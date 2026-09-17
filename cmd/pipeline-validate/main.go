@@ -18,6 +18,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,8 +29,8 @@ import (
 )
 
 const (
-	exitOK       = 0
-	exitFail     = 1
+	exitOK      = 0
+	exitFail    = 1
 	exitBadUsage = 2
 )
 
@@ -52,7 +53,7 @@ func main() {
 	os.Exit(run(flag.Arg(0), *baseRef, *noGit, os.Stdout, os.Stderr))
 }
 
-func run(reportPath, baseRef string, noGit bool, stdout, stderr *os.File) int {
+func run(reportPath, baseRef string, noGit bool, stdout, stderr io.Writer) int {
 	absReport, err := filepath.Abs(reportPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "caminho inválido: %v\n", err)
@@ -164,7 +165,7 @@ func changedFiles(root, baseRef string) ([]string, error) {
 	return files, nil
 }
 
-func printResult(stdout *os.File, name string, findings []report.Finding) int {
+func printResult(stdout io.Writer, name string, findings []report.Finding) int {
 	var erros, avisos int
 	for _, f := range findings {
 		if f.Level == "ERRO" {
