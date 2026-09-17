@@ -7,6 +7,7 @@ package report
 import (
 	"bufio"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -26,11 +27,19 @@ type Finding struct {
 
 func (f Finding) String() string { return f.Level + ": " + f.Message }
 
-// placeholders são marcadores que não podem sobreviver a uma entrega.
+// Marcadores que não podem sobreviver a uma entrega.
 //
-// A checagem é por substring e case-insensitive. A versão em bash comparava o
-// valor inteiro, então "cobertura: TODO revisar" passava batido (divergência 2).
-var placeholders = []string{"todo", "tbd", "fixme", "pendente", "a definir", "<preencher>", "xxx"}
+// A detecção é por palavra inteira, não por substring. A primeira versão usava
+// strings.Contains e reprovava qualquer relatório em português, porque "todos"
+// contém "todo" e "independente" contém "pendente".
+//
+// Convenções de código (TODO, FIXME) casam só em caixa alta: é como aparecem em
+// comentários, e exigir caixa alta elimina o falso positivo com a palavra
+// portuguesa "todo".
+var codeMarkerRE = regexp.MustCompile(`\b(TODO|TBD|FIXME|XXX|HACK|WIP)\b`)
+
+// Frases de preenchimento, case-insensitive e por palavra inteira.
+var fillerRE = regexp.MustCompile(`(?i)\b(a definir|a preencher|preencher aqui|lorem ipsum|descreva aqui)\b`)
 
 // requiredFront são os campos de front matter obrigatórios em toda delivery.
 var requiredFront = []string{"delivery_id", "task_code", "title", "status"}
@@ -238,23 +247,20 @@ func isNA(s string) bool {
 
 func (r *Report) checkPlaceholders() []Finding {
 	var out []Finding
-	lower := strings.ToLower(r.Body)
 
-	for _, p := range placeholders {
-		idx := strings.Index(lower, p)
-		if idx < 0 {
-			continue
+	for _, re := range []*regexp.Regexp{codeMarkerRE, fillerRE} {
+		for _, loc := range re.FindAllStringIndex(r.Body, -1) {
+			out = append(out, Finding{"ERRO",
+				fmt.Sprintf("marcador %q encontrado no relatório (linha %d)",
+					r.Body[loc[0]:loc[1]], lineOf(r.Body, loc[0]))})
 		}
-		out = append(out, Finding{"ERRO",
-			fmt.Sprintf("marcador %q encontrado no relatório (linha %d)", p, lineOf(r.Body, idx))})
 	}
 
 	for key, value := range r.Front {
-		lv := strings.ToLower(value)
-		for _, p := range placeholders {
-			if strings.Contains(lv, p) {
+		for _, re := range []*regexp.Regexp{codeMarkerRE, fillerRE} {
+			if m := re.FindString(value); m != "" {
 				out = append(out, Finding{"ERRO",
-					fmt.Sprintf("front matter: campo %q contém o marcador %q", key, p)})
+					fmt.Sprintf("front matter: campo %q contém o marcador %q", key, m)})
 				break
 			}
 		}

@@ -105,8 +105,64 @@ func TestPlaceholderParcial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if !hasError(r.Validate(), `"todo"`) {
+	if !hasError(r.Validate(), "TODO") {
 		t.Errorf("esperava erro sobre marcador TODO, obteve: %v", r.Validate())
+	}
+}
+
+// TestPortuguesNaoEhMarcador fixa o falso positivo que a primeira versão tinha:
+// a detecção por substring reprovava "todos" (contém "todo") e "independente"
+// (contém "pendente"), inviabilizando qualquer relatório em português.
+func TestPortuguesNaoEhMarcador(t *testing.T) {
+	frases := []string{
+		"Todos os testes passaram.",
+		"O módulo é independente do storage.",
+		"Cobre todo o fluxo de autenticação.",
+		"Nenhum item pendente no checklist.",
+	}
+	for _, frase := range frases {
+		t.Run(frase, func(t *testing.T) {
+			content := strings.Replace(relatorioOK, "Table-driven cobrindo 6 casos.", frase, 1)
+			r, err := Parse(content)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if fs := r.Validate(); len(fs) != 0 {
+				t.Errorf("texto português legítimo foi reprovado: %v", fs)
+			}
+		})
+	}
+}
+
+func TestMarcadoresDeCodigo(t *testing.T) {
+	tests := []struct {
+		frase string
+		erro  bool
+	}{
+		{"Falta cobrir expiração. FIXME antes do merge.", true},
+		{"Prazo TBD com o time.", true},
+		{"Deixado como XXX por ora.", true},
+		{"Ainda WIP.", true},
+		{"Seção a definir.", true},
+		{"Lorem ipsum dolor.", true},
+		{"O fix me pareceu correto.", false},
+		{"Rodou em ambiente Windows XP.", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.frase, func(t *testing.T) {
+			content := strings.Replace(relatorioOK, "Table-driven cobrindo 6 casos.", tt.frase, 1)
+			r, err := Parse(content)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			fs := r.Validate()
+			if tt.erro && len(fs) == 0 {
+				t.Error("esperava reprovação, passou")
+			}
+			if !tt.erro && len(fs) != 0 {
+				t.Errorf("esperava aprovação, reprovou: %v", fs)
+			}
+		})
 	}
 }
 
@@ -123,10 +179,10 @@ func TestChecklistIncompleto(t *testing.T) {
 
 func TestFlagsCondicionais(t *testing.T) {
 	tests := []struct {
-		name     string
-		front    string
-		secao    string
-		querErro string
+		name      string
+		front     string
+		secao     string
+		querErro  string
 	}{
 		{
 			name:     "security ligado sem seção",
