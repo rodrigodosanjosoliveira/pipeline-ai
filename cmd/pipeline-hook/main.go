@@ -28,12 +28,21 @@ const (
 	exitBlock = 2
 )
 
-// hookInput é o subconjunto do payload do PreToolUse que interessa aqui.
-//
-// Atenção ao formato: o caminho do arquivo vem em tool_input.file_path, e não
-// em file_path na raiz. O script bash original lia a raiz, por isso nunca
-// bloqueou nada. Ver D-11.
+// toolCall representa uma chamada de ferramenta no protocolo Antigravity.
+type toolCall struct {
+	Name string         `json:"name"`
+	Args map[string]any `json:"args"`
+}
+
+// hookInput suporta tanto o payload do Antigravity (toolCall, workspacePaths)
+// quanto o formato legado do Claude Code (tool_name, tool_input.file_path, cwd).
 type hookInput struct {
+	// Protocolo Antigravity
+	ToolCall       *toolCall `json:"toolCall"`
+	WorkspacePaths []string  `json:"workspacePaths"`
+	SubagentID     string    `json:"subagentId"`
+
+	// Protocolo legado
 	ToolName  string `json:"tool_name"`
 	AgentType string `json:"agent_type"`
 	CWD       string `json:"cwd"`
@@ -42,72 +51,142 @@ type hookInput struct {
 	} `json:"tool_input"`
 }
 
-// editTools são as ferramentas que alteram arquivos.
+// antigravityOutput é a resposta no stdout esperada pelo Antigravity PreToolUse.
+type antigravityOutput struct {
+	Decision string `json:"decision"` // "allow" ou "deny"
+	Reason   string `json:"reason,omitempty"`
+}
+
+// editTools são as ferramentas que alteram arquivos (Antigravity e legado).
 var editTools = map[string]bool{
+	// Antigravity tools
+	"write_to_file":              true,
+	"replace_file_content":       true,
+	"multi_replace_file_content": true,
+
+	// Claude Code tools
 	"Edit":         true,
 	"Write":        true,
 	"MultiEdit":    true,
 	"NotebookEdit": true,
 }
 
-func main() {
-	os.Exit(run(os.Stdin, os.Stderr))
+func (in *hookInput) isAntigravity() bool {
+	return in.ToolCall != nil
 }
 
-func run(stdin io.Reader, stderr io.Writer) int {
+func (in *hookInput) toolName() string {
+	if in.ToolCall != nil {
+		return in.ToolCall.Name
+	}
+	return in.ToolName
+}
+
+func (in *hookInput) filePath() string {
+	if in.ToolCall != nil && in.ToolCall.Args != nil {
+		for _, k := range []string{"TargetFile", "target_file", "file_path", "FilePath", "path", "Path"} {
+			if val, ok := in.ToolCall.Args[k]; ok {
+				if s, ok := val.(string); ok && strings.TrimSpace(s) != "" {
+					return strings.TrimSpace(s)
+				}
+			}
+		}
+	}
+	return strings.TrimSpace(in.ToolInput.FilePath)
+}
+
+func (in *hookInput) agentType() string {
+	if in.AgentType != "" {
+		return strings.TrimSpace(in.AgentType)
+	}
+	if in.SubagentID != "" {
+		return strings.TrimSpace(in.SubagentID)
+	}
+	return ""
+}
+
+func (in *hookInput) startDir() string {
+	if len(in.WorkspacePaths) > 0 && strings.TrimSpace(in.WorkspacePaths[0]) != "" {
+		return in.WorkspacePaths[0]
+	}
+	if in.CWD != "" {
+		return in.CWD
+	}
+	if wd, err := os.Getwd(); err == nil {
+		return wd
+	}
+	return "."
+}
+
+func main() {
+	os.Exit(run(os.Stdin, os.Stdout, os.Stderr))
+}
+
+func run(stdin io.Reader, stdout, stderr io.Writer) int {
 	raw, err := io.ReadAll(stdin)
 	if err != nil {
-		// Sem entrada legível não há o que avaliar. A camada de permissões
-		// continua ativa, então liberar aqui não abre brecha real.
+		// Sem entrada legível não há o que avaliar.
 		fmt.Fprintf(stderr, "pipeline-hook: falha ao ler stdin: %v\n", err)
-		return exitAllow
+		return replyAllow(false, stdout)
 	}
 
 	var in hookInput
 	if err := json.Unmarshal(raw, &in); err != nil {
 		fmt.Fprintf(stderr, "pipeline-hook: payload inválido: %v\n", err)
-		return exitAllow
+		return replyAllow(false, stdout)
 	}
 
-	if !editTools[in.ToolName] {
-		return exitAllow
+	tool := in.toolName()
+	if !editTools[tool] {
+		return replyAllow(in.isAntigravity(), stdout)
 	}
 
-	path := strings.TrimSpace(in.ToolInput.FilePath)
+	path := in.filePath()
 	if path == "" {
-		return exitAllow
+		return replyAllow(in.isAntigravity(), stdout)
 	}
 
-	start := in.CWD
-	if start == "" {
-		if wd, err := os.Getwd(); err == nil {
-			start = wd
-		} else {
-			start = "."
-		}
-	}
-
+	start := in.startDir()
 	cfg, err := config.Load(start)
 	if err != nil {
 		if err == config.ErrNotFound {
 			// Projeto não adota o pipeline. Nada a fazer.
-			return exitAllow
+			return replyAllow(in.isAntigravity(), stdout)
 		}
 		// Config presente mas quebrada: bloqueia, porque seguir em frente
 		// daria a falsa impressão de que a proteção está ativa.
-		fmt.Fprintf(stderr, "pipeline-hook: %v\n", err)
-		fmt.Fprintln(stderr, "Corrija o "+config.FileName+" antes de editar arquivos.")
-		return exitBlock
+		msg := fmt.Sprintf("pipeline-hook: %v\nCorrija o %s antes de editar arquivos.\n", err, config.FileName)
+		fmt.Fprint(stderr, msg)
+		return replyDeny(in.isAntigravity(), msg, stdout)
 	}
 
 	if !cfg.IsProtected(path) {
-		return exitAllow
+		return replyAllow(in.isAntigravity(), stdout)
 	}
-	if cfg.IsEditorAgent(in.AgentType) {
-		return exitAllow
+	if cfg.IsEditorAgent(in.agentType()) {
+		return replyAllow(in.isAntigravity(), stdout)
 	}
 
-	fmt.Fprint(stderr, blockMessage(path, in.AgentType, cfg))
+	msg := blockMessage(path, in.agentType(), cfg)
+	fmt.Fprint(stderr, msg)
+	return replyDeny(in.isAntigravity(), msg, stdout)
+}
+
+func replyAllow(isAntigravity bool, stdout io.Writer) int {
+	if isAntigravity {
+		_ = json.NewEncoder(stdout).Encode(antigravityOutput{Decision: "allow"})
+	}
+	return exitAllow
+}
+
+func replyDeny(isAntigravity bool, reason string, stdout io.Writer) int {
+	if isAntigravity {
+		_ = json.NewEncoder(stdout).Encode(antigravityOutput{
+			Decision: "deny",
+			Reason:   reason,
+		})
+		return exitAllow
+	}
 	return exitBlock
 }
 
