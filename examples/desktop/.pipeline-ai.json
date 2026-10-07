@@ -6,15 +6,19 @@
     "internal/",
     "frontend/src/",
     "main.go",
+    "go.mod",
+    "go.sum",
     "Taskfile.yml"
   ],
 
   "editor_agents": [
     "dev-implementation",
     "test-writer",
-    "code-reviewer",
-    "query-performance",
     "docs-update"
+  ],
+
+  "enabled_modules": [
+    "release-ops"
   ],
 
   "security_surface_paths": [

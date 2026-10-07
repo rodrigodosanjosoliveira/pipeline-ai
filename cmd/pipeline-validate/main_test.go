@@ -232,16 +232,25 @@ func TestSalvaguardaCobreGoMod(t *testing.T) {
 	}
 }
 
-// TestGitIndisponivelVirarAviso fixa a decisão em aberto: sem git, a
-// salvaguarda não roda e a delivery passa com aviso, em vez de reprovar.
-func TestGitIndisponivelViraAviso(t *testing.T) {
+// TestGitIndisponivelReprova confirma que falha no git diff reprova fatalmente
+// com ERRO (D-14), a menos que --no-git seja usado.
+func TestGitIndisponivelReprova(t *testing.T) {
 	_, rp := projeto(t, "- DEL-001\n", relatorioOK) // sem git init
 
 	code, out := runValidate(t, rp, false)
-	if code != exitOK {
-		t.Errorf("exit = %d, quer %d\n%s", code, exitOK, out)
+	if code != exitFail {
+		t.Errorf("exit = %d, quer %d\n%s", code, exitFail, out)
 	}
-	if !strings.Contains(out, "AVISO") {
-		t.Errorf("saída não traz AVISO:\n%s", out)
+	if !strings.Contains(out, "ERRO") {
+		t.Errorf("saída não traz ERRO:\n%s", out)
+	}
+
+	// Com --no-git a checagem é pulada e a delivery é aprovada.
+	codeNoGit, outNoGit := runValidate(t, rp, true)
+	if codeNoGit != exitOK {
+		t.Errorf("com --no-git: exit = %d, quer %d\n%s", codeNoGit, exitOK, outNoGit)
+	}
+	if !strings.Contains(outNoGit, "APROVADO") {
+		t.Errorf("com --no-git: saída não diz APROVADO:\n%s", outNoGit)
 	}
 }

@@ -44,6 +44,9 @@ type Config struct {
 	// automaticamente, mesmo que o triage tenha esquecido (D-14).
 	SecuritySurfacePaths []string `json:"security_surface_paths"`
 
+	// EnabledModules são os módulos opcionais ativados pelo projeto (D-15).
+	EnabledModules []string `json:"enabled_modules"`
+
 	// DeliveriesDir é onde ficam os relatórios de entrega.
 	DeliveriesDir string `json:"deliveries_dir"`
 
@@ -117,6 +120,16 @@ func (c *Config) applyDefaults() {
 	}
 }
 
+// AllowedModules lista os módulos opcionais válidos reconhecidos pelo padrão (D-15).
+var AllowedModules = map[string]bool{
+	"data-model":         true,
+	"migration-reviewer": true,
+	"query-performance":  true,
+	"release-ops":        true,
+	"agent-auditor":      true,
+	"context-loader":     true,
+}
+
 func (c *Config) validate() error {
 	if c.Version != 1 {
 		return fmt.Errorf("version %d não suportada por este binário (esperado 1)", c.Version)
@@ -131,7 +144,26 @@ func (c *Config) validate() error {
 	if len(c.ProtectedPaths) == 0 {
 		return errors.New("protected_paths está vazio: o hook não protegeria nada")
 	}
+	for _, m := range c.EnabledModules {
+		mod := strings.ToLower(strings.TrimSpace(m))
+		if !AllowedModules[mod] {
+			return fmt.Errorf("módulo %q inválido em enabled_modules", m)
+		}
+	}
 	return nil
+}
+
+// IsModuleEnabled informa se o módulo opcional name está habilitado no projeto (D-15).
+func (c *Config) IsModuleEnabled(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, m := range c.EnabledModules {
+		if strings.EqualFold(strings.TrimSpace(m), strings.TrimSpace(name)) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsEditorAgent informa se agentType pode editar código.

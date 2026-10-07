@@ -119,11 +119,9 @@ func checkIndex(cfg *config.Config, r *report.Report) []report.Finding {
 func checkSecuritySurface(cfg *config.Config, r *report.Report, baseRef string) []report.Finding {
 	changed, err := changedFiles(cfg.Root(), baseRef)
 	if err != nil {
-		// Sem git não dá para afirmar nada. Vira aviso, não erro, para não
-		// reprovar uma delivery por causa do ambiente.
 		return []report.Finding{{
-			Level:   "AVISO",
-			Message: fmt.Sprintf("não foi possível calcular o diff contra %s (%v); a salvaguarda de segurança não rodou", baseRef, err),
+			Level:   "ERRO",
+			Message: fmt.Sprintf("não foi possível calcular o diff contra %s (%v); use --no-git se quiser ignorar a checagem", baseRef, err),
 		}}
 	}
 

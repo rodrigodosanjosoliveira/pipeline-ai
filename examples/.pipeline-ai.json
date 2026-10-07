@@ -6,15 +6,19 @@
     "internal/",
     "cmd/",
     "pkg/",
-    "frontend/src/"
+    "frontend/src/",
+    "go.mod",
+    "go.sum"
   ],
 
   "editor_agents": [
     "dev-implementation",
     "test-writer",
-    "code-reviewer",
-    "query-performance",
     "docs-update"
+  ],
+
+  "enabled_modules": [
+    "release-ops"
   ],
 
   "security_surface_paths": [

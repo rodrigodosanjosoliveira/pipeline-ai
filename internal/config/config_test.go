@@ -66,6 +66,20 @@ func TestLoadValidacao(t *testing.T) {
 			body: validBody,
 		},
 		{
+			name: "enabled_modules válidos",
+			body: `{"version":1,"project_type":"api","protected_paths":["internal/"],"enabled_modules":["data-model","release-ops"]}`,
+		},
+		{
+			name:    "enabled_modules com módulo inválido",
+			body:    `{"version":1,"project_type":"api","protected_paths":["internal/"],"enabled_modules":["modulo-inexistente"]}`,
+			wantErr: true,
+		},
+		{
+			name:    "enabled_modules com item vazio",
+			body:    `{"version":1,"project_type":"api","protected_paths":["internal/"],"enabled_modules":[""]}`,
+			wantErr: true,
+		},
+		{
 			name:    "project_type ausente",
 			body:    `{"version":1,"protected_paths":["internal/"]}`,
 			wantErr: true,
@@ -211,5 +225,54 @@ func TestIsSecuritySurface(t *testing.T) {
 				t.Errorf("IsSecuritySurface(%q) = %v, quer %v", tt.path, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestIsModuleEnabled(t *testing.T) {
+	const body = `{
+  "version": 1,
+  "project_type": "api",
+  "protected_paths": ["internal/"],
+  "enabled_modules": ["data-model", "release-ops", "query-performance"]
+}`
+	dir := t.TempDir()
+	writeConfig(t, dir, body)
+	c, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		module string
+		want   bool
+	}{
+		{"módulo ativo", "data-model", true},
+		{"outro ativo", "release-ops", true},
+		{"case-insensitive", "Query-Performance", true},
+		{"com espaços", "  data-model  ", true},
+		{"módulo válido mas não ativo", "migration-reviewer", false},
+		{"módulo inexistente", "desconhecido", false},
+		{"string vazia", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := c.IsModuleEnabled(tt.module); got != tt.want {
+				t.Errorf("IsModuleEnabled(%q) = %v, quer %v", tt.module, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsModuleEnabledSemModulos(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, validBody)
+	c, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.IsModuleEnabled("data-model") {
+		t.Errorf("IsModuleEnabled devolveu true sem enabled_modules configurado")
 	}
 }

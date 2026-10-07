@@ -7,15 +7,22 @@
     "cmd/",
     "frontend/src/",
     "migrations/",
+    "go.mod",
+    "go.sum",
     "Taskfile.yml"
   ],
 
   "editor_agents": [
     "dev-implementation",
     "test-writer",
-    "code-reviewer",
     "query-performance",
     "docs-update"
+  ],
+
+  "enabled_modules": [
+    "migration-reviewer",
+    "query-performance",
+    "release-ops"
   ],
 
   "security_surface_paths": [
