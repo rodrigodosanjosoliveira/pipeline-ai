@@ -80,8 +80,8 @@ func TestRun(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var stderr bytes.Buffer
-			got := run(strings.NewReader(tt.payload), &stderr)
+			var stdout, stderr bytes.Buffer
+			got := run(strings.NewReader(tt.payload), &stdout, &stderr)
 			if got != tt.want {
 				t.Errorf("run = %d, quer %d (stderr: %s)", got, tt.want, stderr.String())
 			}
@@ -98,8 +98,8 @@ func TestRegressaoCampoNaRaiz(t *testing.T) {
 
 	payload := `{"tool_name":"Edit","cwd":"` + root + `","file_path":"` + protected + `"}`
 
-	var stderr bytes.Buffer
-	if got := run(strings.NewReader(payload), &stderr); got != exitAllow {
+	var stdout, stderr bytes.Buffer
+	if got := run(strings.NewReader(payload), &stdout, &stderr); got != exitAllow {
 		t.Errorf("run = %d, quer %d: campo na raiz não é o formato do PreToolUse", got, exitAllow)
 	}
 }
@@ -108,8 +108,8 @@ func TestConfigQuebradaBloqueia(t *testing.T) {
 	root := setupProject(t, `{"version":1,`)
 	payload := `{"tool_name":"Edit","cwd":"` + root + `","tool_input":{"file_path":"` + filepath.Join(root, "internal", "x.go") + `"}}`
 
-	var stderr bytes.Buffer
-	if got := run(strings.NewReader(payload), &stderr); got != exitBlock {
+	var stdout, stderr bytes.Buffer
+	if got := run(strings.NewReader(payload), &stdout, &stderr); got != exitBlock {
 		t.Errorf("run = %d, quer %d: config quebrada deve bloquear", got, exitBlock)
 	}
 	if !strings.Contains(stderr.String(), config.FileName) {
@@ -121,13 +121,124 @@ func TestMensagemDeBloqueioOrienta(t *testing.T) {
 	root := setupProject(t, cfgBody)
 	payload := `{"tool_name":"Edit","cwd":"` + root + `","tool_input":{"file_path":"` + filepath.Join(root, "internal", "x.go") + `"}}`
 
-	var stderr bytes.Buffer
-	run(strings.NewReader(payload), &stderr)
+	var stdout, stderr bytes.Buffer
+	run(strings.NewReader(payload), &stdout, &stderr)
 	msg := stderr.String()
 
 	for _, want := range []string{"BLOQUEADO", "/triage", "dev-implementation"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("mensagem não contém %q:\n%s", want, msg)
 		}
+	}
+}
+
+func TestAntigravityProtocol(t *testing.T) {
+	root := setupProject(t, cfgBody)
+	protected := filepath.Join(root, "internal", "auth", "token.go")
+	livre := filepath.Join(root, "docs-ai", "nota.md")
+
+	tests := []struct {
+		name         string
+		payload      string
+		wantExit     int
+		wantDecision string
+		containsText string
+	}{
+		{
+			name: "write_to_file em caminho protegido bloqueia",
+			payload: `{
+				"toolCall": {"name": "write_to_file", "args": {"TargetFile": "` + protected + `"}},
+				"workspacePaths": ["` + root + `"]
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
+			containsText: "BLOQUEADO pelo pipeline-ai",
+		},
+		{
+			name: "replace_file_content em caminho protegido bloqueia",
+			payload: `{
+				"toolCall": {"name": "replace_file_content", "args": {"TargetFile": "` + protected + `"}},
+				"workspacePaths": ["` + root + `"]
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
+			containsText: "dev-implementation",
+		},
+		{
+			name: "multi_replace_file_content em caminho protegido bloqueia",
+			payload: `{
+				"toolCall": {"name": "multi_replace_file_content", "args": {"TargetFile": "` + protected + `"}},
+				"workspacePaths": ["` + root + `"]
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
+			containsText: "BLOQUEADO",
+		},
+		{
+			name: "agent autorizado em subagentId passa",
+			payload: `{
+				"toolCall": {"name": "replace_file_content", "args": {"TargetFile": "` + protected + `"}},
+				"workspacePaths": ["` + root + `"],
+				"subagentId": "dev-implementation"
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "allow",
+		},
+		{
+			name: "write_to_file em caminho não protegido passa",
+			payload: `{
+				"toolCall": {"name": "write_to_file", "args": {"TargetFile": "` + livre + `"}},
+				"workspacePaths": ["` + root + `"]
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "allow",
+		},
+		{
+			name: "ferramenta de leitura passa",
+			payload: `{
+				"toolCall": {"name": "run_command", "args": {"CommandLine": "go test ./..."}},
+				"workspacePaths": ["` + root + `"]
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "allow",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			got := run(strings.NewReader(tt.payload), &stdout, &stderr)
+			if got != tt.wantExit {
+				t.Errorf("exit = %d, quer %d", got, tt.wantExit)
+			}
+			outStr := stdout.String()
+			if !strings.Contains(outStr, `"decision":"`+tt.wantDecision+`"`) {
+				t.Errorf("stdout não tem decision %q: %s", tt.wantDecision, outStr)
+			}
+			if tt.containsText != "" && !strings.Contains(outStr, tt.containsText) {
+				t.Errorf("stdout não contém %q: %s", tt.containsText, outStr)
+			}
+		})
+	}
+}
+
+func TestAntigravityConfigQuebrada(t *testing.T) {
+	root := setupProject(t, `{"version":1,`)
+	payload := `{
+		"toolCall": {"name": "write_to_file", "args": {"TargetFile": "` + filepath.Join(root, "internal", "x.go") + `"}},
+		"workspacePaths": ["` + root + `"]
+	}`
+
+	var stdout, stderr bytes.Buffer
+	got := run(strings.NewReader(payload), &stdout, &stderr)
+	if got != exitAllow {
+		t.Errorf("exit = %d, quer %d", got, exitAllow)
+	}
+	outStr := stdout.String()
+	if !strings.Contains(outStr, `"decision":"deny"`) {
+		t.Errorf("stdout não tem decision deny: %s", outStr)
+	}
+	if !strings.Contains(outStr, config.FileName) {
+		t.Errorf("stdout não menciona o config: %s", outStr)
 	}
 }
