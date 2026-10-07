@@ -1,16 +1,15 @@
 // Command pipeline-hook é o hook PreToolUse que impede a sessão principal de
 // editar código diretamente, forçando a delegação aos agents do pipeline.
 //
-// É a camada 2 da decisão D-11. A camada 1, que de fato barra, são as deny
-// rules de permissão em .claude/settings.json. Este hook existe para dar ao
-// modelo uma razão legível, que o Claude Code repassa ao agent principal a
-// partir do stderr quando o exit code é 2.
+// É a camada 2 da decisão D-11. No Antigravity, o hook é configurado em
+// .agents/hooks.json (PreToolUse) e emite JSON com decision ("allow" ou "deny")
+// e reason no stdout. No formato legado, emite erro no stderr com exit code 2.
 //
-// Entrada: JSON no stdin, no formato do PreToolUse.
+// Entrada: JSON no stdin, no formato PreToolUse (Antigravity ou legado).
 // Saída:
 //
-//	exit 0 → permitido
-//	exit 2 → bloqueado (a razão vai no stderr e é mostrada ao modelo)
+//	Antigravity: JSON no stdout ({"decision": "allow"|"deny", "reason": "..."}), exit 0
+//	Legado:      exit 0 (permitido) ou exit 2 (bloqueado com motivo no stderr)
 package main
 
 import (
