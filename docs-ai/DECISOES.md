@@ -406,17 +406,27 @@ Divergências encontradas no kit original que a fase 1 precisa resolver.
 
 ---
 
-## 7. Pendências em aberto
+## 7. Pendências resolvidas da Fase 1
 
-Pontos que ainda precisam de decisão antes do fim da fase 1.
+1. **Fallback de roteamento quando `release-ops` está desativado:**
+   Resolvido: `qa-validation` assume o roteamento e direciona diretamente para `docs-update` quando `release-ops` não estiver habilitado em `.pipeline-ai.json`.
 
-1. **Fallback de roteamento quando `release-ops` está desativado.**
-   D-13 define que Release/Ops roteia para Docs, mas D-15 torna `release-ops`
-   opcional. Quando o módulo está desligado, é preciso definir quem roteia para
-   `docs-update` — provavelmente `qa-validation`.
+2. **Salvaguarda do validador (D-14 estrito):**
+   Resolvido: falha ao calcular o `git diff` reprova fatalmente com `ERRO`. Para ignorar intencionalmente, é obrigatório passar a flag `-no-git`.
 
-2. **Divergências 4, 7, 8, 9 e 10** do backlog acima.
+3. **Permissão de escrita do `code-reviewer`:**
+   Resolvido: permissão de edição removida de `editor_agents` em `.pipeline-ai.json` e proibição explícita na skill `code-reviewer` (D-04 / D-11).
 
-3. **Comportamentos do hook e do validador** ainda não confirmados: config
-   ausente libera / config quebrada bloqueia; payload ilegível libera; git
-   indisponível vira aviso em vez de erro (este último enfraquece o D-14).
+---
+
+## 8. Migração para Antigravity / Gemini (Opção 1B)
+
+### D-20 — Migração total para o ecossistema Antigravity
+
+- **Estrutura nativa:** `.claude` e `CLAUDE.md` substituídos por `.agents/` (`hooks.json`, `rules/`, `skills/`) e diretrizes raiz `AGENTS.md` e `GEMINI.md`.
+- **Skills nativas:** Todos os 11 agents convertidos para o formato de skills do Antigravity (`SKILL.md` com YAML frontmatter `name` e `description`).
+- **Hook PreToolUse em Go:** `cmd/pipeline-hook` adaptado para o protocolo de ciclo de vida do Antigravity, processando `toolCall` e emitindo resposta JSON no `stdout` (`{"decision": "allow" | "deny", "reason": "..."}`), com suporte a retrocompatibilidade.
+- **Módulos opcionais em Go (D-15):** Schema de `.pipeline-ai.json` atualizado com `enabled_modules ([]string)`, método `c.IsModuleEnabled(name)` e catálogo `AllowedModules`.
+- **Superfície protegida:** `go.mod` e `go.sum` incluídos em `protected_paths` em todos os templates de configuração.
+- **Proteção de branch local:** Script `.githooks/pre-push` configurado para impedir pushes diretos na `main` em repositórios privados, garantindo entrega 100% via Pull Request.
+
