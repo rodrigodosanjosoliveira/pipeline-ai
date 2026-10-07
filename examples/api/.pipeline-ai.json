@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "project_type": "api",
+
+  "protected_paths": [
+    "internal/",
+    "cmd/",
+    "frontend/src/",
+    "migrations/",
+    "Taskfile.yml"
+  ],
+
+  "editor_agents": [
+    "dev-implementation",
+    "test-writer",
+    "code-reviewer",
+    "query-performance",
+    "docs-update"
+  ],
+
+  "security_surface_paths": [
+    "internal/auth/",
+    "internal/http/middleware/",
+    "internal/storage/",
+    "go.mod",
+    "go.sum",
+    "migrations/",
+    ".github/workflows/"
+  ],
+
+  "deliveries_dir": "docs-ai/deliveries",
+  "index_file": "docs-ai/deliveries/INDEX.md",
+  "base_ref": "origin/main"
+}
