@@ -51,3 +51,4 @@ O bloco do contrato de handoff, com:
 - `SEMVER_SUGERIDO`: `patch` | `minor` | `major` (com justificativa).
 - `IMPACTO_OPERACIONAL`: novas variáveis de ambiente, passos de deploy ou notas de release.
 - `MANIFESTS_VERIFICADOS`: caminhos e status dos artefatos operacionais.
+

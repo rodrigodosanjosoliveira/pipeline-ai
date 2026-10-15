@@ -1,0 +1,30 @@
+#!/bin/sh
+# pre-push hook: bloqueia push direto para a branch main.
+# Para contornar em emergência absoluta: git push --no-verify
+
+remote="$1"
+url="$2"
+
+zero="0000000000000000000000000000000000000000"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    # Se estiver deletando a branch remota, ignora
+    if [ "$local_sha" = "$zero" ]; then
+        continue
+    fi
+
+    # Bloqueia push direto na branch main
+    if [ "$remote_ref" = "refs/heads/main" ]; then
+        echo "======================================================================" >&2
+        echo "BLOQUEADO: push direto para a branch 'main' não é permitido!" >&2
+        echo "" >&2
+        echo "Fluxo obrigatório:" >&2
+        echo "  1. Crie uma branch de trabalho: git checkout -b feat/sua-mudanca" >&2
+        echo "  2. Faça o push da sua branch:   git push -u origin feat/sua-mudanca" >&2
+        echo "  3. Abra um Pull Request:        gh pr create" >&2
+        echo "======================================================================" >&2
+        exit 1
+    fi
+done
+
+exit 0

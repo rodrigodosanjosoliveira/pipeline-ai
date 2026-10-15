@@ -1,0 +1,33 @@
+version: '3'
+
+tasks:
+  setup:
+    desc: Baixa dependências e sincroniza módulos
+    cmds:
+      - go mod download
+      - go mod tidy
+
+  fmt:
+    desc: Formata o código Go
+    cmds:
+      - gofmt -w .
+
+  vet:
+    desc: Roda análise estática com go vet
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Executa os testes unitários
+    cmds:
+      - go test -v ./...
+
+  build:
+    desc: Compila a aplicação desktop
+    cmds:
+      - go build -v ./...
+
+  validate:
+    desc: Valida relatório de delivery
+    cmds:
+      - go tool pipeline-validate docs-ai/deliveries/{{.DELIVERY}}/report.md
