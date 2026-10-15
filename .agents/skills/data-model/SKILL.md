@@ -57,3 +57,4 @@ O bloco do contrato de handoff, contendo:
 - `ENTIDADES_DOMINIO`: structs e campos de negócio especificados.
 - `ESQUEMA_BANCO`: especificação de tabelas/coleções/chaves para o banco do projeto.
 - `PADROES_DE_ACESSO`: lista de consultas/leituras previstas.
+

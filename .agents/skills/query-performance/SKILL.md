@@ -51,3 +51,4 @@ Handoff do `code-reviewer` ou `migration-reviewer`, com as queries e modelos alt
 O bloco do contrato de handoff, com:
 - `ANALISE_PERFORMANCE`: aprovação das queries, uso de índices e ausência de N+1.
 - `INDICES_RECOMENDADOS`: novos índices criados ou verificados para suportar as consultas.
+

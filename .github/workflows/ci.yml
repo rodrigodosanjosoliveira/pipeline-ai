@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  go-gates:
+    name: Go Gates & Testes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Go 1.24
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Verificar formatação (gofmt)
+        run: test -z "$(gofmt -l .)"
+
+      - name: Análise estática (go vet)
+        run: go vet ./...
+
+      - name: Executar testes unitários com detector de race (-race)
+        run: go test -race -v ./...
+
+      - name: Compilação de todos os pacotes
+        run: go build -v ./...
+
+  supply-chain:
+    name: Supply Chain Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Go 1.24
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Verificar integridade dos módulos (go mod verify)
+        run: go mod verify
+
+      - name: Executar govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
