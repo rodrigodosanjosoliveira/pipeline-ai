@@ -179,10 +179,10 @@ func TestChecklistIncompleto(t *testing.T) {
 
 func TestFlagsCondicionais(t *testing.T) {
 	tests := []struct {
-		name      string
-		front     string
-		secao     string
-		querErro  string
+		name     string
+		front    string
+		secao    string
+		querErro string
 	}{
 		{
 			name:     "security ligado sem seção",

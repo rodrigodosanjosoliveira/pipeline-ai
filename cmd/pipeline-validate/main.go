@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	exitOK      = 0
-	exitFail    = 1
+	exitOK       = 0
+	exitFail     = 1
 	exitBadUsage = 2
 )
 
