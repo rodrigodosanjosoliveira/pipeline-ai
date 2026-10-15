@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "project_type": "desktop",
+
+  "protected_paths": [
+    "internal/",
+    "frontend/src/",
+    "main.go",
+    "go.mod",
+    "go.sum",
+    "Taskfile.yml"
+  ],
+
+  "editor_agents": [
+    "dev-implementation",
+    "test-writer",
+    "docs-update"
+  ],
+
+  "enabled_modules": [
+    "release-ops"
+  ],
+
+  "security_surface_paths": [
+    "internal/auth/",
+    "internal/crypto/",
+    "internal/storage/",
+    "go.mod",
+    "go.sum",
+    "build/",
+    ".github/workflows/"
+  ],
+
+  "deliveries_dir": "docs-ai/deliveries",
+  "index_file": "docs-ai/deliveries/INDEX.md",
+  "base_ref": "origin/main"
+}

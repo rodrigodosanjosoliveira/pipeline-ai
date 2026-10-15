@@ -72,3 +72,4 @@ Projetos no formato API estruturam um servidor backend independente com pontos d
 | `go.mod` / `go.sum` | Grafo de dependências e ferramentas do Go | Superfície de Segurança |
 | `docs-ai/deliveries/` | Relatórios de entregas (`report.md`) e índice (`INDEX.md`) | Aberto para escrita de relatórios |
 | `docs-ai/` | Decisões e invariantes de arquitetura | Aberto para leitura |
+

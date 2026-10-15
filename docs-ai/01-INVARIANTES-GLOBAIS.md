@@ -61,3 +61,4 @@
 4. **Validação de Entrega:**
    - Toda tarefa deve gerar um relatório em `docs-ai/deliveries/{DELIVERY_ID}/report.md` registrado no `INDEX.md`.
    - O comando `go tool pipeline-validate` deve retornar código `0` antes da abertura do PR.
+
