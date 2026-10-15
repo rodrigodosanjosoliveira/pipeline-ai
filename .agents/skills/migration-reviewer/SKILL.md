@@ -50,3 +50,4 @@ Handoff do `code-reviewer` e os arquivos de migração criados ou alterados na p
 O bloco do contrato de handoff, com:
 - `MIGRATION_CHECK`: aprovação da idempotência, reversibilidade e análise de locks.
 - `SCRIPTS_AVALIADOS`: lista de arquivos `.up.sql` e `.down.sql` revisados.
+

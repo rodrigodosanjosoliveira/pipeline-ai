@@ -1,0 +1,57 @@
+version: '3'
+
+tasks:
+  default:
+    desc: Executa todas as verificações principais
+    cmds:
+      - task: check
+
+  fmt:
+    desc: Formata todos os arquivos Go
+    cmds:
+      - gofmt -w .
+
+  fmt:check:
+    desc: Verifica se o código Go está formatado
+    cmds:
+      - test -z "$(gofmt -l .)"
+
+  vet:
+    desc: Roda análise estática da stdlib (go vet)
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Executa a suíte de testes unitários
+    cmds:
+      - go test -v ./...
+
+  test:race:
+    desc: Executa testes com detector de concorrência (-race)
+    cmds:
+      - go test -race -v ./...
+
+  build:
+    desc: Compila todos os pacotes e comandos
+    cmds:
+      - go build -v ./...
+
+  vuln:
+    desc: Verifica vulnerabilidades conhecidas com govulncheck
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  check:
+    desc: Executa format, vet e testes
+    cmds:
+      - task: fmt:check
+      - task: vet
+      - task: test
+
+  ci:
+    desc: Executa os mesmos gates exigidos na pipeline de CI
+    cmds:
+      - task: fmt:check
+      - task: vet
+      - task: test:race
+

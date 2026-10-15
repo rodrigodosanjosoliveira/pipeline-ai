@@ -48,3 +48,4 @@ O bloco do contrato de handoff, com:
 - `FONTE_CONSULTADA`: URI, caminho do arquivo ou pacote referenciado.
 - `SINTESE_TECNICA`: tipos, regras e restrições extraídos da fonte.
 - `EXEMPLOS_RELEVANTES`: exemplos mínimos de entrada e saída esperados.
+
