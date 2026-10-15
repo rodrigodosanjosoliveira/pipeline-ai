@@ -395,13 +395,13 @@ Divergências encontradas no kit original que a fase 1 precisa resolver.
 | 1 | Hook não bloqueia nada (lê campo errado do JSON) | Resolvido por D-11 e D-19 |
 | 2 | Duas versões divergentes de `validate-delivery.sh` | Resolver na reescrita (D-19) |
 | 3 | `require_security: true` no template | Resolvido por D-14 |
-| 4 | Contrato de handoff diverge entre doc, skill e command | **Em aberto** |
+| 4 | Contrato de handoff diverge entre doc, skill e command | Resolvido por D-24 e D-25 (.agents/rules/handoff-contract.md) |
 | 5 | Padrões de git conflitantes | Resolvido por D-12 |
 | 6 | Ordem do fluxo conflitante | Resolvido por D-13 |
-| 7 | Faltam contratos para 6 agents | **Em aberto** |
-| 8 | `agent-auditor` duplica skill `agent-audit`; `delivery-check` duplica `validate-delivery` | **Em aberto** |
-| 9 | `INDEX.md` registra delivery inexistente; caminhos errados no prompt | **Em aberto** |
-| 10 | Allowlist mais permissiva que as regras dos agents (`git add *`, `make *`) | **Em aberto** |
+| 7 | Faltam contratos para 6 agents | Resolvido (todas as 16 skills possuem contratos estruturados) |
+| 8 | `agent-auditor` duplica skill `agent-audit`; `delivery-check` duplica `validate-delivery` | Resolvido (unificado na skill nativa `agent-auditor`) |
+| 9 | `INDEX.md` registra delivery inexistente; caminhos errados no prompt | Resolvido (`INDEX.md` limpo) |
+| 10 | Allowlist mais permissiva que as regras dos agents (`git add *`, `make *`) | Resolvido por D-11 e pre-push hook |
 | 11 | Seção Go do guia não cobre a toolchain | Resolvido por D-18 |
 
 ---
@@ -419,14 +419,19 @@ Divergências encontradas no kit original que a fase 1 precisa resolver.
 
 ---
 
-## 8. Migração para Antigravity / Gemini (Opção 1B)
+## 8. Migração para Antigravity / Gemini (Opção 1B) e Versão Estável v0.3.0
 
 ### D-20 — Migração total para o ecossistema Antigravity
 
 - **Estrutura nativa:** `.claude` e `CLAUDE.md` substituídos por `.agents/` (`hooks.json`, `rules/`, `skills/`) e diretrizes raiz `AGENTS.md` e `GEMINI.md`.
-- **Skills nativas:** Todos os 11 agents convertidos para o formato de skills do Antigravity (`SKILL.md` com YAML frontmatter `name` e `description`).
+- **Skills nativas:** 16 skills do Antigravity implementadas (`SKILL.md` com YAML frontmatter `name` e `description`):
+  - *Núcleo (10):* `pm-triage`, `architecture-guardrails`, `test-writer`, `dev-implementation`, `code-reviewer`, `security-review`, `supply-chain-review`, `qa-validation`, `docs-update`, `git-delivery`.
+  - *Módulos opcionais (6):* `release-ops`, `data-model` (Postgres, Mongo, DynamoDB), `migration-reviewer`, `query-performance`, `context-loader`, `agent-auditor`.
 - **Hook PreToolUse em Go:** `cmd/pipeline-hook` adaptado para o protocolo de ciclo de vida do Antigravity, processando `toolCall` e emitindo resposta JSON no `stdout` (`{"decision": "allow" | "deny", "reason": "..."}`), com suporte a retrocompatibilidade.
 - **Módulos opcionais em Go (D-15):** Schema de `.pipeline-ai.json` atualizado com `enabled_modules ([]string)`, método `c.IsModuleEnabled(name)` e catálogo `AllowedModules`.
+- **Scaffolding de Projetos (`cmd/pipeline-init`):** Criação de novos projetos em 1 comando com templates embutidos via `//go:embed all:templates`.
+- **Automação e CI:** Padronização com `Taskfile.yml` e workflow no GitHub Actions (`.github/workflows/ci.yml`).
 - **Superfície protegida:** `go.mod` e `go.sum` incluídos em `protected_paths` em todos os templates de configuração.
 - **Proteção de branch local:** Script `.githooks/pre-push` configurado para impedir pushes diretos na `main` em repositórios privados, garantindo entrega 100% via Pull Request.
+
 

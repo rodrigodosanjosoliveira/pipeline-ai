@@ -1,127 +1,152 @@
 # pipeline-ai
 
-Ferramentas do padrão de novos projetos. Dois binários Go, sem dependências
-externas além da stdlib.
+Toolkit e padrão reutilizável para projetos de desenvolvimento assistido por agentes de IA, integrando nativamente Go no backend e o ecossistema **Antigravity**.
+
+Três binários Go compilados estaticamente, sem dependências externas além da biblioteca padrão:
 
 | Binário | Função |
 |---|---|
-| `pipeline-hook` | Hook `PreToolUse` que impede edição direta de código fora dos agents autorizados (D-11) |
-| `pipeline-validate` | Valida o relatório de delivery antes do commit (D-14, D-19) |
+| `pipeline-hook` | Hook `PreToolUse` que impede edição direta em caminhos protegidos fora dos agents/skills autorizados (D-11). |
+| `pipeline-validate` | Valida o relatório de delivery antes do commit e abertura de PR, garantindo salvaguarda estrita de Git (D-14). |
+| `pipeline-init` | Utilitário de *scaffolding* que inicializa novos projetos completos em 1 comando com templates embutidos. |
+
+---
 
 ## Estado
 
-Compilado e testado com **100% de sucesso em Go 1.24+** (stdlib pura, sem dependências externas).
-Integrado nativamente ao ecossistema **Antigravity** via `.agents/hooks.json` e skills modulares.
+- Compilado e testado com **100% de sucesso em Go 1.24+** (stdlib pura, compatível com detector de concorrência `-race`).
+- Integrado nativamente ao ecossistema **Antigravity** via `.agents/hooks.json`, regras e **16 skills modulares**.
+- Automação via **`Taskfile.yml`** e workflow completo no **GitHub Actions** (`.github/workflows/ci.yml`).
+- Versão estável atual: **`v0.3.0`**.
 
-## Instalação em um projeto
+---
 
-Requer Go 1.24 ou superior: a diretiva `tool` no `go.mod` não é aceita por toolchains anteriores.
+## Como Criar um Novo Projeto (1 Comando)
+
+Crie o diretório do novo projeto e execute o `pipeline-init` via `go run`:
 
 ```bash
-go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-hook@v0.1.0
-go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-validate@v0.1.0
+mkdir ~/workspace/meu-novo-app && cd ~/workspace/meu-novo-app
+
+go run github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-init@latest
 ```
 
-A versão fica registrada no `go.mod` do projeto, permitindo auditar qual projeto usa qual versão do padrão sem conflito de dependências.
+O utilitário guia você de forma interativa (ou via flags `-name`, `-type`, `-db`, `-module`, `-dir`) e entrega o projeto pronto:
+- `git init` e hook `.githooks/pre-push` instalados (bloqueando pushes diretos na `main`).
+- `go.mod` inicializado com diretivas `tool` apontando para a versão estável do `pipeline-ai`.
+- `.agents/` configurado com `hooks.json`, regras e as 16 skills do padrão.
+- `AGENTS.md` e `GEMINI.md` com placeholders substituídos.
+- Estrutura completa de documentação e relatórios em `docs-ai/`.
 
-## Configuração
+Consulte o [Guia de Criação de Projetos](docs-ai/GUIA-CRIACAO-PROJETOS.md) para detalhes.
 
-Copie o template correspondente de `examples/` para a raiz do seu projeto (`.pipeline-ai.json`):
-- `examples/desktop/.pipeline-ai.json`: para aplicações desktop (Wails + Go).
-- `examples/api/.pipeline-ai.json`: para serviços backend / API.
+---
 
-Campos suportados:
-- `protected_paths`: caminhos que a sessão principal não pode editar diretamente.
-- `editor_agents`: skills/agents autorizados a alterar código protegido.
-- `security_surface_paths`: caminhos sensíveis que exigem auditoria de segurança (D-14).
-- `enabled_modules`: módulos opcionais ativados pelo projeto (D-15), como `migration-reviewer`, `query-performance`, `release-ops`.
+## Instalação em Projeto Existente
 
-## Uso
+Requer Go 1.24 ou superior (a diretiva `tool` no `go.mod` é obrigatória):
 
-### 1. Hook de Proteção em Tempo de Execução (`pipeline-hook`)
+```bash
+go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-hook@v0.3.0
+go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-validate@v0.3.0
+```
 
-Configurado em `.agents/hooks.json` para ser acionado pelo Antigravity antes de ferramentas de edição (`write_to_file`, `replace_file_content`, `multi_replace_file_content`):
+*(Se o repositório for privado, configure `go env -w GOPRIVATE="github.com/rodrigodosanjosoliveira/*"` e autentique o Git via SSH)*.
+
+---
+
+## Catálogo de Skills Nativas (16 Skills)
+
+O fluxo do Antigravity é orquestrado por skills especializadas em `.agents/skills/`:
+
+### Núcleo Obrigatório (10)
+| Skill | Responsabilidade | Roteamento |
+|---|---|---|
+| `pm-triage` | Ponto de entrada de toda demanda. Classifica escopo, atribui `DEL-NNN` e roteia. | `architecture-guardrails` |
+| `architecture-guardrails` | Define a abordagem técnica, limites de implementação e bloqueia violação de invariantes. | `data-model` ou `test-writer` |
+| `test-writer` | Escreve os testes antes da implementação (TDD) e alvos de fuzzing determinísticos. | `dev-implementation` |
+| `dev-implementation` | Implementa o código estritamente dentro do escopo até os 4 gates passarem. | `code-reviewer` |
+| `code-reviewer` | Revisa o diff contra os invariantes e escopo. Não possui permissão de edição direta. | `migration-reviewer` / `query-performance` / `security-review` / `qa-validation` |
+| `security-review` | Audita superfícies de autenticação, criptografia, storage e CI quando tocadas. | `supply-chain-review` ou `qa-validation` |
+| `supply-chain-review` | Audita alterações em `go.mod` e `go.sum` com `govulncheck` e `go mod verify`. | `qa-validation` |
+| `qa-validation` | Valida o comportamento entregue contra o escopo inicial com suíte completa de testes. | `release-ops` ou `docs-update` |
+| `docs-update` | Atualiza documentação afetada e monta o relatório em `docs-ai/deliveries/`. | `git-delivery` |
+| `git-delivery` | Cria a branch `task/*`, o commit padronizado e abre o Pull Request (`gh pr create`). | Encerramento |
+
+### Módulos Opcionais (6)
+| Skill | Ativação | Responsabilidade |
+|---|---|---|
+| `release-ops` | `"release-ops"` | Versionamento SemVer, checklist de manifests e notas de release. |
+| `data-model` | `"data-model"` | Modelagem de dados para PostgreSQL (SQL), MongoDB (BSON) ou DynamoDB (PK/SK). |
+| `migration-reviewer` | `"migration-reviewer"` | Auditoria de scripts DDL em `migrations/` (idempotência, rollback, zero-downtime). |
+| `query-performance` | `"query-performance"` | Análise de planos de execução (`EXPLAIN`), índices adequados e eliminação de N+1. |
+| `context-loader` | `"context-loader"` | Carregamento seletivo de documentações externas e contratos de API sob demanda. |
+| `agent-auditor` | `"agent-auditor"` | Auditoria de integridade contra alucinação, drift e scope creep. |
+
+---
+
+## Configuração (`.pipeline-ai.json`)
+
+Exemplo de configuração para projeto desktop (`examples/desktop/.pipeline-ai.json`):
 
 ```json
 {
-  "pipeline-guard": {
-    "PreToolUse": [
-      {
-        "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd .. && go tool pipeline-hook"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd .. && gofmt -w . 2>/dev/null; exit 0"
-          }
-        ]
-      }
-    ]
-  }
+  "version": 1,
+  "project_type": "desktop",
+  "protected_paths": [
+    "internal/",
+    "frontend/src/",
+    "main.go",
+    "go.mod",
+    "go.sum",
+    "Taskfile.yml"
+  ],
+  "editor_agents": [
+    "dev-implementation",
+    "test-writer",
+    "docs-update"
+  ],
+  "enabled_modules": [
+    "release-ops",
+    "data-model"
+  ],
+  "security_surface_paths": [
+    "internal/auth/",
+    "internal/crypto/",
+    "internal/storage/",
+    "go.mod",
+    "go.sum",
+    "build/",
+    ".github/workflows/"
+  ],
+  "deliveries_dir": "docs-ai/deliveries",
+  "index_file": "docs-ai/deliveries/INDEX.md",
+  "base_ref": "origin/main"
 }
 ```
 
-O hook recebe o payload no `stdin` e responde em JSON no `stdout`:
-- `{"decision": "allow"}`: edição autorizada.
-- `{"decision": "deny", "reason": "..."}`: edição bloqueada com justificativa legível ao modelo.
+---
 
-*(Também suporta o protocolo legado via stderr e exit code 2).*
+## Automação e Gates (`Taskfile.yml`)
 
-### 2. Validador de Delivery (`pipeline-validate`)
-
-Valida o relatório de entrega antes do commit e abertura de PR:
+O repositório inclui rotinas determinísticas:
 
 ```bash
-# Validação completa com checagem de diff do git
+task check      # Roda format check, go vet e suíte completa de testes
+task test:race  # Executa testes com detector de concorrência ativo
+task vuln       # Executa auditoria de vulnerabilidades com govulncheck
+task build      # Compila todos os pacotes e binários
+```
+
+---
+
+## Validação de Entregas (`pipeline-validate`)
+
+Antes de abrir o Pull Request, toda entrega é validada pelo binário em Go:
+
+```bash
 go tool pipeline-validate docs-ai/deliveries/DEL-001/report.md
-
-# Pula as checagens dependentes de git
-go tool pipeline-validate -no-git docs-ai/deliveries/DEL-001/report.md
 ```
 
-#### Exit codes do validador
-
-| Código | Significado |
-|---|---|
-| `0` | Aprovado (com ou sem avisos) |
-| `1` | Reprovado (bloqueia o commit/delivery) |
-| `2` | Erro de uso ou parâmetros |
-
-### 3. Proteção de Branch Git (`pre-push`)
-
-Para repositórios privados no plano gratuito do GitHub, um hook local em `.githooks/pre-push` impede pushes diretos para a branch `main`:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-Toda entrega sobe obrigatoriamente via branch de feature (`task/*` ou `feat/*`) e Pull Request (`gh pr create`).
-
-## Decisões de comportamento
-
-- **Config ausente libera.** Um projeto sem `.pipeline-ai.json` não adota o pipeline, então o hook não interfere.
-- **Config quebrada bloqueia.** Se o arquivo existir com JSON inválido ou schema incorreto, bloqueia imediatamente.
-- **Git indisponível reprova fatalmente com ERRO.** Sem cálculo de diff contra a base, a salvaguarda de segurança (D-14) não pode garantir a integridade da entrega. Para ignorar voluntariamente, passe `-no-git`.
-
-## Correções em relação ao kit original
-
-| Problema | Correção |
-|---|---|
-| Hook lia `file_path` na raiz do JSON e nunca bloqueava | Lê `tool_input.file_path`; há teste de regressão |
-| Hook dependia de `python3`/`jq` | Binário Go estático |
-| Identificação do agent por `CLAUDE_AGENT` (inexistente) | Campo `agent_type` do payload |
-| Sem lista de agents autorizados | `editor_agents` no config |
-| Caminhos protegidos fixos no script | `protected_paths` no config |
-| `TODO` só rejeitado se fosse o valor inteiro | Busca por substring, case-insensitive |
-| Duas versões divergentes do validador | Uma implementação |
-| `require_security` ligado por padrão | Desligado, com salvaguarda pelo diff |
+- **Exit code 0:** Aprovado.
+- **Exit code 1:** Reprovado (bloqueia o commit/PR caso haja marcadores `TODO`, checklist incompleto ou salvaguarda de segurança violada).
