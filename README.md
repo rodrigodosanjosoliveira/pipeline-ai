@@ -1,5 +1,9 @@
 # pipeline-ai
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go)](go.mod)
+[![CI](https://github.com/rodrigodosanjosoliveira/pipeline-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/rodrigodosanjosoliveira/pipeline-ai/actions/workflows/ci.yml)
+
 Toolkit e padrão reutilizável para projetos de desenvolvimento assistido por agentes de IA, integrando nativamente Go no backend e o ecossistema **Antigravity**.
 
 Três binários Go compilados estaticamente, sem dependências externas além da biblioteca padrão:
@@ -17,7 +21,7 @@ Três binários Go compilados estaticamente, sem dependências externas além da
 - Compilado e testado com **100% de sucesso em Go 1.24+** (stdlib pura, compatível com detector de concorrência `-race`).
 - Integrado nativamente ao ecossistema **Antigravity** via `.agents/hooks.json`, regras e **16 skills modulares**.
 - Automação via **`Taskfile.yml`** e workflow completo no **GitHub Actions** (`.github/workflows/ci.yml`).
-- Versão estável atual: **`v0.3.0`**.
+- Versão estável atual: **`v0.3.1`**.
 
 ---
 
@@ -150,3 +154,19 @@ go tool pipeline-validate docs-ai/deliveries/DEL-001/report.md
 
 - **Exit code 0:** Aprovado.
 - **Exit code 1:** Reprovado (bloqueia o commit/PR caso haja marcadores `TODO`, checklist incompleto ou salvaguarda de segurança violada).
+
+---
+
+## Como Contribuir
+
+Contribuições são muito bem-vindas! Se você deseja contribuir com novas funcionalidades, melhorias nas skills ou correções de bugs:
+
+1. Consulte o [Guia de Contribuição](CONTRIBUTING.md) para detalhes sobre invariantes de arquitetura, fluxo de branch e estilo de código.
+2. Abra uma [Issue](https://github.com/rodrigodosanjosoliveira/pipeline-ai/issues) para discutir propostas antes de submeter grandes alterações.
+3. Certifique-se de que `task check` passa com sucesso antes de abrir o seu Pull Request.
+
+---
+
+## Licença
+
+Este projeto é distribuído sob os termos da licença **MIT**. Consulte o arquivo [LICENSE](LICENSE) para mais detalhes.
