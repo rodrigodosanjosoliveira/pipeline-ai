@@ -20,3 +20,4 @@ Como essa proposta se alinha aos invariantes do projeto (Go 1.24+, stdlib pura, 
 
 **Contexto Adicional**
 Adicione qualquer outro contexto, exemplos de uso ou referências sobre a proposta aqui.
+
