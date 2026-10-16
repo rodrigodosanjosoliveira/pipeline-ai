@@ -65,3 +65,4 @@ Se você tiver a ferramenta [Task](https://taskfile.dev/) instalada, pode usar o
 ## Código de Conduta
 
 Esperamos que todas as interações no repositório (issues, PRs, discussões) sejam pautadas pelo respeito mútuo, cordialidade, escuta ativa e foco em soluções construtivas.
+

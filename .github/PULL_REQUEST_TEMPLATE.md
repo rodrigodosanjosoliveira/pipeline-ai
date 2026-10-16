@@ -17,3 +17,4 @@ Breve resumo da motivação e do que foi implementado ou corrigido.
 - [ ] Testes unitários com a biblioteca `testing` foram incluídos/atualizados.
 - [ ] `task check` (ou `gofmt -l .`, `go vet ./...`, `go test -race ./...`) passou com sucesso.
 - [ ] A documentação relevante (`README.md`, `docs-ai/`) foi atualizada, se aplicável.
+

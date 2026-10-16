@@ -1,0 +1,58 @@
+flowchart LR
+    subgraph S1["📐 1. Escopo & Design"]
+        direction TB
+        Triage["pm-triage\n(Escopo & DEL-ID)"]
+        Arch["architecture-guardrails\n(Invariantes & Limites)"]
+        Data["data-model\n(PostgreSQL / Mongo / Dynamo)"]
+        Triage --> Arch
+        Arch -. persistência .-> Data
+    end
+
+    subgraph S2["🧪 2. TDD & Código"]
+        direction TB
+        Test["test-writer\n(TDD & Fuzzing primeiro)"]
+        Hook{{"🛡️ PreToolUse Hook\n(Bloqueia escrita não autorizada)"}}
+        Dev["dev-implementation\n(Código estrito aos testes)"]
+        Test --> Hook --> Dev
+    end
+
+    subgraph S3["🔍 3. Revisão & Segurança"]
+        direction TB
+        Review["code-reviewer\n(Bloqueios vs Sugestões)"]
+        Sec["security-review\n& supply-chain-review"]
+        DB["migration-reviewer\n& query-performance"]
+        Review --> Sec
+        Review --> DB
+    end
+
+    subgraph S4["🚀 4. Validação & Entrega"]
+        direction TB
+        QA["qa-validation\n(Gates & Testes completos)"]
+        Docs["docs-update\n(Relatório de Delivery)"]
+        Gate{{"⚡ pipeline-validate\n(Validação do git diff)"}}
+        Git["git-delivery\n(Branch & Pull Request)"]
+        QA --> Docs --> Gate --> Git
+    end
+
+    S1 ==> S2 ==> S3 ==> S4
+
+    subgraph S3["🔍 3. Revisão & Segurança"]
+        direction TB
+        Review["code-reviewer\n(Bloqueios vs Sugestões)"]
+        Sec["security-review\n& supply-chain-review"]
+        DB["migration-reviewer\n& query-performance"]
+        Review --> Sec
+        Review --> DB
+    end
+
+    subgraph S4["🚀 4. Validação & Entrega"]
+        direction TB
+        QA["qa-validation\n(Gates & Testes completos)"]
+        Docs["docs-update\n(Relatório de Delivery)"]
+        Gate{{"⚡ pipeline-validate\n(Validação do git diff)"}}
+        Git["git-delivery\n(Branch & Pull Request)"]
+        QA --> Docs --> Gate --> Git
+    end
+
+    S1 ==> S2 ==> S3 ==> S4
+
