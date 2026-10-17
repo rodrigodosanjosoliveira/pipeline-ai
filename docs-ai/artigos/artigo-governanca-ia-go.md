@@ -33,32 +33,19 @@ A primeira decisão de arquitetura foi implementar o princípio do menor privil�
 
 O Google Antigravity oferece hooks de ciclo de vida, em especial o evento **`PreToolUse`**. Toda vez que o modelo invoca uma ferramenta como `write_to_file` ou `replace_file_content`, o hook intercepta a chamada **antes** que qualquer byte seja tocado no disco.
 
-Construí o binário **`pipeline-hook`** em Go 1.24 puro (sem nenhuma dependência externa além da biblioteca padrão). Ele recebe o payload JSON no `stdin`, identifica qual subagente está operando e qual arquivo está sendo tocado:
+Construí o binário **`pipeline-hook`** em Go 1.24 puro (sem nenhuma dependência externa além da biblioteca padrão). Ele intercepta o payload JSON no `stdin`, identifica qual subagente está operando e valida o arquivo alvo:
 
 ```go
-// Trecho simplificado da lógica de interceptação do pipeline-hook
-func run(stdin io.Reader, stdout, stderr io.Writer) int {
-    var in hookInput
-    if err := json.Unmarshal(raw, &in); err != nil {
-        return replyAllow(stdout)
-    }
+// Interceptação PreToolUse no pipeline-hook:
+if editTools[in.ToolName] {
+    target := in.FilePath()
 
-    // Se a ferramenta tentar modificar o disco
-    if editTools[in.ToolName] {
-        target := in.FilePath()
-        
-        // Verifica se o caminho é protegido (.pipeline-ai.json)
-        if cfg.IsProtected(target) && !cfg.IsEditorAgent(in.AgentType) {
-            msg := fmt.Sprintf(
-                "BLOCKED: O agente '%s' não tem permissão para editar '%s'. "+
-                "Apenas os agentes autorizados [%s] podem realizar alterações neste diretório.",
-                in.AgentType, target, strings.Join(cfg.EditorAgents, ", "),
-            )
-            return replyDeny(msg, stdout)
-        }
+    // Bloqueia se o caminho for protegido e o agente não for editor
+    if cfg.IsProtected(target) && !cfg.IsEditorAgent(in.AgentType) {
+        return replyDeny("BLOCKED: Agente não autorizado", stdout)
     }
-    return replyAllow(stdout)
 }
+return replyAllow(stdout)
 ```
 
 Se o agente `pm-triage` ou a sessão principal tentar mexer em `internal/auth/token.go`, o hook retorna `deny` no nível do processo. Não há negociação: **a ferramenta simplesmente não executa**.
@@ -71,21 +58,19 @@ Um dos erros mais comuns com IA é usar um "agente sabe-tudo". Quando um único 
 
 No **Pipeline-AI**, decompusemos o ciclo de desenvolvimento em um pipeline modular de **16 skills especializadas**:
 
-```text
-1. pm-triage              → Delimita o escopo da issue e atribui DEL-ID
-2. architecture-guardrails → Define limites técnicos e bloqueia violações de invariantes
-3. [data-model]           → Modela entidades e esquemas (PostgreSQL, Mongo, DynamoDB)
-4. test-writer            → Escreve cenários de TDD e alvos de Fuzzing (Red)
-5. dev-implementation     → Codifica estritamente até os testes passarem (Green)
-6. code-reviewer          → Analisa o diff identificando bloqueios vs sugestões
-7. [migration-reviewer]   → Revisa DDLs, locks e planos de rollback
-8. [security-review]      → Acionado automaticamente se tocar auth, crypto ou storage
-9. [supply-chain-review]  → Audita alterações em go.mod e invoca govulncheck
-10. qa-validation         → Executa a suíte de testes de ponta a ponta e checa invariantes
-11. [release-ops]         → Avalia SemVer, tags e prontidão de manifesto
-12. docs-update           → Monta o relatório de delivery auditável
-13. git-delivery          → Cria a branch, commit convencional e Pull Request
-```
+1. **pm-triage**: Delimita o escopo da issue e atribui DEL-ID
+2. **architecture-guardrails**: Define limites técnicos e invariantes
+3. **[data-model]**: Modela entidades e esquemas (PostgreSQL, Mongo, DynamoDB)
+4. **test-writer**: Escreve cenários de TDD e alvos de Fuzzing (Fase Red)
+5. **dev-implementation**: Codifica estritamente até os testes passarem (Fase Green)
+6. **code-reviewer**: Analisa o diff separando bloqueios de sugestões
+7. **[migration-reviewer]**: Revisa DDLs, locks e planos de rollback
+8. **[security-review]**: Acionado se tocar auth, crypto ou storage
+9. **[supply-chain-review]**: Audita dependências e invoca govulncheck
+10. **qa-validation**: Executa a suíte de testes de ponta a ponta e checa invariantes
+11. **[release-ops]**: Avalia SemVer, tags e prontidão de manifesto
+12. **docs-update**: Monta o relatório de delivery auditável
+13. **git-delivery**: Cria a branch, commit convencional e Pull Request
 
 *(Colchetes indicam módulos opcionais, ativados via configuração de projeto).*
 
@@ -106,11 +91,9 @@ Na prática, a melhor especificação para um agente de IA é um teste unitário
 
 ## 4. O Portão de Entrega: `pipeline-validate`
 
-Antes de qualquer Pull Request ser aberto, uma ferramenta em Go faz o double-check de conformidade:
+Antes de qualquer Pull Request ser aberto, uma ferramenta em Go faz o double-check de conformidade executando:
 
-```bash
-go tool pipeline-validate docs-ai/deliveries/DEL-011/report.md
-```
+> `$ go tool pipeline-validate docs-ai/deliveries/DEL-011/report.md`
 
 O validador reprova a entrega se:
 - O checklist técnico contiver caixas desmarcadas.
