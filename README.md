@@ -16,6 +16,12 @@ Três binários Go compilados estaticamente, sem dependências externas além da
 
 ---
 
+## Fluxo de Execução
+
+![Fluxo de Execução do Pipeline AI](docs-ai/pipeline-ai.png)
+
+---
+
 ## Estado
 
 - Compilado e testado com **100% de sucesso em Go 1.24+** (stdlib pura, compatível com detector de concorrência `-race`).
