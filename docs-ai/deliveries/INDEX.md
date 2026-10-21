@@ -7,7 +7,7 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| — | — | nenhuma delivery registrada | — | — | — |
+| DEL-001 | TASK-001 | CLI unificada pipeline-ai com subcomandos sync e doctor | feat | 2026-10-21 | draft |
 
 <!--
 Formato da linha:

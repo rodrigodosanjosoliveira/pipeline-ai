@@ -11,10 +11,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
 )
 
 func main() {
-	var opts Options
+	var opts scaffold.Options
 
 	flag.StringVar(&opts.Name, "name", "", "Nome do projeto (obrigatório)")
 	flag.StringVar(&opts.Type, "type", "", "Formato do projeto: desktop ou api")
@@ -83,7 +85,7 @@ func main() {
 	}
 
 	fmt.Printf("\nInicializando projeto %q (%s, %s)...\n", opts.Name, opts.Type, opts.Database)
-	if err := Scaffold(opts); err != nil {
+	if err := scaffold.Scaffold(opts); err != nil {
 		fmt.Fprintf(os.Stderr, "\nERRO ao inicializar projeto: %v\n", err)
 		os.Exit(1)
 	}
