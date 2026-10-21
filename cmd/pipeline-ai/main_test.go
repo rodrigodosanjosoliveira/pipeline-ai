@@ -108,6 +108,14 @@ func TestCLISyncAndDoctor(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Configuração (.pipeline-ai.json)") {
 		t.Errorf("doctor não encontrou configuração:\n%s", stdout.String())
 	}
+
+	// 5. Doctor com flag -json
+	stdout.Reset()
+	stderr.Reset()
+	_ = run([]string{"doctor", "-dir", tmpDir, "-json"}, &stdout, &stderr)
+	if !strings.Contains(stdout.String(), `"ok":`) || !strings.Contains(stdout.String(), `"results":`) {
+		t.Errorf("doctor -json não retornou campos esperados:\n%s", stdout.String())
+	}
 }
 
 func TestCLIValidate(t *testing.T) {

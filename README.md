@@ -14,7 +14,7 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 | `pipeline-ai hook` | Hook `PreToolUse` que impede edição direta em caminhos protegidos fora dos agents/skills autorizados (D-11). |
 | `pipeline-ai validate` | Valida o relatório de delivery antes do commit e abertura de PR, garantindo salvaguarda estrita de Git (D-14). |
 | `pipeline-ai sync` | Sincroniza e atualiza skills (`.agents/skills`), regras e hooks em projetos existentes sem tocar em código de negócio. |
-| `pipeline-ai doctor` | Diagnostica a integridade do ambiente local (Go 1.24+, git, gh, pre-push hook e `.pipeline-ai.json`). |
+| `pipeline-ai doctor` | Diagnostica a integridade do ambiente local (Go 1.24+, git, gh, pre-push hook e `.pipeline-ai.json`). Suporta `--json` para automações e CI. |
 
 *(Os binários individuais `pipeline-hook`, `pipeline-validate` e `pipeline-init` permanecem disponíveis para retrocompatibilidade com diretivas `tool` existentes).*
 
