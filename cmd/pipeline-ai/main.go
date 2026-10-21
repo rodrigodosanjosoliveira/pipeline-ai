@@ -25,7 +25,7 @@ import (
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
 )
 
-const version = "v0.4.0"
+const version = "v0.5.0"
 
 func main() {
 	os.Exit(runWithStdin(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))

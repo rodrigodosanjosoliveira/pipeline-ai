@@ -3,7 +3,7 @@ delivery_id: DEL-005
 task_code: TASK-005
 title: Expansão MCP Fase 2: Resources pipeline:// e Tools de Scaffold e Sync
 type: feat
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false
