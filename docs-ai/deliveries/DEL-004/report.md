@@ -3,7 +3,7 @@ delivery_id: DEL-004
 task_code: TASK-004
 title: Servidor MCP stdio nativo no comando pipeline-ai mcp
 type: feat
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

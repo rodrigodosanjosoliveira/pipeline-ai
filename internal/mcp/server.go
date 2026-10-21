@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
 )
 
@@ -29,7 +31,6 @@ func NewServer(rootDir string) *Server {
 // ServeStream processa requisições JSON-RPC linha a linha até encontrar EOF.
 func (s *Server) ServeStream(in io.Reader, out, errOut io.Writer) error {
 	scanner := bufio.NewScanner(in)
-	// Aumenta buffer para suportar payloads grandes se necessário
 	buf := make([]byte, 1024*1024)
 	scanner.Buffer(buf, 10*1024*1024)
 
@@ -52,7 +53,6 @@ func (s *Server) ServeStream(in io.Reader, out, errOut io.Writer) error {
 }
 
 func (s *Server) handleRequest(req *Request, out, errOut io.Writer) {
-	// Notificações não possuem ID e não devem gerar resposta JSON
 	isNotification := req.ID == nil
 
 	switch req.Method {
@@ -60,7 +60,8 @@ func (s *Server) handleRequest(req *Request, out, errOut io.Writer) {
 		res := map[string]any{
 			"protocolVersion": "2024-11-05",
 			"capabilities": map[string]any{
-				"tools": map[string]any{},
+				"tools":     map[string]any{},
+				"resources": map[string]any{},
 			},
 			"serverInfo": map[string]any{
 				"name":    "pipeline-ai",
@@ -70,11 +71,16 @@ func (s *Server) handleRequest(req *Request, out, errOut io.Writer) {
 		s.sendResult(out, req.ID, res)
 
 	case "notifications/initialized":
-		// Handshake concluído pelo cliente MCP (nenhuma resposta necessária)
 		return
 
 	case "ping":
 		s.sendResult(out, req.ID, map[string]any{})
+
+	case "resources/list":
+		s.handleResourcesList(req, out)
+
+	case "resources/read":
+		s.handleResourcesRead(req, out)
 
 	case "tools/list":
 		s.handleToolsList(req, out)
@@ -86,6 +92,103 @@ func (s *Server) handleRequest(req *Request, out, errOut io.Writer) {
 		if !isNotification {
 			s.sendError(out, req.ID, CodeMethodNotFound, fmt.Sprintf("método não encontrado: %s", req.Method))
 		}
+	}
+}
+
+func (s *Server) handleResourcesList(req *Request, out io.Writer) {
+	resources := []Resource{
+		{
+			URI:         "pipeline://invariants",
+			Name:        "Invariantes Globais do Projeto",
+			Description: "Regras inegociáveis de arquitetura e governança do projeto",
+			MimeType:    "text/markdown",
+		},
+		{
+			URI:         "pipeline://active-delivery",
+			Name:        "Delivery Ativa",
+			Description: "Status da delivery mais recente registrada no INDEX.md",
+			MimeType:    "text/markdown",
+		},
+		{
+			URI:         "pipeline://catalog",
+			Name:        "Catálogo de Skills",
+			Description: "Lista de skills nativas em .agents/skills",
+			MimeType:    "text/markdown",
+		},
+	}
+	s.sendResult(out, req.ID, map[string]any{"resources": resources})
+}
+
+func (s *Server) handleResourcesRead(req *Request, out io.Writer) {
+	var params struct {
+		URI string `json:"uri"`
+	}
+	_ = json.Unmarshal(req.Params, &params)
+
+	switch params.URI {
+	case "pipeline://invariants":
+		var text string
+		candidates := []string{
+			filepath.Join(s.RootDir, "docs-ai", "01-INVARIANTES-GLOBAIS.md"),
+			filepath.Join(s.RootDir, ".agents", "rules", "invariants.md"),
+			filepath.Join(s.RootDir, "AGENTS.md"),
+		}
+		for _, p := range candidates {
+			if data, err := os.ReadFile(p); err == nil {
+				text = string(data)
+				break
+			}
+		}
+		s.sendResult(out, req.ID, ReadResourceResult{
+			Contents: []ResourceContent{
+				{
+					URI:      params.URI,
+					MimeType: "text/markdown",
+					Text:     text,
+				},
+			},
+		})
+
+	case "pipeline://active-delivery":
+		var text strings.Builder
+		indexFile := filepath.Join(s.RootDir, "docs-ai", "deliveries", "INDEX.md")
+		if data, err := os.ReadFile(indexFile); err == nil {
+			text.WriteString("# Índice de Deliveries\n\n")
+			text.WriteString(string(data))
+		}
+		s.sendResult(out, req.ID, ReadResourceResult{
+			Contents: []ResourceContent{
+				{
+					URI:      params.URI,
+					MimeType: "text/markdown",
+					Text:     text.String(),
+				},
+			},
+		})
+
+	case "pipeline://catalog":
+		var text strings.Builder
+		text.WriteString("# Catálogo de Skills Nativas (.agents/skills)\n\n")
+		skillsDir := filepath.Join(s.RootDir, ".agents", "skills")
+		if entries, err := os.ReadDir(skillsDir); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					text.WriteString(fmt.Sprintf("- **%s**\n", e.Name()))
+				}
+			}
+		}
+		s.sendResult(out, req.ID, ReadResourceResult{
+			Contents: []ResourceContent{
+				{
+					URI:      params.URI,
+					MimeType: "text/markdown",
+					Text:     text.String(),
+				},
+			},
+		})
+
+	default:
+		s.sendError(out, req.ID, CodeInvalidParams, fmt.Sprintf("recurso não encontrado: %s", params.URI))
 	}
 }
 
@@ -124,6 +227,42 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 					},
 				},
 				"required": []string{"report_path"},
+			},
+		},
+		{
+			Name:        "pipeline_scaffold_delivery",
+			Description: "Inicializa o esqueleto de uma nova entrega: cria docs-ai/deliveries/DEL-NNN/report.md com seções obrigatórias e registra no INDEX.md.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title": map[string]any{
+						"type":        "string",
+						"description": "Título descritivo da nova delivery",
+					},
+					"type": map[string]any{
+						"type":        "string",
+						"description": "Tipo da entrega (feat, bugfix, refactor, chore, docs)",
+						"enum":        []string{"feat", "bugfix", "refactor", "chore", "docs"},
+					},
+					"task_code": map[string]any{
+						"type":        "string",
+						"description": "Código da tarefa (opcional, padrão: TASK-NNN)",
+					},
+				},
+				"required": []string{"title", "type"},
+			},
+		},
+		{
+			Name:        "pipeline_sync_skills",
+			Description: "Sincroniza skills, regras e hooks em .agents/ a partir dos templates embutidos da CLI.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"dir": map[string]any{
+						"type":        "string",
+						"description": "Diretório raiz do projeto a ser sincronizado (padrão: raiz atual)",
+					},
+				},
 			},
 		},
 	}
@@ -209,6 +348,76 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 				},
 			},
 			IsError: code != 0,
+		})
+
+	case "pipeline_scaffold_delivery":
+		title, _ := params.Arguments["title"].(string)
+		delivType, _ := params.Arguments["type"].(string)
+		taskCode, _ := params.Arguments["task_code"].(string)
+
+		if strings.TrimSpace(title) == "" || strings.TrimSpace(delivType) == "" {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: "ERRO: parâmetros 'title' e 'type' são obrigatórios",
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		delivID, reportPath, err := ScaffoldDelivery(s.RootDir, title, delivType, taskCode)
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO ao criar scaffold da delivery: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		s.sendResult(out, req.ID, ToolResult{
+			Content: []ToolContent{
+				{
+					Type: "text",
+					Text: fmt.Sprintf("Delivery %s criada com sucesso!\nRelatório: %s\nRegistrada no INDEX.md com status 'draft'.", delivID, reportPath),
+				},
+			},
+			IsError: false,
+		})
+
+	case "pipeline_sync_skills":
+		targetDir := s.RootDir
+		if rawDir, ok := params.Arguments["dir"].(string); ok && strings.TrimSpace(rawDir) != "" {
+			if filepath.IsAbs(rawDir) {
+				targetDir = rawDir
+			} else {
+				targetDir = filepath.Join(s.RootDir, rawDir)
+			}
+		}
+		var outBuf, errBuf bytes.Buffer
+		err := scaffold.Sync(targetDir, &outBuf, &errBuf)
+		output := outBuf.String()
+		if err != nil {
+			if output != "" {
+				output += "\n"
+			}
+			output += fmt.Sprintf("ERRO: %v", err)
+		}
+		s.sendResult(out, req.ID, ToolResult{
+			Content: []ToolContent{
+				{
+					Type: "text",
+					Text: output,
+				},
+			},
+			IsError: err != nil,
 		})
 
 	default:
