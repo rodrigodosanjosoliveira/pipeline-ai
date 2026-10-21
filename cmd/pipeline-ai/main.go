@@ -167,7 +167,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 
 	var opts scaffold.Options
 	fs.StringVar(&opts.Name, "name", "", "Nome do projeto (obrigatório)")
-	fs.StringVar(&opts.Type, "type", "", "Formato do projeto: desktop ou api")
+	fs.StringVar(&opts.Type, "type", "", "Formato do projeto: desktop, api ou cli")
 	fs.StringVar(&opts.Database, "db", "", "Banco de dados: postgres, mongo ou dynamo (default: postgres)")
 	fs.StringVar(&opts.Module, "module", "", "Caminho do módulo Go (ex: github.com/user/repo)")
 	fs.StringVar(&opts.TargetDir, "dir", ".", "Diretório de destino (padrão: diretório atual)")
@@ -195,12 +195,16 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		fmt.Println("\nEscolha o formato do projeto:")
 		fmt.Println("  1) desktop (Go + Wails v3 + React num binário único)")
 		fmt.Println("  2) api     (Servidor Go API + UI React)")
-		fmt.Print("Opção [1/2, default: 1]: ")
+		fmt.Println("  3) cli     (Aplicação de linha de comando ou terminal em Go)")
+		fmt.Print("Opção [1/2/3, default: 1]: ")
 		text, _ := reader.ReadString('\n')
 		choice := strings.TrimSpace(text)
-		if choice == "2" || strings.ToLower(choice) == "api" {
+		switch choice {
+		case "2", "api":
 			opts.Type = "api"
-		} else {
+		case "3", "cli", "tui":
+			opts.Type = "cli"
+		default:
 			opts.Type = "desktop"
 		}
 	}

@@ -28,8 +28,8 @@ type Config struct {
 	// Version permite evoluir o formato sem quebrar projetos antigos.
 	Version int `json:"version"`
 
-	// ProjectType é "desktop" (Go + Wails + React) ou "api" (API Go + UI React
-	// separadas). Ver D-03.
+	// ProjectType é "desktop" (Go + Wails + React), "api" (API Go + UI React
+	// separadas) ou "cli" (linha de comando / terminal). Ver D-03.
 	ProjectType string `json:"project_type"`
 
 	// ProtectedPaths são os diretórios que a sessão principal não pode editar
@@ -135,11 +135,11 @@ func (c *Config) validate() error {
 		return fmt.Errorf("version %d não suportada por este binário (esperado 1)", c.Version)
 	}
 	switch c.ProjectType {
-	case "desktop", "api":
+	case "desktop", "api", "cli":
 	case "":
-		return errors.New(`project_type é obrigatório ("desktop" ou "api")`)
+		return errors.New(`project_type é obrigatório ("desktop", "api" ou "cli")`)
 	default:
-		return fmt.Errorf(`project_type %q inválido (use "desktop" ou "api")`, c.ProjectType)
+		return fmt.Errorf(`project_type %q inválido (use "desktop", "api" ou "cli")`, c.ProjectType)
 	}
 	if len(c.ProtectedPaths) == 0 {
 		return errors.New("protected_paths está vazio: o hook não protegeria nada")

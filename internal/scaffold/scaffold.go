@@ -35,8 +35,11 @@ func (o *Options) Normalize() error {
 	}
 
 	o.Type = strings.ToLower(strings.TrimSpace(o.Type))
-	if o.Type != "desktop" && o.Type != "api" {
-		return fmt.Errorf("tipo de projeto inválido %q: use \"desktop\" ou \"api\"", o.Type)
+	if o.Type == "tui" {
+		o.Type = "cli"
+	}
+	if o.Type != "desktop" && o.Type != "api" && o.Type != "cli" {
+		return fmt.Errorf("tipo de projeto inválido %q: use \"desktop\", \"api\" ou \"cli\"", o.Type)
 	}
 
 	db := strings.ToLower(strings.TrimSpace(o.Database))
@@ -87,7 +90,7 @@ func Scaffold(opts Options) error {
 	}
 
 	// 1. Criar estrutura de diretórios do formato
-	if err := createDirSkeleton(absTarget, opts.Type); err != nil {
+	if err := createDirSkeleton(absTarget, opts.Type, opts.Name); err != nil {
 		return err
 	}
 
@@ -101,8 +104,11 @@ func Scaffold(opts Options) error {
 
 	// 3. Copiar .pipeline-ai.json específico
 	jsonTemplate := "templates/pipeline-ai.desktop.json"
-	if opts.Type == "api" {
+	switch opts.Type {
+	case "api":
 		jsonTemplate = "templates/pipeline-ai.api.json"
+	case "cli":
+		jsonTemplate = "templates/pipeline-ai.cli.json"
 	}
 	if err := copyEmbeddedFile(jsonTemplate, filepath.Join(absTarget, ".pipeline-ai.json")); err != nil {
 		return fmt.Errorf("falha ao copiar .pipeline-ai.json: %w", err)
@@ -138,15 +144,19 @@ tool (
 
 	// 6. Gerar Taskfile.yml
 	taskfileTemplate := "templates/Taskfile.desktop.yml"
-	if opts.Type == "api" {
+	switch opts.Type {
+	case "api":
 		taskfileTemplate = "templates/Taskfile.api.yml"
+	case "cli":
+		taskfileTemplate = "templates/Taskfile.cli.yml"
 	}
 	if err := copyEmbeddedFile(taskfileTemplate, filepath.Join(absTarget, "Taskfile.yml")); err != nil {
 		return fmt.Errorf("falha ao copiar Taskfile.yml: %w", err)
 	}
 
 	// 7. Gerar main.go
-	if opts.Type == "desktop" {
+	switch opts.Type {
+	case "desktop":
 		data, err := templateFS.ReadFile("templates/main.desktop.go.tmpl")
 		if err != nil {
 			return err
@@ -155,13 +165,22 @@ tool (
 		if err := os.WriteFile(filepath.Join(absTarget, "main.go"), []byte(rendered), 0644); err != nil {
 			return err
 		}
-	} else {
+	case "api":
 		data, err := templateFS.ReadFile("templates/main.api.go.tmpl")
 		if err != nil {
 			return err
 		}
 		rendered := strings.ReplaceAll(string(data), "{{NOME_DO_PROJETO}}", opts.Name)
 		if err := os.WriteFile(filepath.Join(absTarget, "cmd", "api", "main.go"), []byte(rendered), 0644); err != nil {
+			return err
+		}
+	case "cli":
+		data, err := templateFS.ReadFile("templates/main.cli.go.tmpl")
+		if err != nil {
+			return err
+		}
+		rendered := strings.ReplaceAll(string(data), "{{NOME_DO_PROJETO}}", opts.Name)
+		if err := os.WriteFile(filepath.Join(absTarget, "cmd", opts.Name, "main.go"), []byte(rendered), 0644); err != nil {
 			return err
 		}
 	}
@@ -184,19 +203,21 @@ tool (
 	return nil
 }
 
-func createDirSkeleton(root, projType string) error {
+func createDirSkeleton(root, projType, projName string) error {
 	dirs := []string{
-		"frontend/src",
 		"internal/domain",
 		"internal/storage",
 		"internal/config",
 		"docs-ai/deliveries/_template",
 	}
 
-	if projType == "desktop" {
-		dirs = append(dirs, "build", "internal/app")
-	} else {
-		dirs = append(dirs, "cmd/api", "internal/http", "migrations")
+	switch projType {
+	case "desktop":
+		dirs = append(dirs, "frontend/src", "build", "internal/app")
+	case "api":
+		dirs = append(dirs, "frontend/src", "cmd/api", "internal/http", "migrations")
+	case "cli":
+		dirs = append(dirs, filepath.Join("cmd", projName), "internal/app")
 	}
 
 	for _, d := range dirs {
@@ -255,17 +276,23 @@ func renderMarkdownDoc(tmplPath, destPath string, opts Options) error {
 	}
 
 	tree := ""
-	if opts.Type == "desktop" {
+	switch opts.Type {
+	case "desktop":
 		tree = `.agents/  .pipeline-ai.json  docs-ai/  build/
 frontend/src/
 internal/{app,domain,storage,config}/
 main.go  Taskfile.yml  go.mod  go.sum`
-	} else {
+	case "api":
 		tree = `.agents/  .pipeline-ai.json  docs-ai/
 cmd/api/main.go
 internal/{http,domain,storage,config}/
 frontend/src/  migrations/
 Taskfile.yml  go.mod  go.sum`
+	case "cli":
+		tree = fmt.Sprintf(`.agents/  .pipeline-ai.json  docs-ai/
+cmd/%s/main.go
+internal/{app,domain,storage,config}/
+Taskfile.yml  go.mod  go.sum`, opts.Name)
 	}
 
 	s := string(data)

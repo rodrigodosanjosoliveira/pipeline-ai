@@ -66,6 +66,10 @@ func TestLoadValidacao(t *testing.T) {
 			body: validBody,
 		},
 		{
+			name: "config válida cli",
+			body: `{"version":1,"project_type":"cli","protected_paths":["internal/","cmd/"]}`,
+		},
+		{
 			name: "enabled_modules válidos",
 			body: `{"version":1,"project_type":"api","protected_paths":["internal/"],"enabled_modules":["data-model","release-ops"]}`,
 		},

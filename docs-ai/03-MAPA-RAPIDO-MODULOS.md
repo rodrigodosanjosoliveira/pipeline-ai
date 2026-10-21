@@ -63,7 +63,33 @@ Projetos no formato API estruturam um servidor backend independente com pontos d
 
 ---
 
-## 3. Diretórios Globais do Padrão (Ambos os Formatos)
+## 3. Formato CLI / Terminal (Aplicações de Linha de Comando em Go)
+
+Projetos no formato CLI estruturam ferramentas de terminal puras sem dependências de frontend.
+
+```text
+├── cmd/
+│   └── <nome-do-app>/
+│       └── main.go       # Ponto de entrada CLI, parsing de flags/comandos e streams
+├── Taskfile.yml          # Automação de tarefas e gates da CLI
+├── .pipeline-ai.json     # Configuração de governança (project_type: "cli")
+├── .agents/              # Skills, regras e hooks do Antigravity
+├── internal/             # Código protegido da CLI
+│   ├── app/              # Execução dos comandos e handlers da CLI
+│   ├── domain/           # Entidades e regras de negócio puras
+│   ├── storage/          # Persistência local ou conectores (quando houver)
+│   └── config/           # Configurações de ambiente e flags
+└── docs-ai/              # Relatórios de entregas e documentação de arquitetura
+```
+
+### Guia de Roteamento por Caminho (CLI):
+- Alterações em `cmd/<app>/`: pontos de entrada, flags, ajuda e streams stdout/stderr.
+- Alterações em `internal/app/`: orquestração e execução de fluxos da CLI.
+- Alterações em `internal/storage/` ou `internal/auth/`: ativa `SECURITY: sim`.
+
+---
+
+## 4. Diretórios Globais do Padrão (Todos os Formatos)
 
 | Diretório / Arquivo | Função | Nível de Acesso |
 |---|---|---|

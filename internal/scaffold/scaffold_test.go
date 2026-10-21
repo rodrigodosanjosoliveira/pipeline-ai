@@ -138,6 +138,76 @@ func TestScaffoldAPI(t *testing.T) {
 	}
 }
 
+func TestScaffoldCLI(t *testing.T) {
+	dir := t.TempDir()
+
+	opts := Options{
+		Name:      "test-cli-tool",
+		Type:      "cli",
+		Database:  "postgres",
+		Module:    "github.com/test/cli-tool",
+		TargetDir: dir,
+		InitGit:   false,
+	}
+
+	if err := Scaffold(opts); err != nil {
+		t.Fatalf("Scaffold falhou: %v", err)
+	}
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatalf("config.Load falhou: %v", err)
+	}
+	if cfg.ProjectType != "cli" {
+		t.Errorf("esperava project_type cli, obteve %s", cfg.ProjectType)
+	}
+
+	expectedFiles := []string{
+		"cmd/test-cli-tool/main.go",
+		"Taskfile.yml",
+		".pipeline-ai.json",
+		".agents/skills/pm-triage/SKILL.md",
+		"AGENTS.md",
+		"GEMINI.md",
+		"docs-ai/01-INVARIANTES-GLOBAIS.md",
+	}
+
+	for _, f := range expectedFiles {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			t.Errorf("arquivo esperado %s não existe: %v", f, err)
+		}
+	}
+
+	frontendDir := filepath.Join(dir, "frontend")
+	if _, err := os.Stat(frontendDir); !os.IsNotExist(err) {
+		t.Errorf("projeto cli não deveria conter diretório frontend/: %v", err)
+	}
+
+	agentsDoc, err := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("falha ao ler AGENTS.md: %v", err)
+	}
+	if !strings.Contains(string(agentsDoc), "**Formato:** cli") {
+		t.Errorf("AGENTS.md não contém formato cli interpolado: %s", string(agentsDoc))
+	}
+	if strings.Contains(string(agentsDoc), "frontend/src") {
+		t.Errorf("AGENTS.md de projeto CLI não deveria referenciar frontend/src")
+	}
+}
+
+func TestScaffoldCLIAliasTUI(t *testing.T) {
+	opts := Options{
+		Name: "test-tui-app",
+		Type: "tui",
+	}
+	if err := opts.Normalize(); err != nil {
+		t.Fatalf("Normalize() falhou para alias 'tui': %v", err)
+	}
+	if opts.Type != "cli" {
+		t.Errorf("esperava tipo normalizado para 'cli', obteve %s", opts.Type)
+	}
+}
+
 func TestScaffoldValidation(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -155,8 +225,18 @@ func TestScaffoldValidation(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "válido",
+			name:    "válido desktop",
 			opts:    Options{Name: "app", Type: "desktop"},
+			wantErr: false,
+		},
+		{
+			name:    "válido cli",
+			opts:    Options{Name: "app", Type: "cli"},
+			wantErr: false,
+		},
+		{
+			name:    "válido alias tui",
+			opts:    Options{Name: "app", Type: "tui"},
 			wantErr: false,
 		},
 	}
