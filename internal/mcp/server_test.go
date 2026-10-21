@@ -204,7 +204,7 @@ func TestMCPScaffoldDelivery(t *testing.T) {
 	if err := os.MkdirAll(delivDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	initialIndex := "# Índice de Deliveries\n\n| ID | Task | Título | Tipo | Data | Status |\n|---|---|---|---|---|---|\n| DEL-001 | TASK-001 | Init | feat | 2026-10-21 | merged |\n"
+	initialIndex := "# Índice de Deliveries\n\n| ID | Task | Título | Tipo | Data | Status |\n|---|---|---|---|---|---|\n| — | — | nenhuma delivery registrada | — | — | — |\n\n<!--\n| DEL-001 | TASK-42 | Exemplo | feat | 2026-09-17 | merged |\n-->"
 	if err := os.WriteFile(filepath.Join(delivDir, "INDEX.md"), []byte(initialIndex), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -222,28 +222,31 @@ func TestMCPScaffoldDelivery(t *testing.T) {
 		t.Fatalf("pipeline_scaffold_delivery retornou erro: %v", result)
 	}
 
-	// Verifica se DEL-002 foi criado
-	expectedReport := filepath.Join(delivDir, "DEL-002", "report.md")
+	// Verifica se DEL-001 foi criado ignorando o comentário HTML
+	expectedReport := filepath.Join(delivDir, "DEL-001", "report.md")
 	content, err := os.ReadFile(expectedReport)
 	if err != nil {
 		t.Fatalf("report.md não foi criado em %s: %v", expectedReport, err)
 	}
 	reportStr := string(content)
-	if !strings.Contains(reportStr, "delivery_id: DEL-002") {
-		t.Errorf("report.md não contém delivery_id: DEL-002")
+	if !strings.Contains(reportStr, "delivery_id: DEL-001") {
+		t.Errorf("report.md não contém delivery_id: DEL-001, obtido: %s", reportStr)
 	}
 	if !strings.Contains(reportStr, "Nova Feature Teste") {
 		t.Errorf("report.md não contém o título fornecido")
 	}
 
-	// Verifica se INDEX.md foi atualizado com DEL-002 no topo da tabela
+	// Verifica se INDEX.md foi atualizado com DEL-001 no topo e removeu a linha placeholder
 	indexBytes, err := os.ReadFile(filepath.Join(delivDir, "INDEX.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	indexStr := string(indexBytes)
-	if !strings.Contains(indexStr, "DEL-002") {
-		t.Errorf("INDEX.md não contém a nova delivery DEL-002")
+	if !strings.Contains(indexStr, "DEL-001") {
+		t.Errorf("INDEX.md não contém a nova delivery DEL-001")
+	}
+	if strings.Contains(indexStr, "nenhuma delivery registrada") {
+		t.Errorf("INDEX.md ainda contém a linha placeholder 'nenhuma delivery registrada'")
 	}
 }
 

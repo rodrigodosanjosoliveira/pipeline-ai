@@ -27,7 +27,9 @@ func ScaffoldDelivery(rootDir, title, delivType, taskCode string) (string, strin
 	}
 
 	indexContent := string(indexBytes)
-	matches := delRegex.FindAllStringSubmatch(indexContent, -1)
+	commentRegex := regexp.MustCompile(`(?s)<!--.*?-->`)
+	cleanContent := commentRegex.ReplaceAllString(indexContent, "")
+	matches := delRegex.FindAllStringSubmatch(cleanContent, -1)
 	maxNum := 0
 	for _, m := range matches {
 		if len(m) > 1 {
@@ -122,6 +124,9 @@ $ go test ./...
 	var newLines []string
 
 	for _, l := range lines {
+		if strings.Contains(l, "nenhuma delivery registrada") {
+			continue
+		}
 		newLines = append(newLines, l)
 		if !inserted && strings.HasPrefix(strings.TrimSpace(l), "|---") {
 			newLines = append(newLines, newLine)
