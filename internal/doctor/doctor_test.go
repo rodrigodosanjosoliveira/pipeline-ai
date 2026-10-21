@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -142,4 +143,34 @@ func TestRunDoctor(t *testing.T) {
 		t.Errorf("esperava output no stdout")
 	}
 	t.Logf("doctor exit code: %d, output:\n%s", code, stdout.String())
+}
+
+func TestRunDoctorJSON(t *testing.T) {
+	var stdout bytes.Buffer
+	code := RunJSON(".", &stdout)
+	if code != 0 {
+		t.Errorf("esperava código de saída 0 no repositório atual, obteve %d", code)
+	}
+
+	raw := stdout.Bytes()
+	var rep Report
+	if err := json.Unmarshal(raw, &rep); err != nil {
+		t.Fatalf("saída não é JSON válido: %v\nOutput:\n%s", err, string(raw))
+	}
+
+	if !rep.OK {
+		t.Errorf("esperava rep.OK == true no repositório atual")
+	}
+	if len(rep.Results) == 0 {
+		t.Fatalf("esperava ao menos um resultado de verificação")
+	}
+
+	for _, r := range rep.Results {
+		if r.Name == "" {
+			t.Errorf("resultado sem campo 'name'")
+		}
+		if r.Status == "" {
+			t.Errorf("resultado sem campo 'status'")
+		}
+	}
 }

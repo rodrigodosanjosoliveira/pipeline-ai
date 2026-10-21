@@ -124,10 +124,14 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 
 	dir := fs.String("dir", ".", "diretório raiz do projeto a ser verificado")
+	asJSON := fs.Bool("json", false, "emite o diagnóstico estruturado em formato JSON")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
+	if *asJSON {
+		return doctor.RunJSON(*dir, stdout)
+	}
 	return doctor.Run(*dir, stdout, stderr)
 }
 

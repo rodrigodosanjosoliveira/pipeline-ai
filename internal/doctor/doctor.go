@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -22,9 +23,15 @@ const (
 )
 
 type CheckResult struct {
-	Name    string
-	Status  CheckStatus
-	Message string
+	Name    string      `json:"name"`
+	Status  CheckStatus `json:"status"`
+	Message string      `json:"message"`
+}
+
+// Report representa o diagnóstico estruturado do ambiente para serialização JSON.
+type Report struct {
+	OK      bool          `json:"ok"`
+	Results []CheckResult `json:"results"`
 }
 
 var goVersionRegex = regexp.MustCompile(`go version go(\d+)\.(\d+)`)
@@ -207,12 +214,8 @@ func CheckAgents(rootDir string) CheckResult {
 	}
 }
 
-// Run executa todas as verificações do doctor e imprime o relatório em stdout.
-// Retorna 0 se tudo passar (ou avisos), 1 se houver falhas críticas.
-func Run(rootDir string, stdout, stderr io.Writer) int {
-	fmt.Fprintln(stdout, "=== pipeline-ai doctor ===")
-	fmt.Fprintln(stdout)
-
+// Collect executa todas as verificações do doctor e retorna os resultados e se o ambiente está aprovado.
+func Collect(rootDir string) ([]CheckResult, bool) {
 	var results []CheckResult
 	results = append(results, CheckGo())
 	results = append(results, CheckToolchain()...)
@@ -222,6 +225,21 @@ func Run(rootDir string, stdout, stderr io.Writer) int {
 
 	hasFail := false
 	for _, res := range results {
+		if res.Status == StatusFail {
+			hasFail = true
+		}
+	}
+	return results, !hasFail
+}
+
+// Run executa todas as verificações do doctor e imprime o relatório em stdout.
+// Retorna 0 se tudo passar (ou avisos), 1 se houver falhas críticas.
+func Run(rootDir string, stdout, stderr io.Writer) int {
+	fmt.Fprintln(stdout, "=== pipeline-ai doctor ===")
+	fmt.Fprintln(stdout)
+
+	results, ok := Collect(rootDir)
+	for _, res := range results {
 		var icon string
 		switch res.Status {
 		case StatusPass:
@@ -230,16 +248,34 @@ func Run(rootDir string, stdout, stderr io.Writer) int {
 			icon = "!"
 		case StatusFail:
 			icon = "✗"
-			hasFail = true
 		}
 		fmt.Fprintf(stdout, " [%s] %-32s : %s\n", icon, res.Name, res.Message)
 	}
 
 	fmt.Fprintln(stdout)
-	if hasFail {
+	if !ok {
 		fmt.Fprintln(stdout, "Resultado: Uma ou mais verificações críticas falharam.")
 		return 1
 	}
 	fmt.Fprintln(stdout, "Resultado: Ambiente validado com sucesso!")
+	return 0
+}
+
+// RunJSON executa todas as verificações do doctor e emite o diagnóstico estruturado em formato JSON no stdout.
+// Retorna 0 se aprovado (ou avisos), 1 se houver falhas críticas.
+func RunJSON(rootDir string, stdout io.Writer) int {
+	results, ok := Collect(rootDir)
+	rep := Report{
+		OK:      ok,
+		Results: results,
+	}
+	enc := json.NewEncoder(stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(rep); err != nil {
+		return 1
+	}
+	if !ok {
+		return 1
+	}
 	return 0
 }
