@@ -184,9 +184,16 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 }
 ```
 
-### Ferramentas MCP Expostas
+### Recursos MCP (Resources)
+- **`pipeline://invariants`**: Fornece os invariantes de arquitetura e governança do projeto.
+- **`pipeline://active-delivery`**: Retorna o status da entrega ativa e tabela do `INDEX.md`.
+- **`pipeline://catalog`**: Lista de skills nativas e módulos disponíveis.
+
+### Ferramentas MCP (Tools)
 - **`pipeline_doctor`**: Executa diagnóstico completo de ambiente e configuração (`dir`).
 - **`pipeline_validate`**: Valida relatórios de entrega (`report_path`, `no_git`, `base_ref`) e salvaguardas de Git.
+- **`pipeline_scaffold_delivery`**: Cria o esqueleto da próxima entrega (`title`, `type`, `task_code`), gera `report.md` com seções obrigatórias e registra no `INDEX.md`.
+- **`pipeline_sync_skills`**: Sincroniza e atualiza `.agents/skills` e regras a partir dos templates embutidos (`dir`).
 
 ---
 

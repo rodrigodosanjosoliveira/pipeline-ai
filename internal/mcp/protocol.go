@@ -51,3 +51,23 @@ type ToolResult struct {
 	Content []ToolContent `json:"content"`
 	IsError bool          `json:"isError,omitempty"`
 }
+
+// Resource representa um recurso de contexto estático ou dinâmico exposto no MCP.
+type Resource struct {
+	URI         string `json:"uri"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	MimeType    string `json:"mimeType"`
+}
+
+// ResourceContent representa o conteúdo retornado por um recurso lido.
+type ResourceContent struct {
+	URI      string `json:"uri"`
+	MimeType string `json:"mimeType"`
+	Text     string `json:"text"`
+}
+
+// ReadResourceResult representa a resposta estruturada para resources/read.
+type ReadResourceResult struct {
+	Contents []ResourceContent `json:"contents"`
+}

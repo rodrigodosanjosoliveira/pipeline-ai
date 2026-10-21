@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -149,5 +151,124 @@ func TestMCPToolsCallValidate(t *testing.T) {
 	result, _ = res["result"].(map[string]any)
 	if result["isError"] == true {
 		t.Errorf("esperava isError false para DEL-001 report.md")
+	}
+}
+
+func TestMCPResources(t *testing.T) {
+	s := NewServer("../..")
+
+	// 1. resources/list
+	reqList := `{"jsonrpc":"2.0","id":40,"method":"resources/list","params":{}}`
+	res := runRPC(t, s, reqList)
+	result, ok := res["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result ausente em resources/list: %v", res)
+	}
+
+	resources, ok := result["resources"].([]any)
+	if !ok || len(resources) < 3 {
+		t.Fatalf("esperava ao menos 3 resources, obteve: %v", resources)
+	}
+
+	// 2. resources/read pipeline://invariants
+	reqRead := `{"jsonrpc":"2.0","id":41,"method":"resources/read","params":{"uri":"pipeline://invariants"}}`
+	res = runRPC(t, s, reqRead)
+	result, ok = res["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result ausente em resources/read: %v", res)
+	}
+	contents, ok := result["contents"].([]any)
+	if !ok || len(contents) == 0 {
+		t.Fatalf("contents vazio em resources/read: %v", result)
+	}
+	first, _ := contents[0].(map[string]any)
+	if text, ok := first["text"].(string); !ok || len(text) == 0 {
+		t.Errorf("texto de pipeline://invariants vazio ou inválido")
+	}
+
+	// 3. resources/read pipeline://active-delivery
+	reqActive := `{"jsonrpc":"2.0","id":42,"method":"resources/read","params":{"uri":"pipeline://active-delivery"}}`
+	res = runRPC(t, s, reqActive)
+	result, _ = res["result"].(map[string]any)
+	contents, _ = result["contents"].([]any)
+	if len(contents) == 0 {
+		t.Fatalf("contents vazio em pipeline://active-delivery")
+	}
+}
+
+func TestMCPScaffoldDelivery(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Configura estrutura básica de docs-ai/deliveries/INDEX.md
+	delivDir := filepath.Join(tmpDir, "docs-ai", "deliveries")
+	if err := os.MkdirAll(delivDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	initialIndex := "# Índice de Deliveries\n\n| ID | Task | Título | Tipo | Data | Status |\n|---|---|---|---|---|---|\n| DEL-001 | TASK-001 | Init | feat | 2026-10-21 | merged |\n"
+	if err := os.WriteFile(filepath.Join(delivDir, "INDEX.md"), []byte(initialIndex), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(tmpDir)
+
+	// Executa pipeline_scaffold_delivery
+	req := `{"jsonrpc":"2.0","id":50,"method":"tools/call","params":{"name":"pipeline_scaffold_delivery","arguments":{"title":"Nova Feature Teste","type":"feat"}}}`
+	res := runRPC(t, s, req)
+	result, ok := res["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result ausente em pipeline_scaffold_delivery: %v", res)
+	}
+	if result["isError"] == true {
+		t.Fatalf("pipeline_scaffold_delivery retornou erro: %v", result)
+	}
+
+	// Verifica se DEL-002 foi criado
+	expectedReport := filepath.Join(delivDir, "DEL-002", "report.md")
+	content, err := os.ReadFile(expectedReport)
+	if err != nil {
+		t.Fatalf("report.md não foi criado em %s: %v", expectedReport, err)
+	}
+	reportStr := string(content)
+	if !strings.Contains(reportStr, "delivery_id: DEL-002") {
+		t.Errorf("report.md não contém delivery_id: DEL-002")
+	}
+	if !strings.Contains(reportStr, "Nova Feature Teste") {
+		t.Errorf("report.md não contém o título fornecido")
+	}
+
+	// Verifica se INDEX.md foi atualizado com DEL-002 no topo da tabela
+	indexBytes, err := os.ReadFile(filepath.Join(delivDir, "INDEX.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexStr := string(indexBytes)
+	if !strings.Contains(indexStr, "DEL-002") {
+		t.Errorf("INDEX.md não contém a nova delivery DEL-002")
+	}
+}
+
+func TestMCPSyncSkills(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Cria pasta .agents prévia para simular projeto existente
+	if err := os.MkdirAll(filepath.Join(tmpDir, ".agents"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	s := NewServer(tmpDir)
+
+	req := `{"jsonrpc":"2.0","id":60,"method":"tools/call","params":{"name":"pipeline_sync_skills","arguments":{"dir":"."}}}`
+	res := runRPC(t, s, req)
+	result, ok := res["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result ausente em pipeline_sync_skills: %v", res)
+	}
+	if result["isError"] == true {
+		t.Fatalf("pipeline_sync_skills retornou erro inesperado: %v", result)
+	}
+
+	// Verifica se .agents/skills foi criado
+	skillsDir := filepath.Join(tmpDir, ".agents", "skills")
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil || len(entries) < 10 {
+		t.Errorf("esperava skills sincronizadas em %s, obteve %d entradas", skillsDir, len(entries))
 	}
 }
