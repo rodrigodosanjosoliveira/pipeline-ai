@@ -32,7 +32,7 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 - Compilado e testado com **100% de sucesso em Go 1.24+** (stdlib pura, compatível com detector de concorrência `-race`).
 - Integrado nativamente ao ecossistema **Antigravity** via `.agents/hooks.json`, regras e **16 skills modulares**.
 - Automação via **`Taskfile.yml`** e workflow completo no **GitHub Actions** (`.github/workflows/ci.yml`).
-- Versão estável atual: **`v0.4.0`**.
+- Versão estável atual: **`v0.5.0`**.
 
 ---
 
@@ -62,10 +62,10 @@ Consulte o [Guia de Criação de Projetos](docs-ai/GUIA-CRIACAO-PROJETOS.md) par
 Requer Go 1.24 ou superior (a diretiva `tool` no `go.mod` é obrigatória):
 
 ```bash
-go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@v0.4.0
+go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@v0.5.0
 ```
 
-*(Os comandos legados `cmd/pipeline-hook@v0.4.0` e `cmd/pipeline-validate@v0.4.0` também permanecem disponíveis).*
+*(Os comandos legados `cmd/pipeline-hook@v0.5.0` e `cmd/pipeline-validate@v0.5.0` também permanecem disponíveis).*
 
 *(Se o repositório for privado, configure `go env -w GOPRIVATE="github.com/rodrigodosanjosoliveira/*"` e autentique o Git via SSH)*.
 
