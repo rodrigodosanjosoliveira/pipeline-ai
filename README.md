@@ -15,6 +15,7 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 | `pipeline-ai validate` | Valida o relatório de delivery antes do commit e abertura de PR, garantindo salvaguarda estrita de Git (D-14). |
 | `pipeline-ai sync` | Sincroniza e atualiza skills (`.agents/skills`), regras e hooks em projetos existentes sem tocar em código de negócio. |
 | `pipeline-ai doctor` | Diagnostica a integridade do ambiente local (Go 1.24+, git, gh, pre-push hook e `.pipeline-ai.json`). Suporta `--json` para automações e CI. |
+| `pipeline-ai mcp` | Servidor MCP nativo (JSON-RPC 2.0 sobre stdio) expondo ferramentas de governança para Antigravity e IDEs. |
 
 *(Os binários individuais `pipeline-hook`, `pipeline-validate` e `pipeline-init` permanecem disponíveis para retrocompatibilidade com diretivas `tool` existentes).*
 
@@ -165,6 +166,27 @@ go tool pipeline-validate docs-ai/deliveries/DEL-001/report.md
 
 - **Exit code 0:** Aprovado.
 - **Exit code 1:** Reprovado (bloqueia o commit/PR caso haja marcadores `TODO`, checklist incompleto ou salvaguarda de segurança violada).
+
+---
+
+## Servidor MCP Nativo (`pipeline-ai mcp`)
+
+O `pipeline-ai` inclui um servidor compatível com a especificação **Model Context Protocol (MCP)** sobre transporte `stdio` (JSON-RPC 2.0). Ele permite que IDEs e assistentes (como o **Antigravity**) invoquem ferramentas de governança diretamente:
+
+```json
+{
+  "mcpServers": {
+    "pipeline-ai": {
+      "command": "pipeline-ai",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+### Ferramentas MCP Expostas
+- **`pipeline_doctor`**: Executa diagnóstico completo de ambiente e configuração (`dir`).
+- **`pipeline_validate`**: Valida relatórios de entrega (`report_path`, `no_git`, `base_ref`) e salvaguardas de Git.
 
 ---
 

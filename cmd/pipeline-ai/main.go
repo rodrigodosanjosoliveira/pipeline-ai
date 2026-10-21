@@ -20,6 +20,7 @@ import (
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/hook"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/mcp"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
 )
@@ -27,10 +28,14 @@ import (
 const version = "v0.4.0"
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(runWithStdin(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	return runWithStdin(args, os.Stdin, stdout, stderr)
+}
+
+func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		printUsage(stdout)
 		return 0
@@ -49,7 +54,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 
 	case "hook":
-		return hook.Run(os.Stdin, stdout, stderr)
+		return hook.Run(stdin, stdout, stderr)
 
 	case "validate":
 		return runValidate(cmdArgs, stdout, stderr)
@@ -62,6 +67,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	case "doctor":
 		return runDoctor(cmdArgs, stdout, stderr)
+
+	case "mcp":
+		return runMCP(cmdArgs, stdin, stdout, stderr)
 
 	default:
 		fmt.Fprintf(stderr, "pipeline-ai: comando desconhecido: %q\nExecute 'pipeline-ai help' para ver a lista de comandos.\n", cmd)
@@ -78,6 +86,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  validate   Valida o relatório de delivery e salvaguardas de segurança antes do PR")
 	fmt.Fprintln(w, "  sync       Sincroniza skills, regras e hooks em .agents/ a partir dos templates")
 	fmt.Fprintln(w, "  doctor     Diagnostica o ambiente local (Go 1.24+, git, gh, hooks e .pipeline-ai.json)")
+	fmt.Fprintln(w, "  mcp        Executa o servidor MCP sobre stdio (JSON-RPC 2.0)")
 	fmt.Fprintln(w, "  version    Exibe a versão do pipeline-ai")
 	fmt.Fprintln(w, "  help       Exibe esta mensagem de ajuda")
 	fmt.Fprintln(w)
@@ -133,6 +142,23 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 		return doctor.RunJSON(*dir, stdout)
 	}
 	return doctor.Run(*dir, stdout, stderr)
+}
+
+func runMCP(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	dir := fs.String("dir", ".", "diretório raiz do projeto")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	s := mcp.NewServer(*dir)
+	if err := s.ServeStream(stdin, stdout, stderr); err != nil && err != io.EOF {
+		fmt.Fprintf(stderr, "mcp: erro no servidor: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func runInit(args []string, stdout, stderr io.Writer) int {
