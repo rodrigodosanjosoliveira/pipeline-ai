@@ -197,3 +197,16 @@ Revisão técnica executada.
 		t.Errorf("validate falhou em relatório válido: exitCode=%d, stdout:\n%s\nstderr:\n%s", exitCode, stdout.String(), stderr.String())
 	}
 }
+
+func TestCLIMCP(t *testing.T) {
+	// Testa inicialização e encerramento limpo do MCP via CLI
+	var stdout, stderr bytes.Buffer
+	stdin := strings.NewReader("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n")
+	exitCode := runWithStdin([]string{"mcp"}, stdin, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Errorf("runWithStdin(mcp) esperava exit code 0, obteve %d. Stderr: %s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"protocolVersion":"2024-11-05"`) {
+		t.Errorf("resposta do initialize não encontrada no stdout:\n%s", stdout.String())
+	}
+}

@@ -3,7 +3,7 @@ delivery_id: DEL-003
 task_code: TASK-003
 title: Suporte a saída estruturada JSON na ferramenta doctor (--json)
 type: feat
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false
