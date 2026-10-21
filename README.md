@@ -6,13 +6,17 @@
 
 Toolkit e padrão reutilizável para projetos de desenvolvimento assistido por agentes de IA, integrando nativamente Go no backend e o ecossistema **Antigravity**.
 
-Três binários Go compilados estaticamente, sem dependências externas além da biblioteca padrão:
+A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamente em Go puro sem dependências externas:
 
-| Binário | Função |
+| Comando | Função |
 |---|---|
-| `pipeline-hook` | Hook `PreToolUse` que impede edição direta em caminhos protegidos fora dos agents/skills autorizados (D-11). |
-| `pipeline-validate` | Valida o relatório de delivery antes do commit e abertura de PR, garantindo salvaguarda estrita de Git (D-14). |
-| `pipeline-init` | Utilitário de *scaffolding* que inicializa novos projetos completos em 1 comando com templates embutidos. |
+| `pipeline-ai init` | Utilitário de *scaffolding* que inicializa novos projetos completos em 1 comando com templates embutidos. |
+| `pipeline-ai hook` | Hook `PreToolUse` que impede edição direta em caminhos protegidos fora dos agents/skills autorizados (D-11). |
+| `pipeline-ai validate` | Valida o relatório de delivery antes do commit e abertura de PR, garantindo salvaguarda estrita de Git (D-14). |
+| `pipeline-ai sync` | Sincroniza e atualiza skills (`.agents/skills`), regras e hooks em projetos existentes sem tocar em código de negócio. |
+| `pipeline-ai doctor` | Diagnostica a integridade do ambiente local (Go 1.24+, git, gh, pre-push hook e `.pipeline-ai.json`). |
+
+*(Os binários individuais `pipeline-hook`, `pipeline-validate` e `pipeline-init` permanecem disponíveis para retrocompatibilidade com diretivas `tool` existentes).*
 
 ---
 
@@ -33,12 +37,12 @@ Três binários Go compilados estaticamente, sem dependências externas além da
 
 ## Como Criar um Novo Projeto (1 Comando)
 
-Crie o diretório do novo projeto e execute o `pipeline-init` via `go run`:
+Crie o diretório do novo projeto e execute o `pipeline-ai init` (ou `pipeline-init`) via `go run`:
 
 ```bash
 mkdir ~/workspace/meu-novo-app && cd ~/workspace/meu-novo-app
 
-go run github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-init@latest
+go run github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@latest init
 ```
 
 O utilitário guia você de forma interativa (ou via flags `-name`, `-type`, `-db`, `-module`, `-dir`) e entrega o projeto pronto:
