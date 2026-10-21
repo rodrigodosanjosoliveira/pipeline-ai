@@ -3,7 +3,7 @@ delivery_id: DEL-001
 task_code: TASK-001
 title: CLI unificada pipeline-ai com subcomandos sync e doctor
 type: feat
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false
