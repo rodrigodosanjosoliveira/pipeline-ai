@@ -210,3 +210,26 @@ func TestCLIMCP(t *testing.T) {
 		t.Errorf("resposta do initialize não encontrada no stdout:\n%s", stdout.String())
 	}
 }
+
+func TestCLIInitCLI(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	var stdout, stderr bytes.Buffer
+	initArgs := []string{
+		"init",
+		"-name", "ferramenta-cli",
+		"-type", "cli",
+		"-db", "postgres",
+		"-dir", tmpDir,
+		"-no-git",
+	}
+	exitCode := run(initArgs, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("run(init -type cli) falhou: exitCode=%d, stderr:\n%s", exitCode, stderr.String())
+	}
+
+	mainFile := filepath.Join(tmpDir, "cmd", "ferramenta-cli", "main.go")
+	if _, err := os.Stat(mainFile); err != nil {
+		t.Errorf("arquivo principal do CLI %s não foi criado: %v", mainFile, err)
+	}
+}

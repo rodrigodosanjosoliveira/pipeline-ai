@@ -28,6 +28,7 @@ O utilitário iniciará o **modo interativo**, perguntando:
 2. **Formato**:
    - `1) desktop` (Go + Wails v3 + React em binário único)
    - `2) api` (Servidor Go API + UI React)
+   - `3) cli` (Aplicação de terminal / linha de comando em Go)
 3. **Banco de dados**:
    - `1) PostgreSQL`
    - `2) MongoDB`
@@ -39,6 +40,15 @@ O utilitário iniciará o **modo interativo**, perguntando:
 ## 3. Criação Não Interativa (Via Flags)
 
 Para scripts de automação ou inicialização rápida sem perguntas:
+
+### Exemplo CLI / Terminal (Go puro):
+```bash
+go run github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@latest init \
+  -name=meu-cli \
+  -type=cli \
+  -db=postgres \
+  -module=github.com/rodrigodosanjosoliveira/meu-cli
+```
 
 ### Exemplo Desktop (Wails v3 + PostgreSQL):
 ```bash

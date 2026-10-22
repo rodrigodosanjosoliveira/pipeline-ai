@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-006 | TASK-006 | Release v0.5.0: Bump de versão, MCP completo e encerramento operacional | chore | 2026-10-21 | draft |
+| DEL-007 | TASK-007 | Suporte ao formato de projeto cli e tui no pipeline-ai init | feat | 2026-10-21 | draft |
+| DEL-006 | TASK-006 | Release v0.5.0: Bump de versão, MCP completo e encerramento operacional | chore | 2026-10-21 | merged |
 | DEL-005 | TASK-005 | Expansão MCP Fase 2: Resources pipeline:// e Tools de Scaffold e Sync | feat | 2026-10-21 | merged |
 | DEL-004 | TASK-004 | Servidor MCP stdio nativo no comando pipeline-ai mcp | feat | 2026-10-21 | merged |
 | DEL-003 | TASK-003 | Suporte a saída estruturada JSON na ferramenta doctor (--json) | feat | 2026-10-21 | merged |
