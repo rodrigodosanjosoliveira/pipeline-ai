@@ -67,9 +67,14 @@ func TestRun(t *testing.T) {
 			want:    exitBlock,
 		},
 		{
-			name:    "payload sem file_path passa",
+			name:    "payload de edicao sem file_path bloqueia",
 			payload: `{"tool_name":"Edit","cwd":"` + root + `","tool_input":{}}`,
-			want:    exitAllow,
+			want:    exitBlock,
+		},
+		{
+			name:    "payload de edicao com file_path vazio bloqueia",
+			payload: `{"tool_name":"Edit","cwd":"` + root + `","tool_input":{"file_path":"   "}}`,
+			want:    exitBlock,
 		},
 		{
 			name:    "JSON inválido não trava a sessão",
@@ -201,6 +206,54 @@ func TestAntigravityProtocol(t *testing.T) {
 			}`,
 			wantExit:     exitAllow,
 			wantDecision: "allow",
+		},
+		{
+			name: "NotebookEdit em caminho protegido com notebook_path e agente não autorizado bloqueia",
+			payload: `{
+				"toolCall": {"name": "NotebookEdit", "args": {"notebook_path": "` + filepath.Join(root, "internal", "foo.go") + `"}},
+				"workspacePaths": ["` + root + `"],
+				"subagentId": "pm-triage"
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
+			containsText: "BLOQUEADO",
+		},
+		{
+			name: "NotebookEdit em caminho protegido com notebook_path na sessao principal bloqueia",
+			payload: `{
+				"toolCall": {"name": "NotebookEdit", "args": {"notebook_path": "` + filepath.Join(root, "internal", "foo.go") + `"}},
+				"workspacePaths": ["` + root + `"]
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
+			containsText: "BLOQUEADO",
+		},
+		{
+			name: "write_to_file com caminho ausente bloqueia com deny",
+			payload: `{
+				"toolCall": {"name": "write_to_file", "args": {}},
+				"workspacePaths": ["` + root + `"]
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
+		},
+		{
+			name: "write_to_file com caminho vazio bloqueia com deny",
+			payload: `{
+				"toolCall": {"name": "write_to_file", "args": {"TargetFile": "   "}},
+				"workspacePaths": ["` + root + `"]
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
+		},
+		{
+			name: "Edit com caminho ausente bloqueia com deny",
+			payload: `{
+				"toolCall": {"name": "Edit", "args": {}},
+				"workspacePaths": ["` + root + `"]
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
 		},
 	}
 

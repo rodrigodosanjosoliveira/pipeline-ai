@@ -8,11 +8,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
 //go:embed all:templates
 var templateFS embed.FS
+
+var validNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 // Options define os parâmetros de criação de um novo projeto.
 type Options struct {
@@ -32,6 +35,9 @@ func (o *Options) Normalize() error {
 	o.Name = strings.TrimSpace(o.Name)
 	if o.Name == "" {
 		return fmt.Errorf("o nome do projeto é obrigatório")
+	}
+	if !validNameRegex.MatchString(o.Name) {
+		return fmt.Errorf("nome de projeto inválido %q: deve conter apenas letras, números, hífen ou sublinhado e começar com caractere alfanumérico", o.Name)
 	}
 
 	o.Type = strings.ToLower(strings.TrimSpace(o.Type))
@@ -204,6 +210,7 @@ tool (
 }
 
 func createDirSkeleton(root, projType, projName string) error {
+	cleanRoot := filepath.Clean(root)
 	dirs := []string{
 		"internal/domain",
 		"internal/storage",
@@ -221,7 +228,12 @@ func createDirSkeleton(root, projType, projName string) error {
 	}
 
 	for _, d := range dirs {
-		if err := os.MkdirAll(filepath.Join(root, d), 0755); err != nil {
+		target := filepath.Clean(filepath.Join(cleanRoot, d))
+		rel, err := filepath.Rel(cleanRoot, target)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("caminho de diretório inválido fora da raiz do projeto: %s", d)
+		}
+		if err := os.MkdirAll(target, 0755); err != nil {
 			return fmt.Errorf("falha ao criar pasta %s: %w", d, err)
 		}
 	}

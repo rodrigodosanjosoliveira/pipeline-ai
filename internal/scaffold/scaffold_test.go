@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -136,6 +137,30 @@ func TestScaffoldAPI(t *testing.T) {
 	if !strings.Contains(string(agentsDoc), "MongoDB") {
 		t.Errorf("AGENTS.md não contém MongoDB interpolado")
 	}
+
+	for _, a := range cfg.EditorAgents {
+		if a == "query-performance" {
+			t.Errorf("query-performance não deve constar em editor_agents do template api (é agente de análise/revisão, D-04)")
+		}
+	}
+}
+
+func TestTemplateAPIEditorAgents(t *testing.T) {
+	data, err := templateFS.ReadFile("templates/pipeline-ai.api.json")
+	if err != nil {
+		t.Fatalf("falha ao ler templates/pipeline-ai.api.json: %v", err)
+	}
+	var tmpl struct {
+		EditorAgents []string `json:"editor_agents"`
+	}
+	if err := json.Unmarshal(data, &tmpl); err != nil {
+		t.Fatalf("falha ao parsear templates/pipeline-ai.api.json: %v", err)
+	}
+	for _, a := range tmpl.EditorAgents {
+		if a == "query-performance" {
+			t.Errorf("templates/pipeline-ai.api.json contém query-performance em editor_agents, mas este é um agente de análise/revisão (D-04)")
+		}
+	}
 }
 
 func TestScaffoldCLI(t *testing.T) {
@@ -239,6 +264,31 @@ func TestScaffoldValidation(t *testing.T) {
 			opts:    Options{Name: "app", Type: "tui"},
 			wantErr: false,
 		},
+		{
+			name:    "nome malicioso path traversal relativo duplo",
+			opts:    Options{Name: "../../escape", Type: "desktop"},
+			wantErr: true,
+		},
+		{
+			name:    "nome malicioso path traversal relativo simples",
+			opts:    Options{Name: "../escape", Type: "desktop"},
+			wantErr: true,
+		},
+		{
+			name:    "nome com barra",
+			opts:    Options{Name: "foo/bar", Type: "desktop"},
+			wantErr: true,
+		},
+		{
+			name:    "nome com caminho absoluto",
+			opts:    Options{Name: "/tmp/abs", Type: "desktop"},
+			wantErr: true,
+		},
+		{
+			name:    "nome com caractere especial arroba",
+			opts:    Options{Name: "test@name", Type: "desktop"},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -246,6 +296,54 @@ func TestScaffoldValidation(t *testing.T) {
 			err := tt.opts.Normalize()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Normalize() erro = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestScaffoldInvalidProjectNames(t *testing.T) {
+	tests := []struct {
+		name        string
+		projectName string
+	}{
+		{name: "path traversal relativo duplo", projectName: "../../escape"},
+		{name: "path traversal relativo simples", projectName: "../escape"},
+		{name: "subdiretorio com barra", projectName: "foo/bar"},
+		{name: "caminho absoluto unix", projectName: "/tmp/abs"},
+		{name: "caractere especial arroba", projectName: "test@name"},
+		{name: "caractere especial espaco", projectName: "test project"},
+		{name: "ponto unico", projectName: "."},
+		{name: "ponto duplo", projectName: ".."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			targetDir := filepath.Join(dir, "target")
+			if err := os.MkdirAll(targetDir, 0o755); err != nil {
+				t.Fatalf("mkdir: %v", err)
+			}
+
+			opts := Options{
+				Name:      tt.projectName,
+				Type:      "cli",
+				TargetDir: targetDir,
+			}
+
+			err := Scaffold(opts)
+			if err == nil {
+				t.Fatalf("Scaffold(%q) deveria ter rejeitado nome inválido/malicioso com erro descritivo, mas retornou nil", tt.projectName)
+			}
+
+			// Verificar que nenhum arquivo foi criado fora de targetDir (no diretório pai dir)
+			entries, readErr := os.ReadDir(dir)
+			if readErr != nil {
+				t.Fatalf("ReadDir falhou: %v", readErr)
+			}
+			for _, entry := range entries {
+				if entry.Name() != "target" {
+					t.Errorf("arquivo ou diretório %q criado fora de TargetDir para nome malicioso %q", entry.Name(), tt.projectName)
+				}
 			}
 		})
 	}
