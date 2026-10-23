@@ -15,7 +15,6 @@
   "editor_agents": [
     "dev-implementation",
     "test-writer",
-    "query-performance",
     "docs-update"
   ],
 

@@ -113,16 +113,29 @@ func checkSecuritySurface(cfg *config.Config, r *report.Report, baseRef string) 
 }
 
 func changedFiles(root, baseRef string) ([]string, error) {
-	cmd := exec.Command("git", "diff", "--name-only", baseRef+"...HEAD")
-	cmd.Dir = root
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, err
+	commands := [][]string{
+		{"diff", "--name-only", baseRef + "...HEAD"},
+		{"diff", "--name-only", "HEAD"},
+		{"diff", "--cached", "--name-only"},
+		{"ls-files", "--others", "--exclude-standard"},
 	}
+
+	seen := make(map[string]bool)
 	var files []string
-	for _, line := range strings.Split(string(out), "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			files = append(files, line)
+
+	for _, args := range commands {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		out, err := cmd.Output()
+		if err != nil {
+			return nil, err
+		}
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" && !seen[line] {
+				seen[line] = true
+				files = append(files, line)
+			}
 		}
 	}
 	return files, nil

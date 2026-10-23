@@ -29,8 +29,9 @@ type hookInput struct {
 	ToolName  string `json:"tool_name"`
 	AgentType string `json:"agent_type"`
 	CWD       string `json:"cwd"`
-	ToolInput struct {
-		FilePath string `json:"file_path"`
+	ToolInput *struct {
+		FilePath     string `json:"file_path"`
+		NotebookPath string `json:"notebook_path"`
 	} `json:"tool_input"`
 }
 
@@ -62,7 +63,7 @@ func (in *hookInput) toolName() string {
 
 func (in *hookInput) filePath() string {
 	if in.ToolCall != nil && in.ToolCall.Args != nil {
-		for _, k := range []string{"TargetFile", "target_file", "file_path", "FilePath", "path", "Path"} {
+		for _, k := range []string{"TargetFile", "target_file", "file_path", "FilePath", "path", "Path", "NotebookPath", "notebook_path"} {
 			if val, ok := in.ToolCall.Args[k]; ok {
 				if s, ok := val.(string); ok && strings.TrimSpace(s) != "" {
 					return strings.TrimSpace(s)
@@ -70,7 +71,15 @@ func (in *hookInput) filePath() string {
 			}
 		}
 	}
-	return strings.TrimSpace(in.ToolInput.FilePath)
+	if in.ToolInput != nil {
+		if s := strings.TrimSpace(in.ToolInput.FilePath); s != "" {
+			return s
+		}
+		if s := strings.TrimSpace(in.ToolInput.NotebookPath); s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 func (in *hookInput) agentType() string {
@@ -115,9 +124,15 @@ func Run(stdin io.Reader, stdout, stderr io.Writer) int {
 		return replyAllow(in.isAntigravity(), stdout)
 	}
 
+	if !in.isAntigravity() && in.ToolInput == nil {
+		return replyAllow(false, stdout)
+	}
+
 	path := in.filePath()
 	if path == "" {
-		return replyAllow(in.isAntigravity(), stdout)
+		msg := fmt.Sprintf("BLOQUEADO pelo pipeline-ai: ferramenta de edição %q invocada com caminho de arquivo ausente ou vazio.\n", tool)
+		fmt.Fprint(stderr, msg)
+		return replyDeny(in.isAntigravity(), msg, stdout)
 	}
 
 	start := in.startDir()
