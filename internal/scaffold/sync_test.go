@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -69,5 +70,71 @@ func TestSyncAgents(t *testing.T) {
 	hooksJSON := filepath.Join(agentsDir, "hooks.json")
 	if _, err := os.Stat(hooksJSON); os.IsNotExist(err) {
 		t.Errorf("Sync não sincronizou hooks.json: %v", err)
+	}
+}
+
+func TestSyncSecurityShiftLeft(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	agentsDir := filepath.Join(tmpDir, ".agents")
+	skillsDir := filepath.Join(agentsDir, "skills")
+	rulesDir := filepath.Join(agentsDir, "rules")
+	if err := os.MkdirAll(skillsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(rulesDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Escreve arquivos legados/desatualizados sem REQUISITOS_SEGURANCA
+	oldHandoff := filepath.Join(rulesDir, "handoff-contract.md")
+	if err := os.WriteFile(oldHandoff, []byte("# Contrato Legado\nSem campos de seguranca no PRE\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := Sync(tmpDir, &stdout, &stderr); err != nil {
+		t.Fatalf("Sync falhou: %v", err)
+	}
+
+	// Valida que handoff-contract.md e as skills sincronizadas possuem REQUISITOS_SEGURANCA
+	tests := []struct {
+		name    string
+		relPath string
+		want    string
+	}{
+		{
+			name:    "handoff-contract sincronizado contém REQUISITOS_SEGURANCA",
+			relPath: filepath.Join(".agents", "rules", "handoff-contract.md"),
+			want:    "REQUISITOS_SEGURANCA",
+		},
+		{
+			name:    "architecture-guardrails sincronizado contém REQUISITOS_SEGURANCA",
+			relPath: filepath.Join(".agents", "skills", "architecture-guardrails", "SKILL.md"),
+			want:    "REQUISITOS_SEGURANCA",
+		},
+		{
+			name:    "test-writer sincronizado contém REQUISITOS_SEGURANCA",
+			relPath: filepath.Join(".agents", "skills", "test-writer", "SKILL.md"),
+			want:    "REQUISITOS_SEGURANCA",
+		},
+		{
+			name:    "security-review sincronizado contém REQUISITOS_SEGURANCA",
+			relPath: filepath.Join(".agents", "skills", "security-review", "SKILL.md"),
+			want:    "REQUISITOS_SEGURANCA",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(tmpDir, tt.relPath)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("falha ao ler arquivo sincronizado %s: %v", tt.relPath, err)
+			}
+			if !strings.Contains(string(data), tt.want) {
+				t.Errorf("arquivo sincronizado %s não contém %q", tt.relPath, tt.want)
+			}
+		})
 	}
 }

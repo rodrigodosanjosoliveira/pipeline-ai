@@ -13,21 +13,22 @@ Revisar o que a delivery expôs, antes do QA. Vem antes por decisão explícita 
 
 ## Entrada
 
-Handoff com `SECURITY: sim`, ou acionamento pelo validador quando o diff tocar `security_surface_paths` de `.pipeline-ai.json`.
+Handoff com `SECURITY: sim` (contendo os `REQUISITOS_SEGURANCA` definidos pelo `architecture-guardrails`), ou acionamento pelo validador quando o diff tocar `security_surface_paths` de `.pipeline-ai.json`.
 
 ## Procedimento
 
 1. Delimitar a superfície pelo diff, não pelo repositório.
-2. Rodar `govulncheck ./...` e colar o resultado real. Ele aponta código que **efetivamente invoca** símbolos vulneráveis, e não apenas dependências listadas.
-3. Revisar, quando presente no diff:
+2. Realizar a auditoria cruzada do diff contra os `REQUISITOS_SEGURANCA` estabelecidos no PRE pelo `architecture-guardrails`, confirmando que todas as salvaguardas foram implementadas e que os testes cobrem os cenários adversariais.
+3. Rodar `govulncheck ./...` e colar o resultado real. Ele aponta código que **efetivamente invoca** símbolos vulneráveis, e não apenas dependências listadas.
+4. Revisar, quando presente no diff:
    - autenticação e autorização: quem pode chamar o quê
    - criptografia: algoritmo, origem da chave, rotação
    - entrada externa: validação antes do uso, não depois
    - segredo: nenhum em código ou em log
    - erro: mensagem não vaza caminho, query ou stack trace
    - CI: workflow com permissão ampla ou com `pull_request_target`
-4. Classificar: `CRITICO`, `ALTO`, `MEDIO`, `BAIXO`.
-5. `CRITICO` ou `ALTO` → `STATUS: bloqueado`.
+5. Classificar: `CRITICO`, `ALTO`, `MEDIO`, `BAIXO`.
+6. `CRITICO` ou `ALTO` → `STATUS: bloqueado`.
 
 ## O que NÃO fazer
 

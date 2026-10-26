@@ -18,13 +18,13 @@ Com IA, o gargalo do desenvolvimento não é gerar código, mas verificá-lo. Os
 
 ```text
 pm-triage
-  → architecture-guardrails
+  → architecture-guardrails [com REQUISITOS_SEGURANCA quando SECURITY: sim]
   → [data-model]
   → test-writer
   → dev-implementation
   → code-reviewer
   → [migration-reviewer] [query-performance]
-  → security-review        (quando houver superfície de segurança)
+  → security-review        (auditoria do diff vs requisitos do PRE)
   → supply-chain-review    (quando go.mod/go.sum mudarem)
   → qa-validation
   → [release-ops]

@@ -222,21 +222,30 @@ A versão divergente que estava na skill `git-delivery` é descartada.
 
 ---
 
-### D-13 — Ordem do fluxo
-- **Security entra antes do QA.**
+### D-13 — Segurança bidirecional: Requisitos no PRE e Auditoria no POST (Security Shift-Left)
+
+A segurança opera em um modelo bidirecional, dividida em dois momentos complementares:
+
+1. **No PRE (`architecture-guardrails` e `test-writer`):**
+   Quando a demanda toca superfície sensível (`SECURITY: sim`), o `architecture-guardrails` executa modelagem de ameaças e formaliza a seção `REQUISITOS_SEGURANCA` no contrato de handoff. Isso orienta o `test-writer` a criar testes adversariais e negativos antes de qualquer código ser escrito. A modelagem de segurança antecipada no PRE reduz drasticamente o retrabalho de dev, evitando que vulnerabilidades arquiteturais sejam codificadas para depois serem descartadas.
+
+2. **No POST (`security-review`):**
+   O `security-review` roda após o `code-reviewer` e antes do `qa-validation`. Ele realiza a auditoria cruzada do diff contra os `REQUISITOS_SEGURANCA` definidos no PRE e executa ferramentas de análise estática e de vulnerabilidades (`govulncheck ./...`). Preservar a auditoria do diff no POST garante que desvios de implementação ou vulnerabilidades acidentais não passem para o QA nem para a entrega final.
+
+- **Security entra antes do QA:** um achado de segurança muda a implementação, e revalidar QA depois sai mais caro.
 - **Release/Ops roteia para Docs** (e não o inverso).
 
 Ordem consolidada:
 
-```
-triage
-  → architecture-guardrails
+```text
+pm-triage
+  → architecture-guardrails [com REQUISITOS_SEGURANCA quando SECURITY: sim]
   → [data-model]
   → test-writer
   → dev-implementation
   → code-reviewer
   → [migration-reviewer] [query-performance]
-  → security-review        (quando houver superfície de segurança)
+  → security-review        (auditoria do diff vs requisitos do PRE)
   → supply-chain-review    (quando go.mod/go.sum mudarem)
   → qa-validation
   → [release-ops]

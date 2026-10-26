@@ -21,18 +21,22 @@ Handoff do `pm-triage`.
 2. Ler o código dos módulos que o triage apontou. Confirmar que existem.
 3. Definir a abordagem: quais pacotes, quais interfaces, onde entra o código.
 4. Definir o **Não fazer**: lista explícita de caminhos que a implementação não deve tomar. Este campo não pode ser genérico.
-5. Verificar violações de invariantes:
+5. Quando `SECURITY: sim` (ou ao identificar superfície sensível como auth, cripto, storage ou CI), executar **modelagem de ameaças** (threat modeling):
+   - Mapear vetores de ataque, superfícies expostas e premissas de confiança violadas.
+   - Definir a seção `REQUISITOS_SEGURANCA` com salvaguardas mandatórias e critérios de teste adversariais para orientar o `test-writer`.
+6. Verificar violações de invariantes:
    - dependência externa nova sem justificativa → `SUPPLY_CHAIN: sim`
    - dependência que force CGO em projeto desktop → **BLOQUEIO**
    - abstração que a stdlib já cobre → questionar
    - mudança de contrato entre Go e frontend → registrar em `RISCOS`
-6. Se a abordagem exigir mudança de arquitetura, `STATUS: bloqueado` e escalonamento para aprovação humana.
+7. Se a abordagem exigir mudança de arquitetura, `STATUS: bloqueado` e escalonamento para aprovação humana.
 
 ## O que NÃO fazer
 
 - Não escrever código nem pseudocódigo extenso.
 - Não aprovar "a abordagem parece boa" sem dizer detalhadamente qual é.
 - Não deixar o "Não fazer" genérico ("não complicar", "não quebrar nada").
+- Não omitir a modelagem de ameaças e os `REQUISITOS_SEGURANCA` quando `SECURITY: sim`.
 - Não editar arquivos de código diretamente.
 
 ## Roteamento
@@ -41,4 +45,4 @@ Handoff do `pm-triage`.
 
 ## Saída obrigatória
 
-O bloco do contrato de handoff, com `ABORDAGEM` e `NAO_FAZER` acrescentados antes de `CONFIRMADO`.
+O bloco do contrato de handoff, com `ABORDAGEM` e `NAO_FAZER` acrescentados antes de `CONFIRMADO`. Havendo `SECURITY: sim`, incluir obrigatoriamente a lista de `REQUISITOS_SEGURANCA` gerada na modelagem de ameaças.

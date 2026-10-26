@@ -371,3 +371,81 @@ func TestScaffoldWithGit(t *testing.T) {
 		t.Fatalf("esperava diretório .git criado: %v", err)
 	}
 }
+
+func TestSecurityShiftLeftTemplates(t *testing.T) {
+	tests := []struct {
+		name        string
+		filePath    string
+		mustContain []string
+	}{
+		{
+			name:     "handoff-contract define formalmente REQUISITOS_SEGURANCA condicionado a SECURITY: sim",
+			filePath: "templates/agents/rules/handoff-contract.md",
+			mustContain: []string{
+				"REQUISITOS_SEGURANCA",
+				"SECURITY: sim",
+			},
+		},
+		{
+			name:     "architecture-guardrails instrui modelagem de ameacas e REQUISITOS_SEGURANCA no handoff",
+			filePath: "templates/agents/skills/architecture-guardrails/SKILL.md",
+			mustContain: []string{
+				"REQUISITOS_SEGURANCA",
+				"SECURITY: sim",
+				"ameaça",
+			},
+		},
+		{
+			name:     "test-writer instrui criacao de testes adversariais e negativos para REQUISITOS_SEGURANCA",
+			filePath: "templates/agents/skills/test-writer/SKILL.md",
+			mustContain: []string{
+				"REQUISITOS_SEGURANCA",
+				"adversaria",
+			},
+		},
+		{
+			name:     "security-review instrui auditoria cruzada contra REQUISITOS_SEGURANCA do PRE",
+			filePath: "templates/agents/skills/security-review/SKILL.md",
+			mustContain: []string{
+				"REQUISITOS_SEGURANCA",
+			},
+		},
+		{
+			name:     "DECISOES.md atualiza D-13 com modelo bidirecional PRE e POST",
+			filePath: "templates/docs-ai/DECISOES.md",
+			mustContain: []string{
+				"D-13",
+				"bidirecional",
+			},
+		},
+		{
+			name:     "03-MAPA-RAPIDO-MODULOS.md reflete seguranca no PRE e POST",
+			filePath: "templates/docs-ai/03-MAPA-RAPIDO-MODULOS.md",
+			mustContain: []string{
+				"REQUISITOS_SEGURANCA",
+			},
+		},
+		{
+			name:     "AGENTS.md.tmpl reflete fluxo com seguranca no PRE e POST",
+			filePath: "templates/AGENTS.md.tmpl",
+			mustContain: []string{
+				"REQUISITOS_SEGURANCA",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := templateFS.ReadFile(tt.filePath)
+			if err != nil {
+				t.Fatalf("falha ao ler arquivo embutido %s: %v", tt.filePath, err)
+			}
+			content := string(data)
+			for _, exp := range tt.mustContain {
+				if !strings.Contains(strings.ToLower(content), strings.ToLower(exp)) {
+					t.Errorf("template %s não contém %q", tt.filePath, exp)
+				}
+			}
+		})
+	}
+}
