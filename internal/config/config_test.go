@@ -280,3 +280,71 @@ func TestIsModuleEnabledSemModulos(t *testing.T) {
 		t.Errorf("IsModuleEnabled devolveu true sem enabled_modules configurado")
 	}
 }
+
+func TestIsProtectedSymlinks(t *testing.T) {
+	root := t.TempDir()
+	internalDir := filepath.Join(root, "internal")
+	if err := os.MkdirAll(internalDir, 0o755); err != nil {
+		t.Fatalf("mkdir internal: %v", err)
+	}
+	secretFile := filepath.Join(internalDir, "secret.go")
+	if err := os.WriteFile(secretFile, []byte("package auth"), 0o644); err != nil {
+		t.Fatalf("write secret.go: %v", err)
+	}
+
+	symlinkDir := filepath.Join(root, "link_to_internal")
+	if err := os.Symlink(internalDir, symlinkDir); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	writeConfig(t, root, `{
+  "version": 1,
+  "project_type": "desktop",
+  "protected_paths": ["internal/"]
+}`)
+
+	cfg, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{
+			name: "arquivo existente via symlink de diretório protegido",
+			path: filepath.Join(root, "link_to_internal", "secret.go"),
+			want: true,
+		},
+		{
+			name: "arquivo novo ou inexistente via symlink de diretório protegido",
+			path: filepath.Join(root, "link_to_internal", "new_file.go"),
+			want: true,
+		},
+		{
+			name: "arquivo direto existente em internal",
+			path: secretFile,
+			want: true,
+		},
+		{
+			name: "arquivo direto inexistente em internal",
+			path: filepath.Join(internalDir, "new_file_direct.go"),
+			want: true,
+		},
+		{
+			name: "arquivo fora do escopo protegido",
+			path: filepath.Join(root, "README.md"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cfg.IsProtected(tt.path); got != tt.want {
+				t.Errorf("IsProtected(%q) = %v, quer %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}

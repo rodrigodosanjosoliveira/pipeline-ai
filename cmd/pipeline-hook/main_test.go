@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,9 +33,10 @@ func TestRun(t *testing.T) {
 	livre := filepath.Join(root, "docs-ai", "nota.md")
 
 	tests := []struct {
-		name    string
-		payload string
-		want    int
+		name               string
+		payload            string
+		want               int
+		wantStderrContains string
 	}{
 		{
 			name:    "sessão principal em caminho protegido bloqueia",
@@ -77,9 +79,16 @@ func TestRun(t *testing.T) {
 			want:    exitBlock,
 		},
 		{
-			name:    "JSON inválido não trava a sessão",
-			payload: `{"tool_name":`,
-			want:    exitAllow,
+			name:               "JSON inválido não trava a sessão",
+			payload:            `{"tool_name":`,
+			want:               exitBlock,
+			wantStderrContains: "doctor",
+		},
+		{
+			name:               "stdin vazio bloqueia fail-closed sugerindo doctor",
+			payload:            "",
+			want:               exitBlock,
+			wantStderrContains: "doctor",
 		},
 	}
 
@@ -89,6 +98,9 @@ func TestRun(t *testing.T) {
 			got := run(strings.NewReader(tt.payload), &stdout, &stderr)
 			if got != tt.want {
 				t.Errorf("run = %d, quer %d (stderr: %s)", got, tt.want, stderr.String())
+			}
+			if tt.wantStderrContains != "" && !strings.Contains(stderr.String(), tt.wantStderrContains) {
+				t.Errorf("stderr não contém %q (stderr: %s)", tt.wantStderrContains, stderr.String())
 			}
 		})
 	}
@@ -255,6 +267,12 @@ func TestAntigravityProtocol(t *testing.T) {
 			wantExit:     exitAllow,
 			wantDecision: "deny",
 		},
+		{
+			name:         "payload Antigravity quebrado contendo toolCall responde com deny",
+			payload:      `{"toolCall": {"name": "write_to_file", "args": {`,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
+		},
 	}
 
 	for _, tt := range tests {
@@ -293,5 +311,22 @@ func TestAntigravityConfigQuebrada(t *testing.T) {
 	}
 	if !strings.Contains(outStr, config.FileName) {
 		t.Errorf("stdout não menciona o config: %s", outStr)
+	}
+}
+
+type errReader struct{}
+
+func (errReader) Read(p []byte) (n int, err error) {
+	return 0, errors.New("read error simulado")
+}
+
+func TestStdinIlegivelBloqueia(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	got := run(errReader{}, &stdout, &stderr)
+	if got != exitBlock {
+		t.Errorf("run = %d, quer %d para stdin com erro de leitura", got, exitBlock)
+	}
+	if !strings.Contains(stderr.String(), "doctor") {
+		t.Errorf("stderr não sugere doctor: %s", stderr.String())
 	}
 }

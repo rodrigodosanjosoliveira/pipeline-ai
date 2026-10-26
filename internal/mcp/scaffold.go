@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 )
 
 var delRegex = regexp.MustCompile(`\|\s*DEL-(\d+)\s*\|`)
@@ -16,6 +18,15 @@ var delRegex = regexp.MustCompile(`\|\s*DEL-(\d+)\s*\|`)
 func ScaffoldDelivery(rootDir, title, delivType, taskCode string) (string, string, error) {
 	delivDir := filepath.Join(rootDir, "docs-ai", "deliveries")
 	indexFile := filepath.Join(delivDir, "INDEX.md")
+
+	if cfg, err := config.Load(rootDir); err == nil && cfg != nil {
+		if cfg.DeliveriesDir != "" {
+			delivDir = filepath.Join(rootDir, filepath.FromSlash(cfg.DeliveriesDir))
+		}
+		if cfg.IndexFile != "" {
+			indexFile = filepath.Join(rootDir, filepath.FromSlash(cfg.IndexFile))
+		}
+	}
 
 	if _, err := os.Stat(indexFile); os.IsNotExist(err) {
 		return "", "", fmt.Errorf("arquivo INDEX.md não encontrado em %s", indexFile)
@@ -142,9 +153,5 @@ $ go test ./...
 		return "", "", fmt.Errorf("falha ao atualizar INDEX.md: %w", err)
 	}
 
-	relReportPath, _ := filepath.Rel(rootDir, reportPath)
-	if relReportPath == "" {
-		relReportPath = reportPath
-	}
-	return deliveryID, relReportPath, nil
+	return deliveryID, reportPath, nil
 }
