@@ -4,6 +4,30 @@
 
 ---
 
+## Fluxo de Execução com Segurança Bidirecional
+
+```text
+pm-triage
+  → architecture-guardrails [com REQUISITOS_SEGURANCA quando SECURITY: sim]
+  → [data-model]
+  → test-writer
+  → dev-implementation
+  → code-reviewer
+  → [migration-reviewer] [query-performance]
+  → security-review        [auditoria do diff vs requisitos do PRE]
+  → supply-chain-review    (quando go.mod/go.sum mudarem)
+  → qa-validation
+  → [release-ops]
+  → docs-update
+  → git-delivery
+```
+
+### Papéis na Segurança Bidirecional:
+- **`architecture-guardrails [com REQUISITOS_SEGURANCA quando SECURITY: sim]`**: Quando a demanda toca superfície de segurança, o guardrails realiza a modelagem de ameaças e estabelece a lista de `REQUISITOS_SEGURANCA` para orientar os testes adversariais do `test-writer`.
+- **`security-review [auditoria do diff vs requisitos do PRE]`**: Realiza a auditoria cruzada do diff contra os `REQUISITOS_SEGURANCA` gerados no PRE e valida a ausência de vulnerabilidades invocadas via `govulncheck ./...`.
+
+---
+
 ## 1. Formato Desktop (Wails v3 + Go + React)
 
 A arquitetura de um projeto desktop concentra backend Go e UI React empacotados num único executável binário.

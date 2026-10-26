@@ -7,6 +7,7 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
+| DEL-011 | TASK-011 | Formalização do Security Shift-Left com segurança bidirecional no PRE e POST | feat | 2026-10-26 | draft |
 | DEL-010 | TASK-010 | Modelo híbrido de autorização com gate por delivery ativa, TTL e caminhos imutáveis | feat | 2026-10-26 | draft |
 | DEL-009 | TASK-009 | Hardening do hook fail-closed, resolução de symlinks e MCP scaffold configurável | bugfix | 2026-10-26 | draft |
 | DEL-008 | TASK-008 | Correção de vulnerabilidades de path traversal e falhas no hook e validador | bugfix | 2026-10-23 | draft |
