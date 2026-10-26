@@ -199,11 +199,22 @@ func (c *Config) IsSecuritySurface(relPath string) bool {
 // relToRoot converte um caminho absoluto em relativo à raiz do projeto.
 // Devolve ok=false se o caminho estiver fora da raiz.
 func (c *Config) relToRoot(absPath string) (string, bool) {
+	canonicalRoot := c.root
+	if r, err := filepath.EvalSymlinks(c.root); err == nil {
+		canonicalRoot = r
+	}
+
 	clean, err := filepath.Abs(absPath)
 	if err != nil {
 		return "", false
 	}
-	rel, err := filepath.Rel(c.root, clean)
+	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
+		clean = resolved
+	} else if dirResolved, err := filepath.EvalSymlinks(filepath.Dir(clean)); err == nil {
+		clean = filepath.Join(dirResolved, filepath.Base(clean))
+	}
+
+	rel, err := filepath.Rel(canonicalRoot, clean)
 	if err != nil {
 		return "", false
 	}

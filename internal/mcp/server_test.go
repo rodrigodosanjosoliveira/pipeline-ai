@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -273,5 +274,70 @@ func TestMCPSyncSkills(t *testing.T) {
 	entries, err := os.ReadDir(skillsDir)
 	if err != nil || len(entries) < 10 {
 		t.Errorf("esperava skills sincronizadas em %s, obteve %d entradas", skillsDir, len(entries))
+	}
+}
+
+func TestScaffoldDeliveryCustomPaths(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	customDeliveriesDir := "custom-docs/deliveries"
+	customIndexFile := "custom-docs/deliveries/INDEX.md"
+
+	cfgBody := fmt.Sprintf(`{
+  "version": 1,
+  "project_type": "desktop",
+  "protected_paths": ["internal/"],
+  "deliveries_dir": %q,
+  "index_file": %q
+}`, customDeliveriesDir, customIndexFile)
+
+	if err := os.WriteFile(filepath.Join(tmpDir, ".pipeline-ai.json"), []byte(cfgBody), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	customDir := filepath.Join(tmpDir, filepath.FromSlash(customDeliveriesDir))
+	if err := os.MkdirAll(customDir, 0o755); err != nil {
+		t.Fatalf("mkdir customDir: %v", err)
+	}
+
+	initialIndex := "# Índice de Deliveries\n\n| ID | Task | Título | Tipo | Data | Status |\n|---|---|---|---|---|---|\n| — | — | nenhuma delivery registrada | — | — | — |\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, filepath.FromSlash(customIndexFile)), []byte(initialIndex), 0o644); err != nil {
+		t.Fatalf("write custom index: %v", err)
+	}
+
+	deliveryID, reportPath, err := ScaffoldDelivery(tmpDir, "Custom Delivery Title", "feat", "TASK-001")
+	if err != nil {
+		t.Fatalf("ScaffoldDelivery falhou: %v", err)
+	}
+
+	if deliveryID != "DEL-001" {
+		t.Errorf("deliveryID = %q, quer DEL-001", deliveryID)
+	}
+
+	expectedReport := filepath.Join(customDir, "DEL-001", "report.md")
+	if reportPath != expectedReport {
+		t.Errorf("reportPath = %q, quer %q", reportPath, expectedReport)
+	}
+
+	if _, err := os.Stat(expectedReport); err != nil {
+		t.Errorf("relatório não foi criado no caminho customizado %s: %v", expectedReport, err)
+	}
+
+	// Garante que não criou em docs-ai/deliveries
+	unwantedDir := filepath.Join(tmpDir, "docs-ai", "deliveries")
+	if _, err := os.Stat(unwantedDir); !os.IsNotExist(err) {
+		t.Errorf("docs-ai/deliveries não deveria ter sido criado")
+	}
+
+	// Valida que custom-docs/deliveries/INDEX.md foi atualizado
+	indexContent, err := os.ReadFile(filepath.Join(tmpDir, filepath.FromSlash(customIndexFile)))
+	if err != nil {
+		t.Fatalf("falha ao ler index customizado: %v", err)
+	}
+	if !strings.Contains(string(indexContent), "DEL-001") {
+		t.Errorf("INDEX customizado não contém DEL-001: %s", string(indexContent))
+	}
+	if strings.Contains(string(indexContent), "nenhuma delivery registrada") {
+		t.Errorf("INDEX customizado ainda contém placeholder")
 	}
 }

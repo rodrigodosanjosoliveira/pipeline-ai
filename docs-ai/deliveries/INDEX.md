@@ -7,6 +7,7 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
+| DEL-009 | TASK-009 | Hardening do hook fail-closed, resolução de symlinks e MCP scaffold configurável | bugfix | 2026-10-26 | draft |
 | DEL-008 | TASK-008 | Correção de vulnerabilidades de path traversal e falhas no hook e validador | bugfix | 2026-10-23 | draft |
 | DEL-007 | TASK-007 | Suporte ao formato de projeto cli e tui no pipeline-ai init | feat | 2026-10-21 | draft |
 | DEL-006 | TASK-006 | Release v0.5.0: Bump de versão, MCP completo e encerramento operacional | chore | 2026-10-21 | merged |

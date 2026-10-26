@@ -109,14 +109,17 @@ func (in *hookInput) startDir() string {
 func Run(stdin io.Reader, stdout, stderr io.Writer) int {
 	raw, err := io.ReadAll(stdin)
 	if err != nil {
-		fmt.Fprintf(stderr, "pipeline-hook: falha ao ler stdin: %v\n", err)
-		return replyAllow(false, stdout)
+		msg := fmt.Sprintf("BLOQUEADO pelo pipeline-ai: falha ao ler stdin do hook: %v\nExecute 'pipeline-ai doctor' para verificar o ambiente.\n", err)
+		fmt.Fprint(stderr, msg)
+		return replyDeny(false, msg, stdout)
 	}
 
 	var in hookInput
 	if err := json.Unmarshal(raw, &in); err != nil {
-		fmt.Fprintf(stderr, "pipeline-hook: payload inválido: %v\n", err)
-		return replyAllow(false, stdout)
+		msg := fmt.Sprintf("BLOQUEADO pelo pipeline-ai: payload de hook ilegível ou JSON inválido: %v\nExecute 'pipeline-ai doctor' para verificar a integridade da IDE ou do ambiente.\n", err)
+		fmt.Fprint(stderr, msg)
+		isAnti := strings.Contains(string(raw), "toolCall")
+		return replyDeny(isAnti, msg, stdout)
 	}
 
 	tool := in.toolName()
