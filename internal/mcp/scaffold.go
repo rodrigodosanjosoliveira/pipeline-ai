@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
 )
 
 var delRegex = regexp.MustCompile(`\|\s*DEL-(\d+)\s*\|`)
@@ -151,6 +152,10 @@ $ go test ./...
 
 	if err := os.WriteFile(indexFile, []byte(strings.Join(newLines, "\n")), 0644); err != nil {
 		return "", "", fmt.Errorf("falha ao atualizar INDEX.md: %w", err)
+	}
+
+	if err := state.Open(rootDir, deliveryID, taskCode, 7*24*time.Hour); err != nil {
+		return "", "", fmt.Errorf("falha ao abrir delivery ativa: %w", err)
 	}
 
 	return deliveryID, reportPath, nil

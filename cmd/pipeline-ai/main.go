@@ -5,6 +5,7 @@
 //   - hook: executa o hook PreToolUse que bloqueia edição direta
 //   - validate: valida relatório de delivery e salvaguardas de git
 //   - sync: sincroniza/atualiza skills e regras (.agents/) em projetos existentes
+//   - delivery: gerencia a delivery ativa (open, close, status)
 //   - doctor: diagnostica o ambiente local e configurações do projeto
 //   - version: exibe a versão instalada
 //   - help: exibe mensagem de ajuda
@@ -12,16 +13,19 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/hook"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/mcp"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
 )
 
@@ -65,6 +69,9 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	case "sync":
 		return runSync(cmdArgs, stdout, stderr)
 
+	case "delivery":
+		return runDelivery(cmdArgs, stdout, stderr)
+
 	case "doctor":
 		return runDoctor(cmdArgs, stdout, stderr)
 
@@ -85,6 +92,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  hook       Executa o hook PreToolUse que impede edição direta em caminhos protegidos")
 	fmt.Fprintln(w, "  validate   Valida o relatório de delivery e salvaguardas de segurança antes do PR")
 	fmt.Fprintln(w, "  sync       Sincroniza skills, regras e hooks em .agents/ a partir dos templates")
+	fmt.Fprintln(w, "  delivery   Gerencia o ciclo de vida da delivery ativa (open, close, status)")
 	fmt.Fprintln(w, "  doctor     Diagnostica o ambiente local (Go 1.24+, git, gh, hooks e .pipeline-ai.json)")
 	fmt.Fprintln(w, "  mcp        Executa o servidor MCP sobre stdio (JSON-RPC 2.0)")
 	fmt.Fprintln(w, "  version    Exibe a versão do pipeline-ai")
@@ -158,6 +166,142 @@ func runMCP(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "mcp: erro no servidor: %v\n", err)
 		return 1
 	}
+	return 0
+}
+
+func runDelivery(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		printDeliveryUsage(stderr)
+		return 1
+	}
+
+	sub := strings.ToLower(strings.TrimSpace(args[0]))
+	subArgs := args[1:]
+
+	switch sub {
+	case "open":
+		return runDeliveryOpen(subArgs, stdout, stderr)
+	case "close":
+		return runDeliveryClose(subArgs, stdout, stderr)
+	case "status":
+		return runDeliveryStatus(subArgs, stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "pipeline-ai delivery: subcomando desconhecido %q (use open, close ou status)\n", sub)
+		return 1
+	}
+}
+
+func printDeliveryUsage(w io.Writer) {
+	fmt.Fprintln(w, "Uso: pipeline-ai delivery <open|close|status> [opções]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Subcomandos:")
+	fmt.Fprintln(w, "  open <DEL-ID> [-task <TASK_CODE>] [-ttl <duration>] [-dir <dir>]")
+	fmt.Fprintln(w, "  close [-dir <dir>]")
+	fmt.Fprintln(w, "  status [-dir <dir>]")
+}
+
+func runDeliveryOpen(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("delivery open", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	task := fs.String("task", "", "código da tarefa (opcional)")
+	ttlStr := fs.String("ttl", "168h", "tempo de validade (TTL), ex: 2h, 48h, 7d")
+	dir := fs.String("dir", ".", "diretório raiz do projeto")
+
+	// Reorganiza argumentos para permitir flags antes ou depois do delivery_id
+	var flagArgs []string
+	var posArgs []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			flagArgs = append(flagArgs, arg)
+			if !strings.Contains(arg, "=") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+				flagArgs = append(flagArgs, args[i])
+			}
+		} else {
+			posArgs = append(posArgs, arg)
+		}
+	}
+
+	if err := fs.Parse(flagArgs); err != nil {
+		return 1
+	}
+
+	if len(posArgs) == 0 || strings.TrimSpace(posArgs[0]) == "" {
+		fmt.Fprintln(stderr, "ERRO: delivery_id é obrigatório. Exemplo: pipeline-ai delivery open DEL-001")
+		return 1
+	}
+
+	delivID := strings.TrimSpace(posArgs[0])
+
+	ttl, err := time.ParseDuration(*ttlStr)
+	if err != nil {
+		fmt.Fprintf(stderr, "ERRO: ttl %q inválido: %v\n", *ttlStr, err)
+		return 1
+	}
+
+	if err := state.Open(*dir, delivID, *task, ttl); err != nil {
+		fmt.Fprintf(stderr, "ERRO ao abrir delivery: %v\n", err)
+		return 1
+	}
+
+	fmt.Fprintf(stdout, "Delivery %s aberta com sucesso (TTL: %v).\n", delivID, ttl)
+	return 0
+}
+
+func runDeliveryClose(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("delivery close", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	dir := fs.String("dir", ".", "diretório raiz do projeto")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	if err := state.Close(*dir); err != nil {
+		fmt.Fprintf(stderr, "ERRO ao fechar delivery: %v\n", err)
+		return 1
+	}
+
+	fmt.Fprintln(stdout, "Delivery ativa fechada com sucesso.")
+	return 0
+}
+
+func runDeliveryStatus(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("delivery status", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	dir := fs.String("dir", ".", "diretório raiz do projeto")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	d, err := state.Get(*dir)
+	if err != nil || d == nil {
+		fmt.Fprintln(stdout, "nenhuma delivery ativa")
+		return 0
+	}
+
+	active, actErr := state.IsActive(*dir)
+	if !active {
+		if errors.Is(actErr, state.ErrExpired) {
+			fmt.Fprintf(stdout, "Delivery ativa: %s (EXPIRADA em %s)\n", d.DeliveryID, d.ExpiresAt.Format(time.RFC3339))
+			if d.TaskCode != "" {
+				fmt.Fprintf(stdout, "Task:           %s\n", d.TaskCode)
+			}
+			return 0
+		}
+		fmt.Fprintln(stdout, "nenhuma delivery ativa")
+		return 0
+	}
+
+	fmt.Fprintf(stdout, "Delivery ativa: %s\n", d.DeliveryID)
+	if d.TaskCode != "" {
+		fmt.Fprintf(stdout, "Task:           %s\n", d.TaskCode)
+	}
+	fmt.Fprintf(stdout, "Aberta em:      %s\n", d.OpenedAt.Format(time.RFC3339))
+	fmt.Fprintf(stdout, "Expira em:      %s\n", d.ExpiresAt.Format(time.RFC3339))
 	return 0
 }
 

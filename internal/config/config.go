@@ -37,6 +37,10 @@ type Config struct {
 	// Um caminho terminado em "/" casa com o diretório e tudo abaixo dele.
 	ProtectedPaths []string `json:"protected_paths"`
 
+	// ImmutablePaths são os caminhos estritamente imutáveis que nenhum agente
+	// ou delivery ativa pode alterar diretamente.
+	ImmutablePaths []string `json:"immutable_paths"`
+
 	// EditorAgents são os agents autorizados a editar código (D-11).
 	EditorAgents []string `json:"editor_agents"`
 
@@ -188,6 +192,16 @@ func (c *Config) IsProtected(absPath string) bool {
 		return false
 	}
 	return matchesAny(rel, c.ProtectedPaths)
+}
+
+// IsImmutable informa se o caminho absoluto absPath cai dentro de algum
+// immutable_path. Caminhos fora da raiz do projeto nunca são imutáveis.
+func (c *Config) IsImmutable(absPath string) bool {
+	rel, ok := c.relToRoot(absPath)
+	if !ok {
+		return false
+	}
+	return matchesAny(rel, c.ImmutablePaths)
 }
 
 // IsSecuritySurface informa se o caminho relativo relPath toca superfície de

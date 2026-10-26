@@ -3,12 +3,15 @@ package hook
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
 )
 
 const (
@@ -149,11 +152,33 @@ func Run(stdin io.Reader, stdout, stderr io.Writer) int {
 		return replyDeny(in.isAntigravity(), msg, stdout)
 	}
 
+	if cfg.IsImmutable(path) {
+		msg := fmt.Sprintf("BLOQUEADO pelo pipeline-ai: caminho %q é estritamente imutável (nenhum agente tem permissão de escrita direta).\n", path)
+		fmt.Fprint(stderr, msg)
+		return replyDeny(in.isAntigravity(), msg, stdout)
+	}
+
 	if !cfg.IsProtected(path) {
 		return replyAllow(in.isAntigravity(), stdout)
 	}
 	if cfg.IsEditorAgent(in.agentType()) {
 		return replyAllow(in.isAntigravity(), stdout)
+	}
+
+	active, activeErr := state.IsActive(cfg.Root())
+	if active {
+		return replyAllow(in.isAntigravity(), stdout)
+	}
+	if errors.Is(activeErr, state.ErrExpired) {
+		activeDel, _ := state.Get(cfg.Root())
+		var delID, expStr string
+		if activeDel != nil {
+			delID = activeDel.DeliveryID
+			expStr = activeDel.ExpiresAt.Format(time.RFC3339)
+		}
+		msg := fmt.Sprintf("BLOQUEADO pelo pipeline-ai: a delivery ativa %s expirou em %s. Renove com 'pipeline-ai delivery open %s' ou finalize com 'pipeline-ai delivery close'.\n", delID, expStr, delID)
+		fmt.Fprint(stderr, msg)
+		return replyDeny(in.isAntigravity(), msg, stdout)
 	}
 
 	msg := blockMessage(path, in.agentType(), cfg)
@@ -190,7 +215,9 @@ func blockMessage(path, agentType string, cfg *config.Config) string {
 		fmt.Fprintf(&b, "  origem:  agent %q (sem permissão de escrita)\n", agentType)
 	}
 
-	b.WriteString("\nCódigo só é alterado por agents do pipeline. Autorizados:\n")
+	b.WriteString("\nCódigo só é alterado por agents do pipeline ou com uma delivery ativa.\n")
+	b.WriteString("Para liberar edições na sessão principal, abra uma delivery com 'pipeline-ai delivery open <DEL-ID>'.\n")
+	b.WriteString("Agents autorizados:\n")
 	if len(cfg.EditorAgents) == 0 {
 		b.WriteString("  (nenhum configurado em editor_agents)\n")
 	}
