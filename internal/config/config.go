@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -59,6 +60,18 @@ type Config struct {
 
 	// BaseRef é a referência git usada para calcular o diff da delivery.
 	BaseRef string `json:"base_ref"`
+
+	// DeliveryIDPattern é a regex para validar identificadores de delivery.
+	DeliveryIDPattern string `json:"delivery_id_pattern"`
+
+	// TaskCodePattern é a regex para validar códigos de tarefas vinculadas.
+	TaskCodePattern string `json:"task_code_pattern"`
+
+	// CustomSections são seções obrigatórias adicionais no relatório de delivery.
+	CustomSections []string `json:"custom_sections"`
+
+	// RequireIndex define se o arquivo INDEX.md é obrigatório. Padrão: true.
+	RequireIndex *bool `json:"require_index"`
 
 	// root é a raiz do projeto, preenchida no carregamento.
 	root string
@@ -153,6 +166,63 @@ func (c *Config) validate() error {
 		if !AllowedModules[mod] {
 			return fmt.Errorf("módulo %q inválido em enabled_modules", m)
 		}
+	}
+	if c.DeliveryIDPattern != "" {
+		if _, err := regexp.Compile(c.DeliveryIDPattern); err != nil {
+			return fmt.Errorf("delivery_id_pattern %q inválido: %w", c.DeliveryIDPattern, err)
+		}
+	}
+	if c.TaskCodePattern != "" {
+		if _, err := regexp.Compile(c.TaskCodePattern); err != nil {
+			return fmt.Errorf("task_code_pattern %q inválido: %w", c.TaskCodePattern, err)
+		}
+	}
+	return nil
+}
+
+// Padrões default para identificadores de delivery e códigos de tarefa.
+const (
+	DefaultDeliveryIDPattern = `^DEL-[0-9]{3,}$`
+	DefaultTaskCodePattern   = `^[A-Z0-9]+-[0-9]+$`
+)
+
+// IsIndexRequired informa se o arquivo INDEX.md é obrigatório para registrar deliveries.
+// Se omitido na configuração (nil), o padrão é true.
+func (c *Config) IsIndexRequired() bool {
+	if c == nil || c.RequireIndex == nil {
+		return true
+	}
+	return *c.RequireIndex
+}
+
+// ValidateDeliveryID valida se o deliveryID atende ao padrão configurado (ou ao padrão default).
+func (c *Config) ValidateDeliveryID(id string) error {
+	pattern := DefaultDeliveryIDPattern
+	if c != nil && c.DeliveryIDPattern != "" {
+		pattern = c.DeliveryIDPattern
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return fmt.Errorf("delivery_id_pattern %q inválido: %w", pattern, err)
+	}
+	if !re.MatchString(id) {
+		return fmt.Errorf("delivery_id %q inválido (não atende ao padrão %q)", id, pattern)
+	}
+	return nil
+}
+
+// ValidateTaskCode valida se o taskCode atende ao padrão configurado (ou ao padrão default).
+func (c *Config) ValidateTaskCode(code string) error {
+	pattern := DefaultTaskCodePattern
+	if c != nil && c.TaskCodePattern != "" {
+		pattern = c.TaskCodePattern
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return fmt.Errorf("task_code_pattern %q inválido: %w", pattern, err)
+	}
+	if !re.MatchString(code) {
+		return fmt.Errorf("task_code %q inválido (não atende ao padrão %q)", code, pattern)
 	}
 	return nil
 }

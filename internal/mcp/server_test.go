@@ -469,3 +469,49 @@ func TestMCPResourceDeliveryActive(t *testing.T) {
 		t.Errorf("texto não contém DEL-099: %s", textActive)
 	}
 }
+
+func TestScaffoldDeliveryWithoutIndex(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	cfgBody := `{
+		"version": 1,
+		"project_type": "desktop",
+		"protected_paths": ["internal/"],
+		"require_index": false
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".pipeline-ai.json"), []byte(cfgBody), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	// 1. Invocação direta da função ScaffoldDelivery em projeto com require_index: false e sem INDEX.md
+	delivID, reportPath, err := ScaffoldDelivery(tmpDir, "Delivery Flexível", "feat", "TASK-001")
+	if err != nil {
+		t.Fatalf("ScaffoldDelivery falhou em projeto com require_index: false: %v", err)
+	}
+	if delivID == "" {
+		t.Errorf("deliveryID retornado está vazio")
+	}
+	if _, err := os.Stat(reportPath); err != nil {
+		t.Fatalf("report.md não foi criado em %s: %v", reportPath, err)
+	}
+
+	content, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("leitura de report.md falhou: %v", err)
+	}
+	if !strings.Contains(string(content), "Delivery Flexível") {
+		t.Errorf("report.md não contém o título esperado: %s", string(content))
+	}
+
+	// 2. Invocação via servidor MCP (tool pipeline_scaffold_delivery)
+	s := NewServer(tmpDir)
+	req := `{"jsonrpc":"2.0","id":100,"method":"tools/call","params":{"name":"pipeline_scaffold_delivery","arguments":{"title":"Segunda Delivery Flexível","type":"feat","task_code":"TASK-002"}}}`
+	res := runRPC(t, s, req)
+	result, ok := res["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result ausente em pipeline_scaffold_delivery: %v", res)
+	}
+	if result["isError"] == true {
+		t.Fatalf("pipeline_scaffold_delivery retornou isError=true: %v", result)
+	}
+}
