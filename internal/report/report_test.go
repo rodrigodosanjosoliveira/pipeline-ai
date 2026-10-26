@@ -3,6 +3,8 @@ package report
 import (
 	"strings"
 	"testing"
+
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 )
 
 const relatorioOK = `---
@@ -278,4 +280,128 @@ func TestNormalizeTitulos(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateWithConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		cfg           *config.Config
+		reportContent string
+		wantErrSubstr string
+		customEmpty   bool
+		wantNoError   bool
+	}{
+		{
+			name:          "cfg nil aprova relatorioOK",
+			cfg:           nil,
+			reportContent: relatorioOK,
+			wantNoError:   true,
+		},
+		{
+			name: "delivery_id em desacordo com cfg.DeliveryIDPattern",
+			cfg: &config.Config{
+				DeliveryIDPattern: `^REL-\d+$`,
+			},
+			reportContent: relatorioOK, // delivery_id: DEL-001
+			wantErrSubstr: "delivery_id",
+		},
+		{
+			name: "delivery_id em acordo com cfg.DeliveryIDPattern",
+			cfg: &config.Config{
+				DeliveryIDPattern: `^DEL-\d+$`,
+			},
+			reportContent: relatorioOK,
+			wantNoError:   true,
+		},
+		{
+			name: "task_code em desacordo com cfg.TaskCodePattern",
+			cfg: &config.Config{
+				TaskCodePattern: `^ISSUE-\d+$`,
+			},
+			reportContent: relatorioOK, // task_code: TASK-42
+			wantErrSubstr: "task_code",
+		},
+		{
+			name: "task_code em acordo com cfg.TaskCodePattern",
+			cfg: &config.Config{
+				TaskCodePattern: `^TASK-\d+$`,
+			},
+			reportContent: relatorioOK,
+			wantNoError:   true,
+		},
+		{
+			name: "seção obrigatória customizada ausente",
+			cfg: &config.Config{
+				CustomSections: []string{"Arquitetura"},
+			},
+			reportContent: relatorioOK, // não contém # Arquitetura
+			wantErrSubstr: "seção obrigatória customizada ausente: arquitetura",
+		},
+		{
+			name: "seção obrigatória customizada vazia",
+			cfg: &config.Config{
+				CustomSections: []string{"Arquitetura"},
+			},
+			reportContent: relatorioOK + "\n# Arquitetura\n\n",
+			customEmpty:   true,
+		},
+		{
+			name: "todas as seções customizadas preenchidas aprova",
+			cfg: &config.Config{
+				CustomSections: []string{"Arquitetura", "Rollback Plan"},
+			},
+			reportContent: relatorioOK + "\n# Arquitetura\nDecisão técnica sobre arquitetura.\n\n# Rollback Plan\nProcedimento detalhado de rollback.\n",
+			wantNoError:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := Parse(tt.reportContent)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			fs := r.ValidateWithConfig(tt.cfg)
+			if tt.wantNoError {
+				for _, f := range fs {
+					if f.Level == "ERRO" {
+						t.Errorf("esperava nenhum erro, obteve finding: %v", f)
+					}
+				}
+			} else if tt.customEmpty {
+				found := false
+				for _, f := range fs {
+					if f.Level == "ERRO" && strings.Contains(f.Message, "vazia") && strings.Contains(strings.ToLower(f.Message), "arquitetura") {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("esperava erro de seção customizada vazia para arquitetura, obteve findings: %v", fs)
+				}
+			} else {
+				if !hasError(fs, tt.wantErrSubstr) {
+					t.Errorf("esperava erro contendo %q, obteve findings: %v", tt.wantErrSubstr, fs)
+				}
+			}
+		})
+	}
+}
+
+func FuzzValidateWithConfig(f *testing.F) {
+	f.Add(relatorioOK)
+	f.Add("---\ndelivery_id: DEL-001\n---\n")
+	f.Add("")
+	cfg := &config.Config{
+		DeliveryIDPattern: `^DEL-\d+$`,
+		TaskCodePattern:   `^TASK-\d+$`,
+		CustomSections:    []string{"Arquitetura"},
+	}
+	f.Fuzz(func(t *testing.T, content string) {
+		r, err := Parse(content)
+		if err != nil {
+			return
+		}
+		_ = r.ValidateWithConfig(cfg)
+	})
 }

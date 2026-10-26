@@ -45,7 +45,7 @@ func Run(reportPath, baseRef string, noGit bool, stdout, stderr io.Writer) int {
 		return ExitFail
 	}
 
-	findings := r.Validate()
+	findings := r.ValidateWithConfig(cfg)
 	findings = append(findings, checkIndex(cfg, r)...)
 
 	if !noGit {
@@ -59,6 +59,9 @@ func Run(reportPath, baseRef string, noGit bool, stdout, stderr io.Writer) int {
 }
 
 func checkIndex(cfg *config.Config, r *report.Report) []report.Finding {
+	if cfg != nil && !cfg.IsIndexRequired() {
+		return nil
+	}
 	id := strings.TrimSpace(r.Front["delivery_id"])
 	if id == "" {
 		return nil

@@ -480,3 +480,324 @@ func TestLoadImmutablePaths(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadFlexibleDeliveryConfig(t *testing.T) {
+	tests := []struct {
+		name                string
+		body                string
+		wantDeliveryPattern string
+		wantTaskPattern     string
+		wantCustomSections  []string
+		wantIsIndexRequired bool
+	}{
+		{
+			name: "campos flexíveis configurados",
+			body: `{
+				"version": 1,
+				"project_type": "api",
+				"protected_paths": ["internal/"],
+				"delivery_id_pattern": "^DEL-[0-9]{3,}$",
+				"task_code_pattern": "^TASK-[0-9]+$",
+				"custom_sections": ["Arquitetura", "Rollback Plan"],
+				"require_index": false
+			}`,
+			wantDeliveryPattern: "^DEL-[0-9]{3,}$",
+			wantTaskPattern:     "^TASK-[0-9]+$",
+			wantCustomSections:  []string{"Arquitetura", "Rollback Plan"},
+			wantIsIndexRequired: false,
+		},
+		{
+			name: "campos flexíveis omitidos (valores default)",
+			body: `{
+				"version": 1,
+				"project_type": "desktop",
+				"protected_paths": ["internal/"]
+			}`,
+			wantDeliveryPattern: "",
+			wantTaskPattern:     "",
+			wantCustomSections:  nil,
+			wantIsIndexRequired: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeConfig(t, dir, tt.body)
+			c, err := Load(dir)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+
+			if c.DeliveryIDPattern != tt.wantDeliveryPattern {
+				t.Errorf("DeliveryIDPattern = %q, quer %q", c.DeliveryIDPattern, tt.wantDeliveryPattern)
+			}
+			if c.TaskCodePattern != tt.wantTaskPattern {
+				t.Errorf("TaskCodePattern = %q, quer %q", c.TaskCodePattern, tt.wantTaskPattern)
+			}
+			if len(c.CustomSections) != len(tt.wantCustomSections) {
+				t.Fatalf("len(CustomSections) = %d, quer %d", len(c.CustomSections), len(tt.wantCustomSections))
+			}
+			for i, s := range tt.wantCustomSections {
+				if c.CustomSections[i] != s {
+					t.Errorf("CustomSections[%d] = %q, quer %q", i, c.CustomSections[i], s)
+				}
+			}
+			if got := c.IsIndexRequired(); got != tt.wantIsIndexRequired {
+				t.Errorf("IsIndexRequired() = %v, quer %v", got, tt.wantIsIndexRequired)
+			}
+		})
+	}
+}
+
+func TestConfigPatternValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wantErr bool
+	}{
+		{
+			name: "delivery_id_pattern regex válida",
+			body: `{
+				"version": 1,
+				"project_type": "api",
+				"protected_paths": ["internal/"],
+				"delivery_id_pattern": "^DEL-[0-9]+$"
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "delivery_id_pattern regex inválida",
+			body: `{
+				"version": 1,
+				"project_type": "api",
+				"protected_paths": ["internal/"],
+				"delivery_id_pattern": "[a-z"
+			}`,
+			wantErr: true,
+		},
+		{
+			name: "task_code_pattern regex válida",
+			body: `{
+				"version": 1,
+				"project_type": "api",
+				"protected_paths": ["internal/"],
+				"task_code_pattern": "^[A-Z]+-[0-9]+$"
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "task_code_pattern regex inválida",
+			body: `{
+				"version": 1,
+				"project_type": "api",
+				"protected_paths": ["internal/"],
+				"task_code_pattern": "(?P<"
+			}`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeConfig(t, dir, tt.body)
+			_, err := Load(dir)
+			if tt.wantErr && err == nil {
+				t.Errorf("esperava erro de validação para regex inválida, obteve nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("erro inesperado: %v", err)
+			}
+		})
+	}
+}
+
+func TestIsIndexRequired(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{
+			name: "omitido no JSON retorna true",
+			body: `{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"]}`,
+			want: true,
+		},
+		{
+			name: "explicitamente true",
+			body: `{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"], "require_index": true}`,
+			want: true,
+		},
+		{
+			name: "explicitamente false",
+			body: `{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"], "require_index": false}`,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeConfig(t, dir, tt.body)
+			c, err := Load(dir)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if got := c.IsIndexRequired(); got != tt.want {
+				t.Errorf("IsIndexRequired() = %v, quer %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateDeliveryID(t *testing.T) {
+	tests := []struct {
+		name       string
+		pattern    string
+		deliveryID string
+		wantErr    bool
+	}{
+		{
+			name:       "default pattern caso válido",
+			pattern:    "",
+			deliveryID: "DEL-001",
+			wantErr:    false,
+		},
+		{
+			name:       "default pattern caso válido de 4 digitos",
+			pattern:    "",
+			deliveryID: "DEL-1234",
+			wantErr:    false,
+		},
+		{
+			name:       "default pattern com prefixo errado",
+			pattern:    "",
+			deliveryID: "REL-001",
+			wantErr:    true,
+		},
+		{
+			name:       "default pattern vazio",
+			pattern:    "",
+			deliveryID: "",
+			wantErr:    true,
+		},
+		{
+			name:       "default pattern minúsculas",
+			pattern:    "",
+			deliveryID: "del-001",
+			wantErr:    true,
+		},
+		{
+			name:       "custom pattern válido",
+			pattern:    "^REL-[0-9]{4}$",
+			deliveryID: "REL-2026",
+			wantErr:    false,
+		},
+		{
+			name:       "custom pattern não casa com DEL padrão",
+			pattern:    "^REL-[0-9]{4}$",
+			deliveryID: "DEL-001",
+			wantErr:    true,
+		},
+		{
+			name:       "custom pattern tamanho incompatível",
+			pattern:    "^REL-[0-9]{4}$",
+			deliveryID: "REL-12",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				DeliveryIDPattern: tt.pattern,
+			}
+			err := cfg.ValidateDeliveryID(tt.deliveryID)
+			if tt.wantErr && err == nil {
+				t.Errorf("ValidateDeliveryID(%q) com pattern %q esperava erro, obteve nil", tt.deliveryID, tt.pattern)
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("ValidateDeliveryID(%q) com pattern %q erro inesperado: %v", tt.deliveryID, tt.pattern, err)
+			}
+		})
+	}
+}
+
+func TestValidateTaskCode(t *testing.T) {
+	tests := []struct {
+		name     string
+		pattern  string
+		taskCode string
+		wantErr  bool
+	}{
+		{
+			name:     "default pattern caso válido",
+			pattern:  "",
+			taskCode: "TASK-42",
+			wantErr:  false,
+		},
+		{
+			name:     "default pattern caso válido 3 dígitos",
+			pattern:  "",
+			taskCode: "TASK-001",
+			wantErr:  false,
+		},
+		{
+			name:     "default pattern vazio",
+			pattern:  "",
+			taskCode: "",
+			wantErr:  true,
+		},
+		{
+			name:     "default pattern com formato desconhecido",
+			pattern:  "",
+			taskCode: "INVALID",
+			wantErr:  true,
+		},
+		{
+			name:     "custom pattern válido Jira",
+			pattern:  "^PROJ-[0-9]+$",
+			taskCode: "PROJ-1234",
+			wantErr:  false,
+		},
+		{
+			name:     "custom pattern inválido contra TASK",
+			pattern:  "^PROJ-[0-9]+$",
+			taskCode: "TASK-42",
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				TaskCodePattern: tt.pattern,
+			}
+			err := cfg.ValidateTaskCode(tt.taskCode)
+			if tt.wantErr && err == nil {
+				t.Errorf("ValidateTaskCode(%q) com pattern %q esperava erro, obteve nil", tt.taskCode, tt.pattern)
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("ValidateTaskCode(%q) com pattern %q erro inesperado: %v", tt.taskCode, tt.pattern, err)
+			}
+		})
+	}
+}
+
+func FuzzValidateDeliveryID(f *testing.F) {
+	f.Add("DEL-001")
+	f.Add("DEL-9999")
+	f.Add("TASK-001")
+	f.Add("")
+	f.Add("DEL-")
+	f.Add("del-001")
+	f.Add("DEL-001\n")
+	f.Add("DEL-001; rm -rf /")
+
+	cfg := &Config{}
+	f.Fuzz(func(t *testing.T, s string) {
+		// Não deve dar panic com nenhuma string arbitrária
+		_ = cfg.ValidateDeliveryID(s)
+	})
+}

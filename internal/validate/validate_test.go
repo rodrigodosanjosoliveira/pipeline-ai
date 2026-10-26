@@ -1,6 +1,8 @@
 package validate
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -89,6 +91,134 @@ func TestChangedFiles(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if !fileMap[tc.path] {
 				t.Errorf("changedFiles não detectou %s (%s). Arquivos detectados: %v", tc.name, tc.path, files)
+			}
+		})
+	}
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+const validReportContent = `---
+delivery_id: DEL-001
+task_code: TASK-42
+title: Validação flexível
+status: done
+require_security: false
+---
+
+# Contexto
+Contexto explicativo.
+
+# Escopo
+Arquivos no escopo.
+
+# Implementação
+Detalhes da implementação.
+
+# Testes
+Testes executados.
+
+# Code Review
+Aprovado sem ressalvas.
+
+# Final Checklist
+- [x] itens concluídos
+`
+
+func TestValidateRequireIndex(t *testing.T) {
+	tests := []struct {
+		name         string
+		requireIndex *bool
+		hasIndex     bool
+		indexHasID   bool
+		wantExitCode int
+		wantOutput   string
+	}{
+		{
+			name:         "require_index false sem INDEX.md aprova",
+			requireIndex: boolPtr(false),
+			hasIndex:     false,
+			wantExitCode: ExitOK,
+			wantOutput:   "APROVADO",
+		},
+		{
+			name:         "require_index false com INDEX.md sem o ID aprova",
+			requireIndex: boolPtr(false),
+			hasIndex:     true,
+			indexHasID:   false,
+			wantExitCode: ExitOK,
+			wantOutput:   "APROVADO",
+		},
+		{
+			name:         "require_index true sem INDEX.md falha",
+			requireIndex: boolPtr(true),
+			hasIndex:     false,
+			wantExitCode: ExitFail,
+			wantOutput:   "REPROVADO",
+		},
+		{
+			name:         "require_index true com INDEX.md sem o ID falha",
+			requireIndex: boolPtr(true),
+			hasIndex:     true,
+			indexHasID:   false,
+			wantExitCode: ExitFail,
+			wantOutput:   "REPROVADO",
+		},
+		{
+			name:         "require_index omitido sem INDEX.md falha",
+			requireIndex: nil,
+			hasIndex:     false,
+			wantExitCode: ExitFail,
+			wantOutput:   "REPROVADO",
+		},
+		{
+			name:         "require_index omitido com INDEX.md contendo ID aprova",
+			requireIndex: nil,
+			hasIndex:     true,
+			indexHasID:   true,
+			wantExitCode: ExitOK,
+			wantOutput:   "APROVADO",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+
+			var cfgBody string
+			if tt.requireIndex == nil {
+				cfgBody = `{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"]}`
+			} else {
+				cfgBody = fmt.Sprintf(`{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"], "require_index": %t}`, *tt.requireIndex)
+			}
+			writeFile(t, filepath.Join(root, ".pipeline-ai.json"), cfgBody)
+
+			reportPath := filepath.Join(root, "docs-ai", "deliveries", "DEL-001", "report.md")
+			writeFile(t, reportPath, validReportContent)
+
+			if tt.hasIndex {
+				indexPath := filepath.Join(root, "docs-ai", "deliveries", "INDEX.md")
+				var indexBody string
+				if tt.indexHasID {
+					indexBody = "# Índice\n\n| DEL-001 | TASK-42 | Validação flexível | feat | 2026-10-26 | done |\n"
+				} else {
+					indexBody = "# Índice\n\n| DEL-999 | TASK-99 | Outra | feat | 2026-10-26 | done |\n"
+				}
+				writeFile(t, indexPath, indexBody)
+			}
+
+			var stdout, stderr bytes.Buffer
+			code := Run(reportPath, "", true, &stdout, &stderr)
+
+			if code != tt.wantExitCode {
+				t.Errorf("Run exit code = %d, quer %d (stdout: %q, stderr: %q)", code, tt.wantExitCode, stdout.String(), stderr.String())
+			}
+
+			fullOutput := stdout.String() + stderr.String()
+			if !strings.Contains(fullOutput, tt.wantOutput) {
+				t.Errorf("saída esperada contendo %q não encontrada. Saída obtida:\n%s", tt.wantOutput, fullOutput)
 			}
 		})
 	}

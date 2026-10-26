@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 )
 
 // Report é um relatório de delivery já parseado.
@@ -179,6 +181,42 @@ func (r *Report) Validate() []Finding {
 	out = append(out, r.checkSections()...)
 	out = append(out, r.checkPlaceholders()...)
 	out = append(out, r.checkChecklist()...)
+
+	return out
+}
+
+// ValidateWithConfig executa a validação do relatório considerando parâmetros do .pipeline-ai.json.
+func (r *Report) ValidateWithConfig(cfg *config.Config) []Finding {
+	out := r.Validate()
+	if cfg == nil {
+		return out
+	}
+
+	if err := cfg.ValidateDeliveryID(r.Front["delivery_id"]); err != nil {
+		out = append(out, Finding{Level: "ERRO", Message: fmt.Sprintf("front matter: %v", err)})
+	}
+
+	if err := cfg.ValidateTaskCode(r.Front["task_code"]); err != nil {
+		out = append(out, Finding{Level: "ERRO", Message: fmt.Sprintf("front matter: %v", err)})
+	}
+
+	for _, sec := range cfg.CustomSections {
+		normSec := normalize(sec)
+		body, ok := r.Sections[normSec]
+		if !ok {
+			out = append(out, Finding{
+				Level:   "ERRO",
+				Message: "seção obrigatória customizada ausente: " + strings.ToLower(sec),
+			})
+			continue
+		}
+		if strings.TrimSpace(body) == "" {
+			out = append(out, Finding{
+				Level:   "ERRO",
+				Message: "seção obrigatória customizada vazia: " + strings.ToLower(sec),
+			})
+		}
+	}
 
 	return out
 }
