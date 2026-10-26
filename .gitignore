@@ -25,3 +25,6 @@ credentials
 Thumbs.db
 *.tmp
 .idea/
+
+# Pipeline AI state
+.pipeline-state/

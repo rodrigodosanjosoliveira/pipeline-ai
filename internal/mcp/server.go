@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
 )
 
@@ -115,6 +117,12 @@ func (s *Server) handleResourcesList(req *Request, out io.Writer) {
 			Description: "Lista de skills nativas em .agents/skills",
 			MimeType:    "text/markdown",
 		},
+		{
+			URI:         "pipeline://delivery/active",
+			Name:        "Delivery Ativa (Estado)",
+			Description: "Metadados e expiração da delivery atualmente ativa",
+			MimeType:    "application/json",
+		},
 	}
 	s.sendResult(out, req.ID, map[string]any{"resources": resources})
 }
@@ -183,6 +191,38 @@ func (s *Server) handleResourcesRead(req *Request, out io.Writer) {
 					URI:      params.URI,
 					MimeType: "text/markdown",
 					Text:     text.String(),
+				},
+			},
+		})
+
+	case "pipeline://delivery/active":
+		del, err := state.Get(s.RootDir)
+		var text string
+		if err != nil || del == nil {
+			text = `{"active":false,"status":"inativa","message":"nenhuma delivery ativa no momento"}`
+		} else {
+			active, _ := state.IsActive(s.RootDir)
+			status := "active"
+			if !active {
+				status = "expired"
+			}
+			outMap := map[string]any{
+				"active":      active,
+				"status":      status,
+				"delivery_id": del.DeliveryID,
+				"task_code":   del.TaskCode,
+				"opened_at":   del.OpenedAt.Format(time.RFC3339),
+				"expires_at":  del.ExpiresAt.Format(time.RFC3339),
+			}
+			data, _ := json.MarshalIndent(outMap, "", "  ")
+			text = string(data)
+		}
+		s.sendResult(out, req.ID, ReadResourceResult{
+			Contents: []ResourceContent{
+				{
+					URI:      params.URI,
+					MimeType: "application/json",
+					Text:     text,
 				},
 			},
 		})
@@ -263,6 +303,14 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 						"description": "Diretório raiz do projeto a ser sincronizado (padrão: raiz atual)",
 					},
 				},
+			},
+		},
+		{
+			Name:        "pipeline_close_delivery",
+			Description: "Fecha a delivery ativa no repositório",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
 			},
 		},
 	}
@@ -418,6 +466,30 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 				},
 			},
 			IsError: err != nil,
+		})
+
+	case "pipeline_close_delivery":
+		err := state.Close(s.RootDir)
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO ao fechar delivery ativa: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+		s.sendResult(out, req.ID, ToolResult{
+			Content: []ToolContent{
+				{
+					Type: "text",
+					Text: "Delivery ativa fechada com sucesso.",
+				},
+			},
+			IsError: false,
 		})
 
 	default:

@@ -233,3 +233,100 @@ func TestCLIInitCLI(t *testing.T) {
 		t.Errorf("arquivo principal do CLI %s não foi criado: %v", mainFile, err)
 	}
 }
+
+func TestCLIDeliveryCommands(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Cria arquivo .pipeline-ai.json para simular projeto válido
+	cfg := `{"version": 1, "project_type": "api", "protected_paths": ["internal/"]}`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".pipeline-ai.json"), []byte(cfg), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name       string
+		args       []string
+		wantExit   int
+		wantStdout string
+		wantStderr string
+		checkState func(t *testing.T, dir string)
+	}{
+		{
+			name:       "delivery open sem argumento falha com erro de uso",
+			args:       []string{"delivery", "open", "-dir", tmpDir},
+			wantExit:   1,
+			wantStderr: "delivery_id é obrigatório",
+		},
+		{
+			name:       "delivery open DEL-001 abre com sucesso",
+			args:       []string{"delivery", "open", "DEL-001", "-dir", tmpDir, "-ttl", "1h"},
+			wantExit:   0,
+			wantStdout: "DEL-001",
+			checkState: func(t *testing.T, dir string) {
+				stateFile := filepath.Join(dir, ".pipeline-state", "active-delivery.json")
+				data, err := os.ReadFile(stateFile)
+				if err != nil {
+					t.Fatalf("arquivo %s não foi criado: %v", stateFile, err)
+				}
+				if !strings.Contains(string(data), "DEL-001") {
+					t.Errorf("conteúdo de active-delivery.json não contém DEL-001: %s", string(data))
+				}
+			},
+		},
+		{
+			name:       "delivery status com delivery ativa exibe detalhes",
+			args:       []string{"delivery", "status", "-dir", tmpDir},
+			wantExit:   0,
+			wantStdout: "DEL-001",
+		},
+		{
+			name:       "delivery close fecha a delivery ativa",
+			args:       []string{"delivery", "close", "-dir", tmpDir},
+			wantExit:   0,
+			wantStdout: "fechada",
+			checkState: func(t *testing.T, dir string) {
+				stateFile := filepath.Join(dir, ".pipeline-state", "active-delivery.json")
+				if data, err := os.ReadFile(stateFile); err == nil && len(strings.TrimSpace(string(data))) > 0 {
+					if strings.Contains(string(data), "DEL-001") {
+						t.Errorf("active-delivery.json ainda contém DEL-001 após close: %s", string(data))
+					}
+				}
+			},
+		},
+		{
+			name:       "delivery status apos close indica nenhuma delivery ativa",
+			args:       []string{"delivery", "status", "-dir", tmpDir},
+			wantExit:   0,
+			wantStdout: "nenhuma delivery ativa",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			exitCode := run(tt.args, &stdout, &stderr)
+
+			if exitCode != tt.wantExit {
+				t.Errorf("run(%v) exitCode = %d, quer %d (stdout: %s, stderr: %s)", tt.args, exitCode, tt.wantExit, stdout.String(), stderr.String())
+			}
+
+			if tt.wantStdout != "" {
+				combined := strings.ToLower(stdout.String())
+				if !strings.Contains(combined, strings.ToLower(tt.wantStdout)) {
+					t.Errorf("stdout não contém %q; saída:\n%s", tt.wantStdout, stdout.String())
+				}
+			}
+
+			if tt.wantStderr != "" {
+				combined := strings.ToLower(stderr.String() + stdout.String())
+				if !strings.Contains(combined, strings.ToLower(tt.wantStderr)) {
+					t.Errorf("stderr não contém %q; saída:\n%s", tt.wantStderr, stderr.String())
+				}
+			}
+
+			if tt.checkState != nil {
+				tt.checkState(t, tmpDir)
+			}
+		})
+	}
+}

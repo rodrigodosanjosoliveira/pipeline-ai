@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 )
@@ -328,5 +330,206 @@ func TestStdinIlegivelBloqueia(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "doctor") {
 		t.Errorf("stderr não sugere doctor: %s", stderr.String())
+	}
+}
+
+func setActiveDelivery(t *testing.T, root, delivID, taskCode string, expiresAt time.Time) {
+	t.Helper()
+	dir := filepath.Join(root, ".pipeline-state")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir .pipeline-state: %v", err)
+	}
+	body := fmt.Sprintf(`{
+  "delivery_id": %q,
+  "task_code": %q,
+  "opened_at": %q,
+  "expires_at": %q
+}`, delivID, taskCode, time.Now().UTC().Format(time.RFC3339), expiresAt.UTC().Format(time.RFC3339))
+	if err := os.WriteFile(filepath.Join(dir, "active-delivery.json"), []byte(body), 0o644); err != nil {
+		t.Fatalf("write active-delivery.json: %v", err)
+	}
+}
+
+func TestHybridGateActiveDelivery(t *testing.T) {
+	root := setupProject(t, cfgBody)
+	protected := filepath.Join(root, "internal", "auth", "token.go")
+
+	tests := []struct {
+		name         string
+		setupState   func(t *testing.T, root string)
+		payload      string
+		wantExit     int
+		wantDecision string
+		containsText string
+	}{
+		{
+			name: "sessao principal liberada com delivery ativa valida no protocolo CLI",
+			setupState: func(t *testing.T, root string) {
+				setActiveDelivery(t, root, "DEL-010", "TASK-010", time.Now().Add(1*time.Hour))
+			},
+			payload:  `{"tool_name":"Edit","cwd":"` + root + `","tool_input":{"file_path":"` + protected + `"}}`,
+			wantExit: exitAllow,
+		},
+		{
+			name: "sessao principal liberada com delivery ativa valida no protocolo Antigravity",
+			setupState: func(t *testing.T, root string) {
+				setActiveDelivery(t, root, "DEL-010", "TASK-010", time.Now().Add(1*time.Hour))
+			},
+			payload: `{
+				"toolCall": {"name": "write_to_file", "args": {"TargetFile": "` + protected + `"}},
+				"workspacePaths": ["` + root + `"]
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "allow",
+		},
+		{
+			name: "sessao principal bloqueada quando delivery ativa esta expirada no protocolo CLI",
+			setupState: func(t *testing.T, root string) {
+				setActiveDelivery(t, root, "DEL-010", "TASK-010", time.Now().Add(-15*time.Minute))
+			},
+			payload:      `{"tool_name":"Edit","cwd":"` + root + `","tool_input":{"file_path":"` + protected + `"}}`,
+			wantExit:     exitBlock,
+			containsText: "expir",
+		},
+		{
+			name: "sessao principal bloqueada quando delivery ativa esta expirada no protocolo Antigravity",
+			setupState: func(t *testing.T, root string) {
+				setActiveDelivery(t, root, "DEL-010", "TASK-010", time.Now().Add(-15*time.Minute))
+			},
+			payload: `{
+				"toolCall": {"name": "write_to_file", "args": {"TargetFile": "` + protected + `"}},
+				"workspacePaths": ["` + root + `"]
+			}`,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
+			containsText: "expir",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			subRoot := setupProject(t, cfgBody)
+			subProtected := filepath.Join(subRoot, "internal", "auth", "token.go")
+			payload := strings.ReplaceAll(tt.payload, protected, subProtected)
+			payload = strings.ReplaceAll(payload, root, subRoot)
+
+			if tt.setupState != nil {
+				tt.setupState(t, subRoot)
+			}
+
+			var stdout, stderr bytes.Buffer
+			got := run(strings.NewReader(payload), &stdout, &stderr)
+			if got != tt.wantExit {
+				t.Errorf("exit = %d, quer %d (stderr: %s, stdout: %s)", got, tt.wantExit, stderr.String(), stdout.String())
+			}
+
+			if tt.wantDecision != "" {
+				outStr := stdout.String()
+				if !strings.Contains(outStr, `"decision":"`+tt.wantDecision+`"`) {
+					t.Errorf("stdout não contém decision %q: %s", tt.wantDecision, outStr)
+				}
+			}
+
+			if tt.containsText != "" {
+				combined := stdout.String() + "\n" + stderr.String()
+				if !strings.Contains(strings.ToLower(combined), strings.ToLower(tt.containsText)) {
+					t.Errorf("saída não contém %q (stdout: %s, stderr: %s)", tt.containsText, stdout.String(), stderr.String())
+				}
+			}
+		})
+	}
+}
+
+func TestImmutablePathsHookBlocking(t *testing.T) {
+	const cfgWithImmutable = `{
+  "version": 1,
+  "project_type": "desktop",
+  "protected_paths": ["internal/", "cmd/"],
+  "immutable_paths": [
+    ".pipeline-ai.json",
+    "AGENTS.md",
+    "internal/core/"
+  ],
+  "editor_agents": ["dev-implementation", "test-writer"]
+}`
+
+	tests := []struct {
+		name         string
+		filePath     string
+		agentType    string
+		withDelivery bool
+		wantExit     int
+		wantDecision string
+		containsText string
+	}{
+		{
+			name:         "dev-implementation tentando editar .pipeline-ai.json bloqueia sempre",
+			filePath:     ".pipeline-ai.json",
+			agentType:    "dev-implementation",
+			withDelivery: false,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
+			containsText: "imutável",
+		},
+		{
+			name:         "sessao principal com delivery ativa tentando editar AGENTS.md bloqueia sempre",
+			filePath:     "AGENTS.md",
+			agentType:    "",
+			withDelivery: true,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
+			containsText: "imutável",
+		},
+		{
+			name:         "dev-implementation com delivery ativa tentando editar arquivo em internal/core/ bloqueia sempre",
+			filePath:     filepath.Join("internal", "core", "guard.go"),
+			agentType:    "dev-implementation",
+			withDelivery: true,
+			wantExit:     exitAllow,
+			wantDecision: "deny",
+			containsText: "imutável",
+		},
+		{
+			name:         "dev-implementation tentando editar caminho protegido normal (nao imutavel) passa",
+			filePath:     filepath.Join("internal", "auth", "token.go"),
+			agentType:    "dev-implementation",
+			withDelivery: false,
+			wantExit:     exitAllow,
+			wantDecision: "allow",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := setupProject(t, cfgWithImmutable)
+			target := filepath.Join(root, tt.filePath)
+
+			if tt.withDelivery {
+				setActiveDelivery(t, root, "DEL-010", "TASK-010", time.Now().Add(1*time.Hour))
+			}
+
+			payload := fmt.Sprintf(`{
+				"toolCall": {"name": "write_to_file", "args": {"TargetFile": %q}},
+				"workspacePaths": [%q],
+				"subagentId": %q
+			}`, target, root, tt.agentType)
+
+			var stdout, stderr bytes.Buffer
+			got := run(strings.NewReader(payload), &stdout, &stderr)
+			if got != tt.wantExit {
+				t.Errorf("exit = %d, quer %d (stderr: %s)", got, tt.wantExit, stderr.String())
+			}
+
+			outStr := stdout.String()
+			if tt.wantDecision != "" && !strings.Contains(outStr, `"decision":"`+tt.wantDecision+`"`) {
+				t.Errorf("stdout não contém decision %q: %s", tt.wantDecision, outStr)
+			}
+			if tt.containsText != "" {
+				combined := strings.ToLower(stdout.String() + "\n" + stderr.String())
+				if !strings.Contains(combined, strings.ToLower(tt.containsText)) && !strings.Contains(combined, "immutable") {
+					t.Errorf("saída não menciona imutabilidade: stdout=%s stderr=%s", stdout.String(), stderr.String())
+				}
+			}
+		})
 	}
 }

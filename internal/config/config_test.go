@@ -348,3 +348,135 @@ func TestIsProtectedSymlinks(t *testing.T) {
 		})
 	}
 }
+
+func TestIsImmutable(t *testing.T) {
+	const cfgWithImmutable = `{
+  "version": 1,
+  "project_type": "desktop",
+  "protected_paths": ["internal/", "cmd/"],
+  "immutable_paths": [
+    ".pipeline-ai.json",
+    "AGENTS.md",
+    "internal/core/",
+    "docs-ai/01-INVARIANTES-GLOBAIS.md"
+  ]
+}`
+	dir := t.TempDir()
+	writeConfig(t, dir, cfgWithImmutable)
+	c, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{
+			name: "arquivo exato .pipeline-ai.json",
+			path: filepath.Join(dir, ".pipeline-ai.json"),
+			want: true,
+		},
+		{
+			name: "arquivo exato AGENTS.md",
+			path: filepath.Join(dir, "AGENTS.md"),
+			want: true,
+		},
+		{
+			name: "arquivo dentro de diretorio imutavel internal/core/",
+			path: filepath.Join(dir, "internal", "core", "guard.go"),
+			want: true,
+		},
+		{
+			name: "arquivo em subdiretorio dentro de internal/core/",
+			path: filepath.Join(dir, "internal", "core", "sub", "rule.go"),
+			want: true,
+		},
+		{
+			name: "arquivo exato em docs-ai imutavel",
+			path: filepath.Join(dir, "docs-ai", "01-INVARIANTES-GLOBAIS.md"),
+			want: true,
+		},
+		{
+			name: "outro arquivo em docs-ai nao configurado em immutable_paths",
+			path: filepath.Join(dir, "docs-ai", "DECISOES.md"),
+			want: false,
+		},
+		{
+			name: "arquivo em internal mas fora de internal/core (apenas protegido, nao imutavel)",
+			path: filepath.Join(dir, "internal", "auth", "token.go"),
+			want: false,
+		},
+		{
+			name: "arquivo na raiz nao imutavel",
+			path: filepath.Join(dir, "README.md"),
+			want: false,
+		},
+		{
+			name: "prefixo parcial nao casa com diretorio imutavel",
+			path: filepath.Join(dir, "internal", "core_extra", "file.go"),
+			want: false,
+		},
+		{
+			name: "caminho fora da raiz do projeto",
+			path: filepath.Join(filepath.Dir(dir), "outro", "AGENTS.md"),
+			want: false,
+		},
+		{
+			name: "caminho vazio",
+			path: "",
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := c.IsImmutable(tt.path); got != tt.want {
+				t.Errorf("IsImmutable(%q) = %v, quer %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoadImmutablePaths(t *testing.T) {
+	tests := []struct {
+		name      string
+		body      string
+		wantCount int
+	}{
+		{
+			name: "com immutable_paths configurado",
+			body: `{
+				"version": 1,
+				"project_type": "api",
+				"protected_paths": ["internal/"],
+				"immutable_paths": [".pipeline-ai.json", "AGENTS.md"]
+			}`,
+			wantCount: 2,
+		},
+		{
+			name: "sem immutable_paths configurado",
+			body: `{
+				"version": 1,
+				"project_type": "api",
+				"protected_paths": ["internal/"]
+			}`,
+			wantCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeConfig(t, dir, tt.body)
+			c, err := Load(dir)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if len(c.ImmutablePaths) != tt.wantCount {
+				t.Errorf("len(c.ImmutablePaths) = %d, quer %d", len(c.ImmutablePaths), tt.wantCount)
+			}
+		})
+	}
+}

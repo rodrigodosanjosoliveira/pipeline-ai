@@ -341,3 +341,131 @@ func TestScaffoldDeliveryCustomPaths(t *testing.T) {
 		t.Errorf("INDEX customizado ainda contém placeholder")
 	}
 }
+
+func TestMCPScaffoldOpensActiveDelivery(t *testing.T) {
+	tmpDir := t.TempDir()
+	delivDir := filepath.Join(tmpDir, "docs-ai", "deliveries")
+	if err := os.MkdirAll(delivDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	initialIndex := "# Índice de Deliveries\n\n| ID | Task | Título | Tipo | Data | Status |\n|---|---|---|---|---|---|\n| — | — | nenhuma delivery registrada | — | — | — |\n"
+	if err := os.WriteFile(filepath.Join(delivDir, "INDEX.md"), []byte(initialIndex), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(tmpDir)
+
+	req := `{"jsonrpc":"2.0","id":70,"method":"tools/call","params":{"name":"pipeline_scaffold_delivery","arguments":{"title":"Scaffold Ativo Teste","type":"feat","task_code":"TASK-100"}}}`
+	res := runRPC(t, s, req)
+	result, ok := res["result"].(map[string]any)
+	if !ok || result["isError"] == true {
+		t.Fatalf("pipeline_scaffold_delivery falhou: %v", res)
+	}
+
+	// Verifica se .pipeline-state/active-delivery.json foi criado com DEL-001
+	stateFile := filepath.Join(tmpDir, ".pipeline-state", "active-delivery.json")
+	data, err := os.ReadFile(stateFile)
+	if err != nil {
+		t.Fatalf("arquivo %s não foi criado pelo scaffold: %v", stateFile, err)
+	}
+	stateStr := string(data)
+	if !strings.Contains(stateStr, "DEL-001") {
+		t.Errorf("active-delivery.json não contém DEL-001: %s", stateStr)
+	}
+	if !strings.Contains(stateStr, "TASK-100") {
+		t.Errorf("active-delivery.json não contém TASK-100: %s", stateStr)
+	}
+}
+
+func TestMCPCloseDelivery(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateDir := filepath.Join(tmpDir, ".pipeline-state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Cria uma delivery ativa prévia
+	activeContent := `{"delivery_id":"DEL-050","task_code":"TASK-050","opened_at":"2026-10-26T12:00:00Z","expires_at":"2026-10-26T14:00:00Z"}`
+	stateFile := filepath.Join(stateDir, "active-delivery.json")
+	if err := os.WriteFile(stateFile, []byte(activeContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(tmpDir)
+
+	// 1. Verifica se pipeline_close_delivery está listado em tools/list
+	reqList := `{"jsonrpc":"2.0","id":80,"method":"tools/list","params":{}}`
+	resList := runRPC(t, s, reqList)
+	resultList, _ := resList["result"].(map[string]any)
+	tools, _ := resultList["tools"].([]any)
+	hasClose := false
+	for _, raw := range tools {
+		tool, ok := raw.(map[string]any)
+		if ok && tool["name"] == "pipeline_close_delivery" {
+			hasClose = true
+			break
+		}
+	}
+	if !hasClose {
+		t.Errorf("ferramenta 'pipeline_close_delivery' não encontrada em tools/list")
+	}
+
+	// 2. Chama pipeline_close_delivery
+	reqCall := `{"jsonrpc":"2.0","id":81,"method":"tools/call","params":{"name":"pipeline_close_delivery","arguments":{}}}`
+	resCall := runRPC(t, s, reqCall)
+	resultCall, ok := resCall["result"].(map[string]any)
+	if !ok || resultCall["isError"] == true {
+		t.Fatalf("pipeline_close_delivery retornou erro: %v", resCall)
+	}
+
+	// 3. Verifica se active-delivery.json foi removido ou limpo
+	if data, err := os.ReadFile(stateFile); err == nil && len(strings.TrimSpace(string(data))) > 0 {
+		var parsed map[string]any
+		if err := json.Unmarshal(data, &parsed); err == nil && parsed["delivery_id"] != nil && parsed["delivery_id"] != "" {
+			t.Errorf("active-delivery.json ainda contém delivery ativa após close: %s", string(data))
+		}
+	}
+}
+
+func TestMCPResourceDeliveryActive(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := NewServer(tmpDir)
+
+	// 1. Leitura sem delivery ativa
+	reqEmpty := `{"jsonrpc":"2.0","id":90,"method":"resources/read","params":{"uri":"pipeline://delivery/active"}}`
+	resEmpty := runRPC(t, s, reqEmpty)
+	resultEmpty, ok := resEmpty["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result ausente em resources/read pipeline://delivery/active: %v", resEmpty)
+	}
+	contentsEmpty, _ := resultEmpty["contents"].([]any)
+	if len(contentsEmpty) == 0 {
+		t.Fatalf("contents vazio para pipeline://delivery/active")
+	}
+	firstEmpty, _ := contentsEmpty[0].(map[string]any)
+	textEmpty, _ := firstEmpty["text"].(string)
+	if !strings.Contains(strings.ToLower(textEmpty), "nenhuma") && !strings.Contains(strings.ToLower(textEmpty), "inativa") && !strings.Contains(strings.ToLower(textEmpty), "fechada") {
+		t.Errorf("texto de delivery inativa inesperado: %s", textEmpty)
+	}
+
+	// 2. Leitura com delivery ativa
+	stateDir := filepath.Join(tmpDir, ".pipeline-state")
+	_ = os.MkdirAll(stateDir, 0755)
+	activeContent := `{"delivery_id":"DEL-099","task_code":"TASK-099","opened_at":"2026-10-26T12:00:00Z","expires_at":"2026-10-26T14:00:00Z"}`
+	_ = os.WriteFile(filepath.Join(stateDir, "active-delivery.json"), []byte(activeContent), 0644)
+
+	reqActive := `{"jsonrpc":"2.0","id":91,"method":"resources/read","params":{"uri":"pipeline://delivery/active"}}`
+	resActive := runRPC(t, s, reqActive)
+	resultActive, ok := resActive["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result ausente em resources/read com delivery ativa: %v", resActive)
+	}
+	contentsActive, _ := resultActive["contents"].([]any)
+	if len(contentsActive) == 0 {
+		t.Fatalf("contents vazio")
+	}
+	firstActive, _ := contentsActive[0].(map[string]any)
+	textActive, _ := firstActive["text"].(string)
+	if !strings.Contains(textActive, "DEL-099") {
+		t.Errorf("texto não contém DEL-099: %s", textActive)
+	}
+}
