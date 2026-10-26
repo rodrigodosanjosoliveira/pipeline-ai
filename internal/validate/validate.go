@@ -2,6 +2,7 @@
 package validate
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -56,6 +57,94 @@ func Run(reportPath, baseRef string, noGit bool, stdout, stderr io.Writer) int {
 	}
 
 	return printResult(stdout, filepath.Base(absReport), findings)
+}
+
+// ValidationResult representa o resultado estruturado da validação para serialização JSON.
+type ValidationResult struct {
+	Status   string           `json:"status"`
+	OK       bool             `json:"ok"`
+	Report   string           `json:"report"`
+	Errors   int              `json:"errors"`
+	Warnings int              `json:"warnings"`
+	Findings []report.Finding `json:"findings"`
+}
+
+// RunJSON executa a validação emitindo o resultado estruturado em JSON no stdout.
+func RunJSON(reportPath, baseRef string, noGit bool, stdout, stderr io.Writer) int {
+	absReport, err := filepath.Abs(reportPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "caminho inválido: %v\n", err)
+		return ExitBadUsage
+	}
+
+	content, err := os.ReadFile(absReport)
+	if err != nil {
+		fmt.Fprintf(stderr, "falha ao ler o relatório: %v\n", err)
+		return ExitBadUsage
+	}
+
+	cfg, err := config.Load(filepath.Dir(absReport))
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return ExitBadUsage
+	}
+
+	r, err := report.Parse(string(content))
+	if err != nil {
+		fmt.Fprintf(stderr, "ERRO: %v\n", err)
+		return ExitFail
+	}
+
+	findings := r.ValidateWithConfig(cfg)
+	findings = append(findings, checkIndex(cfg, r)...)
+
+	if !noGit {
+		if baseRef == "" {
+			baseRef = cfg.BaseRef
+		}
+		findings = append(findings, checkSecuritySurface(cfg, r, baseRef)...)
+	}
+
+	var nErros, nAvisos int
+	for _, f := range findings {
+		switch f.Level {
+		case "ERRO":
+			nErros++
+		case "AVISO":
+			nAvisos++
+		}
+	}
+
+	status := "PASS"
+	ok := true
+	if nErros > 0 {
+		status = "FAIL"
+		ok = false
+	}
+	if findings == nil {
+		findings = []report.Finding{}
+	}
+
+	res := ValidationResult{
+		Status:   status,
+		OK:       ok,
+		Report:   filepath.Base(absReport),
+		Errors:   nErros,
+		Warnings: nAvisos,
+		Findings: findings,
+	}
+
+	enc := json.NewEncoder(stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(res); err != nil {
+		fmt.Fprintf(stderr, "erro ao serializar JSON: %v\n", err)
+		return ExitBadUsage
+	}
+
+	if ok {
+		return ExitOK
+	}
+	return ExitFail
 }
 
 func checkIndex(cfg *config.Config, r *report.Report) []report.Finding {

@@ -13,6 +13,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/hook"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/mcp"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
 )
@@ -75,6 +77,9 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	case "doctor":
 		return runDoctor(cmdArgs, stdout, stderr)
 
+	case "sensor":
+		return runSensor(cmdArgs, stdout, stderr)
+
 	case "mcp":
 		return runMCP(cmdArgs, stdin, stdout, stderr)
 
@@ -94,6 +99,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  sync       Sincroniza skills, regras e hooks em .agents/ a partir dos templates")
 	fmt.Fprintln(w, "  delivery   Gerencia o ciclo de vida da delivery ativa (open, close, status)")
 	fmt.Fprintln(w, "  doctor     Diagnostica o ambiente local (Go 1.24+, git, gh, hooks e .pipeline-ai.json)")
+	fmt.Fprintln(w, "  sensor     Executa os sensores de qualidade (fmt, vet, test) com saída estruturada")
 	fmt.Fprintln(w, "  mcp        Executa o servidor MCP sobre stdio (JSON-RPC 2.0)")
 	fmt.Fprintln(w, "  version    Exibe a versão do pipeline-ai")
 	fmt.Fprintln(w, "  help       Exibe esta mensagem de ajuda")
@@ -107,6 +113,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 
 	baseRef := fs.String("base", "", "referência git para o diff (default: base_ref do config)")
 	noGit := fs.Bool("no-git", false, "pula as checagens que dependem do git")
+	asJSON := fs.Bool("json", false, "emite o resultado estruturado em JSON")
 
 	if err := fs.Parse(args); err != nil {
 		return validate.ExitBadUsage
@@ -117,7 +124,47 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 		return validate.ExitBadUsage
 	}
 
+	if *asJSON {
+		return validate.RunJSON(fs.Arg(0), *baseRef, *noGit, stdout, stderr)
+	}
 	return validate.Run(fs.Arg(0), *baseRef, *noGit, stdout, stderr)
+}
+
+func runSensor(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("sensor", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	dir := fs.String("dir", ".", "diretório raiz do projeto a ser analisado")
+	asJSON := fs.Bool("json", false, "emite os resultados estruturados em JSON")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	res, err := sensor.Run(*dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "sensor: erro na execução: %v\n", err)
+		return 1
+	}
+
+	if *asJSON {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(res); err != nil {
+			fmt.Fprintf(stderr, "sensor: erro ao serializar JSON: %v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Fprintf(stdout, "Status geral: %s\n", res.Overall)
+		fmt.Fprintf(stdout, "Testes executados: %d\n", res.TestsRun)
+		for _, s := range res.Sensors {
+			fmt.Fprintf(stdout, "- [%s] %s: %s\n", s.Status, s.Name, s.Message)
+		}
+	}
+
+	if !res.OK {
+		return 1
+	}
+	return 0
 }
 
 func runSync(args []string, stdout, stderr io.Writer) int {

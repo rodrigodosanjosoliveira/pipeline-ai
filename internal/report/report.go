@@ -179,6 +179,7 @@ func (r *Report) Validate() []Finding {
 
 	out = append(out, r.checkFrontMatter()...)
 	out = append(out, r.checkSections()...)
+	out = append(out, r.checkTestEvidence()...)
 	out = append(out, r.checkPlaceholders()...)
 	out = append(out, r.checkChecklist()...)
 
@@ -342,4 +343,54 @@ func (r *Report) checkChecklist() []Finding {
 	_ = done
 
 	return out
+}
+
+func (r *Report) checkTestEvidence() []Finding {
+	body, ok := r.Sections["testes"]
+	if !ok {
+		return nil
+	}
+	trimmed := strings.TrimSpace(body)
+	if trimmed == "" {
+		return nil
+	}
+
+	hasRealOutput := strings.Contains(body, "PASS") ||
+		strings.Contains(body, "FAIL") ||
+		strings.Contains(body, "ok  \t") ||
+		strings.Contains(body, "ok\t") ||
+		strings.Contains(body, "ok ") ||
+		strings.Contains(body, "=== RUN") ||
+		strings.Contains(body, "--- PASS:") ||
+		strings.Contains(body, "--- FAIL:") ||
+		strings.Contains(body, "--- SKIP:")
+
+	if hasRealOutput {
+		return nil
+	}
+
+	lower := strings.ToLower(trimmed)
+	lacksEvidence := false
+
+	if strings.Contains(lower, "go test") {
+		lacksEvidence = true
+	} else if strings.Contains(lower, "[no test files]") {
+		lacksEvidence = true
+	} else if strings.Contains(lower, "rodados com sucesso") ||
+		strings.Contains(lower, "executados com sucesso") ||
+		strings.Contains(lower, "foram rodados") ||
+		strings.Contains(lower, "foram executados") {
+		lacksEvidence = true
+	}
+
+	if lacksEvidence {
+		return []Finding{
+			{
+				Level:   "ERRO",
+				Message: "relatório deve conter evidência real de execução de testes na seção Testes",
+			},
+		}
+	}
+
+	return nil
 }

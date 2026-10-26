@@ -405,3 +405,68 @@ func FuzzValidateWithConfig(f *testing.F) {
 		_ = r.ValidateWithConfig(cfg)
 	})
 }
+
+func TestSalvaguardaSecaoTestes_EvidenciaExecucao(t *testing.T) {
+	tests := []struct {
+		name          string
+		testesContent string
+		wantError     bool
+	}{
+		{
+			name:          "evidência válida com ok e PASS",
+			testesContent: "```\n$ go test ./...\nok  \tgithub.com/rodrigodosanjosoliveira/pipeline-ai/internal/report\t0.041s\nPASS\n```",
+			wantError:     false,
+		},
+		{
+			name:          "seção testes vazia",
+			testesContent: "",
+			wantError:     true,
+		},
+		{
+			name:          "apenas comando digitado sem saída de testes",
+			testesContent: "```bash\n$ go test ./...\n```",
+			wantError:     true,
+		},
+		{
+			name:          "apenas no test files sem testes executados",
+			testesContent: "```\n$ go test ./...\n?   \tgithub.com/rodrigodosanjosoliveira/pipeline-ai/foo\t[no test files]\n```",
+			wantError:     true,
+		},
+		{
+			name:          "apenas texto genérico sem log de execução",
+			testesContent: "Os testes de unidade foram rodados com sucesso.",
+			wantError:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := strings.Replace(
+				relatorioOK,
+				"Table-driven cobrindo 6 casos.",
+				tt.testesContent,
+				1,
+			)
+			r, err := Parse(content)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			fs := r.Validate()
+
+			hasTestErr := false
+			for _, f := range fs {
+				if f.Level == "ERRO" && (strings.Contains(strings.ToLower(f.Message), "teste") || strings.Contains(strings.ToLower(f.Message), "evidência") || strings.Contains(strings.ToLower(f.Message), "evidencia")) {
+					hasTestErr = true
+					break
+				}
+			}
+
+			if tt.wantError && !hasTestErr {
+				t.Errorf("esperava erro de falta de evidência de execução de testes na seção Testes, obteve findings: %v", fs)
+			}
+			if !tt.wantError && hasTestErr {
+				t.Errorf("não esperava erro de teste para conteúdo legítimo, obteve: %v", fs)
+			}
+		})
+	}
+}

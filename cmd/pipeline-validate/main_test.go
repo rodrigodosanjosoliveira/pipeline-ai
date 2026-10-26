@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
 )
 
 const cfgBody = `{
@@ -252,5 +255,27 @@ func TestGitIndisponivelReprova(t *testing.T) {
 	}
 	if !strings.Contains(outNoGit, "APROVADO") {
 		t.Errorf("com --no-git: saída não diz APROVADO:\n%s", outNoGit)
+	}
+}
+
+func TestPipelineValidateJSON(t *testing.T) {
+	_, rp := projeto(t, "# Índice\n\n- DEL-001 — Ajuste no parser\n", relatorioOK)
+
+	var stdout, stderr bytes.Buffer
+	code := runCLI([]string{"-json", "-no-git", rp}, &stdout, &stderr)
+	if code != exitOK {
+		t.Errorf("exit = %d, quer %d (stderr: %s)", code, exitOK, stderr.String())
+	}
+
+	var res validate.ValidationResult
+	if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+		t.Fatalf("stdout não é JSON de ValidationResult válido: %v (raw: %s)", err, stdout.String())
+	}
+
+	if res.Status != "PASS" || !res.OK {
+		t.Errorf("esperava status PASS e ok true, obteve status=%s, ok=%v", res.Status, res.OK)
+	}
+	if res.Errors != 0 {
+		t.Errorf("esperava 0 erros, obteve %d", res.Errors)
 	}
 }
