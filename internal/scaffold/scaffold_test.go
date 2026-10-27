@@ -58,6 +58,7 @@ func TestScaffoldDesktop(t *testing.T) {
 		".agents/hooks.json",
 		".agents/rules/invariants.md",
 		".agents/rules/handoff-contract.md",
+		".agents/rules/orchestration.md",
 		".agents/skills/pm-triage/SKILL.md",
 		".agents/skills/release-ops/SKILL.md",
 		".agents/skills/dev-implementation/SKILL.md",

@@ -71,6 +71,12 @@ func TestSyncAgents(t *testing.T) {
 	if _, err := os.Stat(hooksJSON); os.IsNotExist(err) {
 		t.Errorf("Sync não sincronizou hooks.json: %v", err)
 	}
+
+	// e) orchestration.md deve ter sido sincronizado
+	orchestrationRule := filepath.Join(rulesDir, "orchestration.md")
+	if _, err := os.Stat(orchestrationRule); os.IsNotExist(err) {
+		t.Errorf("Sync não sincronizou .agents/rules/orchestration.md: %v", err)
+	}
 }
 
 func TestSyncSecurityShiftLeft(t *testing.T) {

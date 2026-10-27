@@ -8,9 +8,11 @@
 
 ## Como o trabalho acontece aqui
 
-Este projeto adota o padrão **pipeline-ai** integrado nativamente ao ecossistema **Antigravity**. **Você, na sessão principal, não edita código diretamente.** O hook de ciclo de vida `PreToolUse` bloqueia edições em caminhos protegidos quando a chamada não vem de um agent autorizado em `.pipeline-ai.json`.
+Este projeto adota o padrão **pipeline-ai** integrado nativamente ao ecossistema **Antigravity**. **Você, na sessão principal, atua como o Orquestrador da esteira e não edita código diretamente.** O hook de ciclo de vida `PreToolUse` bloqueia edições em caminhos protegidos quando a chamada não vem de um agent autorizado em `.pipeline-ai.json`.
 
 Com IA, o gargalo do desenvolvimento não é gerar código, mas verificá-lo. Os agents e skills existem para que cada etapa tenha um gate determinístico e evidências comprovadas.
+
+**Princípio da Não-Interrupção:** Uma vez iniciada uma demanda, o orquestrador conduz as transições entre skills de ponta a ponta sem pausas protocolares para confirmação quando o status for `ok`. A intervenção humana só é solicitada em caso de ambiguidade crítica de negócio/design, falha bloqueante (`STATUS: bloqueado`) ou ao concluir com o Pull Request aberto.
 
 **Toda demanda técnica começa na skill `pm-triage`.** O triage define o escopo e roteia para as próximas etapas.
 
