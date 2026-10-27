@@ -30,3 +30,4 @@ MOTIVO: {por que esta skill/agent e não outra}
 4. **`REQUISITOS_SEGURANCA` é obrigatório quando `SECURITY: sim`.** Quando a demanda toca superfície de segurança (`SECURITY: sim`), o `architecture-guardrails` é obrigado a detalhar os requisitos de segurança e salvaguardas adversariais no PRE para orientar os testes negativos no `test-writer` e a auditoria cruzada no `security-review`.
 5. **`STATUS: bloqueado` interrompe o fluxo.** O `PROXIMO` passa a ser quem pode desbloquear, e o `MOTIVO` diz o que falta.
 6. **Um handoff não repete o anterior.** Carrega o que o receptor precisa, não o histórico inteiro.
+7. **Transição Contínua quando OK.** Quando o handoff for emitido com `STATUS: ok`, o orquestrador avança diretamente para a próxima etapa (`PROXIMO`) sem solicitar confirmações manuais intermediárias ao usuário, operando de ponta a ponta até a abertura do Pull Request ou bloqueio legítimo.

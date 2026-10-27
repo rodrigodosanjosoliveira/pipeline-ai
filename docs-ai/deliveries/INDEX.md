@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-015 | TASK-015 | Release v0.6.0: Consolidação de versão, changelog e encerramento operacional do contraditório técnico | chore | 2026-10-27 | draft |
+| DEL-016 | TASK-016 | Regra formal de orquestração autônoma e princípio da não-interrupção | feat | 2026-10-27 | draft |
+| DEL-015 | TASK-015 | Release v0.6.0: Consolidação de versão, changelog e encerramento operacional do contraditório técnico | chore | 2026-10-27 | merged |
 | DEL-014 | TASK-014 | Checkpoints de invariantes, critérios de reversibilidade/rollback e gestão dinâmica de módulos | feat | 2026-10-26 | merged |
 | DEL-013 | TASK-013 | Sensores com saída estruturada em JSON e autoteste negativo contra falsos positivos | feat | 2026-10-26 | merged |
 | DEL-012 | TASK-012 | Suporte a relatórios customizados, prefixos de entrega flexíveis e índice opcional | feat | 2026-10-26 | merged |
