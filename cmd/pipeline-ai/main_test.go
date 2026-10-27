@@ -692,3 +692,102 @@ Aprovado sem ressalvas.
 		}
 	})
 }
+
+func TestCLIHandOffValidate(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	validHandoff := `DE: architecture-guardrails
+PARA: test-writer
+DELIVERY_ID: DEL-018
+TASK_CODE: TASK-018
+STATUS: ok
+ESCOPO: internal/handoff, cmd/pipeline-ai, internal/mcp
+ARQUIVOS: internal/handoff/handoff.go, internal/handoff/handoff_test.go
+CONFIRMADO: go test ./... executado com sucesso e 100% dos testes passando
+ASSUNCOES: nenhuma
+RISCOS: nenhum
+SINAIS:
+  SECURITY: nao
+  SUPPLY_CHAIN: nao
+  MIGRATION: nao
+  PERFORMANCE: nao
+PROXIMO: test-writer
+MOTIVO: implementacao TDD
+`
+	validFile := filepath.Join(tmpDir, "valid_handoff.txt")
+	if err := os.WriteFile(validFile, []byte(validHandoff), 0o644); err != nil {
+		t.Fatalf("falha ao criar arquivo de handoff valido: %v", err)
+	}
+
+	invalidHandoff := `DE: dev-implementation
+PARA: qa-validation
+DELIVERY_ID: DEL-018
+STATUS: status-invalido
+CONFIRMADO: Verifiquei e está ok
+PROXIMO: qa-validation
+MOTIVO: teste
+`
+	invalidFile := filepath.Join(tmpDir, "invalid_handoff.txt")
+	if err := os.WriteFile(invalidFile, []byte(invalidHandoff), 0o644); err != nil {
+		t.Fatalf("falha ao criar arquivo de handoff invalido: %v", err)
+	}
+
+	t.Run("handoff valido via arquivo", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"handoff", "validate", validFile}, &stdout, &stderr)
+		if code != 0 {
+			t.Errorf("handoff validate retornou exitCode = %d, esperado 0; stderr:\n%s", code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Válido") && !strings.Contains(strings.ToLower(stdout.String()), "ok") {
+			t.Errorf("saida de handoff validate nao contem confirmacao de validade:\n%s", stdout.String())
+		}
+	})
+
+	t.Run("handoff valido com saida json", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"handoff", "validate", "-json", validFile}, &stdout, &stderr)
+		if code != 0 {
+			t.Errorf("handoff validate -json retornou exitCode = %d, esperado 0; stderr:\n%s", code, stderr.String())
+		}
+
+		var res struct {
+			Valid    bool           `json:"valid"`
+			Errors   []string       `json:"errors"`
+			Warnings []string       `json:"warnings"`
+			Handoff  map[string]any `json:"handoff"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			t.Fatalf("saida nao e JSON de ValidationResult valido: %v; raw:\n%s", err, stdout.String())
+		}
+		if !res.Valid {
+			t.Errorf("res.Valid = false no json para handoff valido, erros: %v", res.Errors)
+		}
+	})
+
+	t.Run("handoff invalido gera exit code 1", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"handoff", "validate", invalidFile}, &stdout, &stderr)
+		if code != 1 {
+			t.Errorf("handoff validate com handoff invalido retornou exitCode = %d, esperado 1", code)
+		}
+	})
+
+	t.Run("arquivo inexistente gera erro", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"handoff", "validate", filepath.Join(tmpDir, "inexistente.txt")}, &stdout, &stderr)
+		if code == 0 {
+			t.Errorf("esperava erro para arquivo inexistente, obteve 0")
+		}
+	})
+
+	t.Run("handoff inline com barra no escopo valida com sucesso", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"handoff", "validate", validHandoff}, &stdout, &stderr)
+		if code != 0 {
+			t.Errorf("handoff validate inline retornou exitCode = %d, esperado 0; stderr:\n%s", code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Válido") && !strings.Contains(strings.ToLower(stdout.String()), "ok") {
+			t.Errorf("saida de handoff validate inline nao contem confirmacao de validade:\n%s", stdout.String())
+		}
+	})
+}

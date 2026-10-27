@@ -27,6 +27,7 @@ import (
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/handoff"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/hook"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/mcp"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/runner"
@@ -70,6 +71,9 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	case "validate":
 		return runValidate(cmdArgs, stdout, stderr)
 
+	case "handoff":
+		return runHandoff(cmdArgs, stdout, stderr)
+
 	case "run":
 		return runRun(cmdArgs, stdout, stderr)
 
@@ -108,6 +112,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  hook       Executa o hook PreToolUse que impede edição direta em caminhos protegidos")
 	fmt.Fprintln(w, "  run        Executa a suíte integrada de gates de governança (doctor, sensor, validate)")
 	fmt.Fprintln(w, "  validate   Valida o relatório de delivery e salvaguardas de segurança antes do PR")
+	fmt.Fprintln(w, "  handoff    Valida integridade e contratos de blocos de handoff (validate [-json])")
 	fmt.Fprintln(w, "  sync       Sincroniza skills, regras e hooks em .agents/ a partir dos templates")
 	fmt.Fprintln(w, "  delivery   Gerencia o ciclo de vida da delivery ativa (open, close, status)")
 	fmt.Fprintln(w, "  doctor     Diagnostica o ambiente local (Go 1.24+, git, gh, hooks e .pipeline-ai.json)")
@@ -196,6 +201,98 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 		return validate.RunJSON(fs.Arg(0), *baseRef, *noGit, stdout, stderr)
 	}
 	return validate.Run(fs.Arg(0), *baseRef, *noGit, stdout, stderr)
+}
+
+func runHandoff(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "uso: pipeline-ai handoff <subcomando> [flags] [argumento]")
+		fmt.Fprintln(stderr, "Subcomandos disponíveis: validate")
+		return 1
+	}
+
+	sub := strings.ToLower(args[0])
+	switch sub {
+	case "validate":
+		fs := flag.NewFlagSet("handoff validate", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		asJSON := fs.Bool("json", false, "emite resultado estruturado em JSON")
+		if err := fs.Parse(args[1:]); err != nil {
+			return 1
+		}
+		if fs.NArg() == 0 {
+			fmt.Fprintln(stderr, "uso: pipeline-ai handoff validate [-json] <arquivo-ou-string>")
+			return 1
+		}
+
+		target := fs.Arg(0)
+		var content string
+
+		fileInfo, statErr := os.Stat(target)
+		if statErr == nil && !fileInfo.IsDir() {
+			data, err := os.ReadFile(target)
+			if err != nil {
+				fmt.Fprintf(stderr, "erro ao ler arquivo %s: %v\n", target, err)
+				return 1
+			}
+			content = string(data)
+		} else {
+			isBlock := strings.Contains(target, "\n") || strings.Contains(target, "DE:")
+			if !isBlock && (strings.Contains(target, "/") || strings.Contains(target, `\`) || strings.HasSuffix(target, ".txt") || strings.HasSuffix(target, ".md")) {
+				fmt.Fprintf(stderr, "arquivo não encontrado: %s\n", target)
+				return 1
+			}
+			content = target
+		}
+
+		res, err := handoff.ValidateContent(content)
+		if res == nil {
+			errMsg := "erro ao validar handoff"
+			if err != nil {
+				errMsg = err.Error()
+			}
+			res = &handoff.ValidationResult{
+				Valid:  false,
+				Errors: []string{errMsg},
+			}
+		}
+
+		if *asJSON {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			if err := enc.Encode(res); err != nil {
+				fmt.Fprintf(stderr, "erro ao serializar JSON: %v\n", err)
+				return 1
+			}
+		} else {
+			if res.Valid {
+				fmt.Fprintln(stdout, "Handoff Válido: OK")
+				if res.Handoff != nil {
+					fmt.Fprintf(stdout, "  DE:       %s\n", res.Handoff.De)
+					fmt.Fprintf(stdout, "  PARA:     %s\n", res.Handoff.Para)
+					fmt.Fprintf(stdout, "  DELIVERY: %s\n", res.Handoff.DeliveryID)
+					fmt.Fprintf(stdout, "  STATUS:   %s\n", res.Handoff.Status)
+					fmt.Fprintf(stdout, "  PROXIMO:  %s\n", res.Handoff.Proximo)
+				}
+			} else {
+				fmt.Fprintln(stderr, "Handoff Inválido:")
+				for _, e := range res.Errors {
+					fmt.Fprintf(stderr, "  - [ERRO] %s\n", e)
+				}
+				for _, w := range res.Warnings {
+					fmt.Fprintf(stderr, "  - [AVISO] %s\n", w)
+				}
+			}
+		}
+
+		if !res.Valid {
+			return 1
+		}
+		return 0
+
+	default:
+		fmt.Fprintf(stderr, "pipeline-ai handoff: subcomando desconhecido: %q\n", sub)
+		return 1
+	}
 }
 
 func runSensor(args []string, stdout, stderr io.Writer) int {

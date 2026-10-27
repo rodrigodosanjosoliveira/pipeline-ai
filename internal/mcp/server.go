@@ -14,6 +14,7 @@ import (
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/handoff"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/runner"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
@@ -378,6 +379,23 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 					"base_ref": map[string]any{
 						"type":        "string",
 						"description": "Referência git base para validação de diff",
+					},
+				},
+			},
+		},
+		{
+			Name:        "pipeline_validate_handoff",
+			Description: "Valida a integridade, presença de evidências reais e regras de contrato de um bloco de handoff entre agentes/skills.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"content": map[string]any{
+						"type":        "string",
+						"description": "Conteúdo textual bruto do handoff a ser validado",
+					},
+					"file": map[string]any{
+						"type":        "string",
+						"description": "Caminho do arquivo contendo o bloco de handoff",
 					},
 				},
 			},
@@ -846,6 +864,78 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 				},
 			},
 			IsError: !res.OK,
+		})
+
+	case "pipeline_validate_handoff":
+		var content string
+		if rawContent, ok := params.Arguments["content"].(string); ok && strings.TrimSpace(rawContent) != "" {
+			content = rawContent
+		} else if fileArg, ok := params.Arguments["file"].(string); ok && strings.TrimSpace(fileArg) != "" {
+			targetPath := fileArg
+			if !filepath.IsAbs(targetPath) {
+				targetPath = filepath.Join(s.RootDir, targetPath)
+			}
+			data, err := os.ReadFile(targetPath)
+			if err != nil {
+				s.sendResult(out, req.ID, ToolResult{
+					Content: []ToolContent{
+						{
+							Type: "text",
+							Text: fmt.Sprintf("ERRO ao ler arquivo de handoff: %v", err),
+						},
+					},
+					IsError: true,
+				})
+				return
+			}
+			content = string(data)
+		} else {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: "ERRO: argumento 'content' ou 'file' é obrigatório para validação de handoff",
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		res, err := handoff.ValidateContent(content)
+		if res == nil {
+			errMsg := "erro desconhecido ao processar handoff"
+			if err != nil {
+				errMsg = err.Error()
+			}
+			res = &handoff.ValidationResult{
+				Valid:  false,
+				Errors: []string{errMsg},
+			}
+		}
+
+		data, err := json.MarshalIndent(res, "", "  ")
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO ao serializar resultado da validação: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		s.sendResult(out, req.ID, ToolResult{
+			Content: []ToolContent{
+				{
+					Type: "text",
+					Text: string(data),
+				},
+			},
+			IsError: !res.Valid,
 		})
 
 	default:
