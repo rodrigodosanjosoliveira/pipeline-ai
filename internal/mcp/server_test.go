@@ -722,3 +722,106 @@ func TestMCPToolsManageModules(t *testing.T) {
 		}
 	})
 }
+
+func TestMCPToolsRunPipeline(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	writeMCPFile := func(path, content string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir falhou: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("write falhou: %v", err)
+		}
+	}
+
+	cfgContent := `{
+  "version": 1,
+  "project_type": "api",
+  "protected_paths": ["internal/"],
+  "editor_agents": ["dev-implementation", "test-writer", "docs-update"]
+}`
+	writeMCPFile(filepath.Join(tmpDir, ".pipeline-ai.json"), cfgContent)
+	writeMCPFile(filepath.Join(tmpDir, "go.mod"), "module mcp_run_test\n\ngo 1.24\n")
+	writeMCPFile(filepath.Join(tmpDir, "app.go"), "package app\n\nfunc OK() bool {\n\treturn true\n}\n")
+	writeMCPFile(filepath.Join(tmpDir, "app_test.go"), "package app\n\nimport \"testing\"\n\nfunc TestOK(t *testing.T) {\n\tif !OK() {\n\t\tt.Fatal(\"err\")\n\t}\n}\n")
+	writeMCPFile(filepath.Join(tmpDir, ".githooks", "pre-push"), "#!/bin/sh\nexit 0\n")
+	writeMCPFile(filepath.Join(tmpDir, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeMCPFile(filepath.Join(tmpDir, ".agents", "hooks.json"), "{}")
+	writeMCPFile(filepath.Join(tmpDir, ".agents", "skills", "test-writer", "SKILL.md"), "# Test Writer")
+
+	s := NewServer(tmpDir)
+
+	// 1. tools/list contém pipeline_run_pipeline
+	t.Run("tools/list contem pipeline_run_pipeline", func(t *testing.T) {
+		req := `{"jsonrpc":"2.0","id":100,"method":"tools/list","params":{}}`
+		res := runRPC(t, s, req)
+
+		result, ok := res["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente: %v", res)
+		}
+		tools, ok := result["tools"].([]any)
+		if !ok {
+			t.Fatalf("tools ausente: %v", result)
+		}
+
+		found := false
+		for _, raw := range tools {
+			tool, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			if tool["name"] == "pipeline_run_pipeline" {
+				found = true
+				desc, _ := tool["description"].(string)
+				if desc == "" {
+					t.Errorf("ferramenta pipeline_run_pipeline sem descrição")
+				}
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("ferramenta pipeline_run_pipeline não encontrada em tools/list")
+		}
+	})
+
+	// 2. tools/call executa pipeline_run_pipeline retornando JSON estruturado
+	t.Run("tools/call pipeline_run_pipeline", func(t *testing.T) {
+		callReq := fmt.Sprintf(`{"jsonrpc":"2.0","id":101,"method":"tools/call","params":{"name":"pipeline_run_pipeline","arguments":{"dir":%q,"no_git":true}}}`, tmpDir)
+		res := runRPC(t, s, callReq)
+
+		result, ok := res["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente no tools/call: %v", res)
+		}
+		content, ok := result["content"].([]any)
+		if !ok || len(content) == 0 {
+			t.Fatalf("content ausente ou vazio: %v", result)
+		}
+		first, ok := content[0].(map[string]any)
+		if !ok {
+			t.Fatalf("primeiro item de content inválido: %v", content)
+		}
+		text, _ := first["text"].(string)
+		if text == "" {
+			t.Fatalf("text vazio em content[0]: %v", first)
+		}
+
+		var parsed struct {
+			Overall string `json:"overall"`
+			OK      bool   `json:"ok"`
+			Steps   []struct {
+				Name   string `json:"name"`
+				Status string `json:"status"`
+			} `json:"steps"`
+		}
+		if err := json.Unmarshal([]byte(text), &parsed); err != nil {
+			t.Fatalf("text retornado não é JSON válido: %v, raw:\n%s", err, text)
+		}
+		if parsed.Overall != "PASS" || !parsed.OK {
+			t.Errorf("overall = %q, ok = %v, esperado PASS/true", parsed.Overall, parsed.OK)
+		}
+	})
+}

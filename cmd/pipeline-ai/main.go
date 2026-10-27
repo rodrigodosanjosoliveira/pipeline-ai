@@ -29,6 +29,7 @@ import (
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/hook"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/mcp"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/runner"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
@@ -69,6 +70,9 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	case "validate":
 		return runValidate(cmdArgs, stdout, stderr)
 
+	case "run":
+		return runRun(cmdArgs, stdout, stderr)
+
 	case "init":
 		return runInit(cmdArgs, stdout, stderr)
 
@@ -102,6 +106,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Comandos disponíveis:")
 	fmt.Fprintln(w, "  init       Inicializa um novo projeto com o padrão pipeline-ai")
 	fmt.Fprintln(w, "  hook       Executa o hook PreToolUse que impede edição direta em caminhos protegidos")
+	fmt.Fprintln(w, "  run        Executa a suíte integrada de gates de governança (doctor, sensor, validate)")
 	fmt.Fprintln(w, "  validate   Valida o relatório de delivery e salvaguardas de segurança antes do PR")
 	fmt.Fprintln(w, "  sync       Sincroniza skills, regras e hooks em .agents/ a partir dos templates")
 	fmt.Fprintln(w, "  delivery   Gerencia o ciclo de vida da delivery ativa (open, close, status)")
@@ -113,6 +118,61 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  help       Exibe esta mensagem de ajuda")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Execute 'pipeline-ai <comando> --help' para detalhes sobre opções específicas.")
+}
+
+func runRun(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	dir := fs.String("dir", ".", "diretório raiz do projeto")
+	delivery := fs.String("delivery", "", "ID da delivery a validar (ex: DEL-001)")
+	report := fs.String("report", "", "caminho do relatório de delivery")
+	noGit := fs.Bool("no-git", false, "pula verificações dependentes do git")
+	baseRef := fs.String("base", "", "referência git para o diff")
+	asJSON := fs.Bool("json", false, "emite os resultados consolidados em JSON")
+
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	opts := runner.Options{
+		Dir:        *dir,
+		DeliveryID: *delivery,
+		ReportPath: *report,
+		BaseRef:    *baseRef,
+		NoGit:      *noGit,
+	}
+
+	res, err := runner.Run(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "pipeline-ai run: erro: %v\n", err)
+		return 1
+	}
+
+	if *asJSON {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(res); err != nil {
+			fmt.Fprintf(stderr, "erro ao serializar JSON: %v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Fprintln(stdout, "=== pipeline-ai runner ===")
+		if res.DeliveryID != "" {
+			fmt.Fprintf(stdout, "Delivery: %s\n", res.DeliveryID)
+		}
+		fmt.Fprintln(stdout)
+		for _, step := range res.Steps {
+			fmt.Fprintf(stdout, " [%s] %-10s : %s\n", step.Status, step.Name, step.Message)
+		}
+		fmt.Fprintln(stdout)
+		fmt.Fprintf(stdout, "Status geral: %s\n", res.Overall)
+	}
+
+	if !res.OK {
+		return 1
+	}
+	return 0
 }
 
 func runValidate(args []string, stdout, stderr io.Writer) int {

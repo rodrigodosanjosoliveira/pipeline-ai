@@ -14,6 +14,7 @@ import (
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/runner"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
@@ -350,6 +351,35 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 					},
 				},
 				"required": []string{"action"},
+			},
+		},
+		{
+			Name:        "pipeline_run_pipeline",
+			Description: "Executa a suíte integrada de gates de governança e qualidade (doctor, sensor, validate).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"dir": map[string]any{
+						"type":        "string",
+						"description": "Diretório raiz do projeto a ser analisado (padrão: raiz atual)",
+					},
+					"delivery": map[string]any{
+						"type":        "string",
+						"description": "ID da delivery a validar (ex: DEL-001)",
+					},
+					"report": map[string]any{
+						"type":        "string",
+						"description": "Caminho do relatório de delivery a validar",
+					},
+					"no_git": map[string]any{
+						"type":        "boolean",
+						"description": "Pula verificações dependentes do git",
+					},
+					"base_ref": map[string]any{
+						"type":        "string",
+						"description": "Referência git base para validação de diff",
+					},
+				},
 			},
 		},
 	}
@@ -739,6 +769,84 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 				IsError: true,
 			})
 		}
+
+	case "pipeline_run_pipeline":
+		targetDir := s.RootDir
+		if rawDir, ok := params.Arguments["dir"].(string); ok && strings.TrimSpace(rawDir) != "" {
+			if filepath.IsAbs(rawDir) {
+				targetDir = rawDir
+			} else {
+				targetDir = filepath.Join(s.RootDir, rawDir)
+			}
+		}
+
+		deliveryID, _ := params.Arguments["delivery"].(string)
+		if deliveryID == "" {
+			deliveryID, _ = params.Arguments["delivery_id"].(string)
+		}
+
+		reportPath, _ := params.Arguments["report"].(string)
+		if reportPath == "" {
+			reportPath, _ = params.Arguments["report_path"].(string)
+		}
+
+		noGit := false
+		if v, ok := params.Arguments["no_git"].(bool); ok {
+			noGit = v
+		} else if v, ok := params.Arguments["noGit"].(bool); ok {
+			noGit = v
+		}
+
+		baseRef, _ := params.Arguments["base_ref"].(string)
+		if baseRef == "" {
+			baseRef, _ = params.Arguments["baseRef"].(string)
+		}
+
+		opts := runner.Options{
+			Dir:        targetDir,
+			DeliveryID: strings.TrimSpace(deliveryID),
+			ReportPath: strings.TrimSpace(reportPath),
+			BaseRef:    strings.TrimSpace(baseRef),
+			NoGit:      noGit,
+		}
+
+		res, err := runner.Run(opts)
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		data, err := json.MarshalIndent(res, "", "  ")
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO ao serializar JSON: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		s.sendResult(out, req.ID, ToolResult{
+			Content: []ToolContent{
+				{
+					Type: "text",
+					Text: string(data),
+				},
+			},
+			IsError: !res.OK,
+		})
 
 	default:
 		s.sendError(out, req.ID, CodeInvalidParams, fmt.Sprintf("ferramenta desconhecida: %s", params.Name))
