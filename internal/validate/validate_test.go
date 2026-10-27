@@ -2,6 +2,7 @@ package validate
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -219,6 +220,73 @@ func TestValidateRequireIndex(t *testing.T) {
 			fullOutput := stdout.String() + stderr.String()
 			if !strings.Contains(fullOutput, tt.wantOutput) {
 				t.Errorf("saída esperada contendo %q não encontrada. Saída obtida:\n%s", tt.wantOutput, fullOutput)
+			}
+		})
+	}
+}
+
+func TestValidateJSONOutput(t *testing.T) {
+	tests := []struct {
+		name         string
+		report       string
+		wantExitCode int
+		wantStatus   string
+		wantOK       bool
+		wantMinErr   int
+	}{
+		{
+			name:         "relatório válido emite JSON com status PASS e ok true",
+			report:       validReportContent,
+			wantExitCode: ExitOK,
+			wantStatus:   "PASS",
+			wantOK:       true,
+			wantMinErr:   0,
+		},
+		{
+			name:         "relatório inválido com checklist incompleto emite FAIL",
+			report:       strings.Replace(validReportContent, "- [x] itens concluídos", "- [ ] itens concluídos", 1),
+			wantExitCode: ExitFail,
+			wantStatus:   "FAIL",
+			wantOK:       false,
+			wantMinErr:   1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			cfgBody := `{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"], "require_index": false}`
+			writeFile(t, filepath.Join(root, ".pipeline-ai.json"), cfgBody)
+
+			reportPath := filepath.Join(root, "docs-ai", "deliveries", "DEL-001", "report.md")
+			writeFile(t, reportPath, tt.report)
+
+			var stdout, stderr bytes.Buffer
+			code := RunJSON(reportPath, "", true, &stdout, &stderr)
+
+			if code != tt.wantExitCode {
+				t.Errorf("RunJSON exit code = %d, quer %d (stderr: %q)", code, tt.wantExitCode, stderr.String())
+			}
+
+			var res ValidationResult
+			if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+				t.Fatalf("stdout não é JSON válido de ValidationResult: %v (raw: %q)", err, stdout.String())
+			}
+
+			if res.Status != tt.wantStatus {
+				t.Errorf("res.Status = %q, quer %q", res.Status, tt.wantStatus)
+			}
+			if res.OK != tt.wantOK {
+				t.Errorf("res.OK = %v, quer %v", res.OK, tt.wantOK)
+			}
+			if res.Errors < tt.wantMinErr {
+				t.Errorf("res.Errors = %d, quer ao menos %d", res.Errors, tt.wantMinErr)
+			}
+			if res.Report == "" {
+				t.Errorf("res.Report veio vazio no JSON")
+			}
+			if tt.wantMinErr > 0 && len(res.Findings) == 0 {
+				t.Errorf("res.Findings veio vazio para relatório com erro")
 			}
 		})
 	}

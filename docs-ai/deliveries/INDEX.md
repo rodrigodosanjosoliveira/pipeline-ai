@@ -7,6 +7,7 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
+| DEL-013 | TASK-013 | Sensores com saída estruturada em JSON e autoteste negativo contra falsos positivos | feat | 2026-10-26 | draft |
 | DEL-012 | TASK-012 | Suporte a relatórios customizados, prefixos de entrega flexíveis e índice opcional | feat | 2026-10-26 | draft |
 | DEL-011 | TASK-011 | Formalização do Security Shift-Left com segurança bidirecional no PRE e POST | feat | 2026-10-26 | draft |
 | DEL-010 | TASK-010 | Modelo híbrido de autorização com gate por delivery ativa, TTL e caminhos imutáveis | feat | 2026-10-26 | draft |

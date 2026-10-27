@@ -13,6 +13,7 @@ import (
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
 )
@@ -313,6 +314,19 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 				"properties": map[string]any{},
 			},
 		},
+		{
+			Name:        "pipeline_run_sensors",
+			Description: "Executa os sensores de qualidade (fmt, vet, test) com saída estruturada e salvaguarda contra falsos positivos.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"dir": map[string]any{
+						"type":        "string",
+						"description": "Diretório raiz do projeto a ser analisado (padrão: raiz atual)",
+					},
+				},
+			},
+		},
 	}
 
 	s.sendResult(out, req.ID, map[string]any{
@@ -490,6 +504,54 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 				},
 			},
 			IsError: false,
+		})
+
+	case "pipeline_run_sensors":
+		targetDir := s.RootDir
+		if rawDir, ok := params.Arguments["dir"].(string); ok && strings.TrimSpace(rawDir) != "" {
+			if filepath.IsAbs(rawDir) {
+				targetDir = rawDir
+			} else {
+				targetDir = filepath.Join(s.RootDir, rawDir)
+			}
+		}
+
+		res, err := sensor.Run(targetDir)
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO ao executar sensores: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		data, err := json.MarshalIndent(res, "", "  ")
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO ao serializar resultado dos sensores: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		s.sendResult(out, req.ID, ToolResult{
+			Content: []ToolContent{
+				{
+					Type: "text",
+					Text: string(data),
+				},
+			},
+			IsError: !res.OK,
 		})
 
 	default:

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -328,5 +329,110 @@ func TestCLIDeliveryCommands(t *testing.T) {
 				tt.checkState(t, tmpDir)
 			}
 		})
+	}
+}
+
+func TestCLIValidateJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	validReport := `---
+delivery_id: DEL-999
+task_code: TASK-1
+title: Teste CLI JSON
+type: feat
+status: draft
+require_security: false
+date: 2026-10-21
+---
+
+## Contexto
+
+Texto de contexto explicativo sobre a entrega técnica realizada.
+
+## Escopo
+
+- Módulo testado
+
+## Implementação
+
+Implementação realizada de acordo com o escopo aprovado.
+
+## Testes
+
+$ go test ./...
+ok   testmod 0.1s
+PASS
+
+## Code Review
+
+Revisão técnica executada.
+
+## Final Checklist
+
+- [x] Testes passando
+- [x] Invariantes respeitados
+- [x] Sem warnings
+`
+	reportPath := filepath.Join(tmpDir, "report.md")
+	if err := os.WriteFile(reportPath, []byte(validReport), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := `{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"], "editor_agents": ["dev-implementation"]}`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".pipeline-ai.json"), []byte(cfg), 0644); err != nil {
+		t.Fatal(err)
+	}
+	delivDir := filepath.Join(tmpDir, "docs-ai", "deliveries")
+	_ = os.MkdirAll(delivDir, 0755)
+	indexContent := "| DEL-999 | TASK-1 | Teste CLI JSON | feat | 2026-10-21 | draft |\n"
+	if err := os.WriteFile(filepath.Join(delivDir, "INDEX.md"), []byte(indexContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := run([]string{"validate", "-json", "-no-git", reportPath}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Errorf("validate -json falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+		t.Fatalf("stdout de validate -json não é JSON válido: %v (raw: %s)", err, stdout.String())
+	}
+
+	if res["status"] != "PASS" {
+		t.Errorf("res[\"status\"] = %v, quer PASS", res["status"])
+	}
+	if res["ok"] != true {
+		t.Errorf("res[\"ok\"] = %v, quer true", res["ok"])
+	}
+}
+
+func TestCLISensorJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Cria estrutura Go mínima válida no tmpDir
+	goMod := "module testcli\n\ngo 1.24\n"
+	_ = os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goMod), 0644)
+	goCode := "package main\n\nfunc Hello() string { return \"world\" }\n"
+	_ = os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(goCode), 0644)
+	goTest := "package main\n\nimport \"testing\"\n\nfunc TestHello(t *testing.T) {\n\tif Hello() != \"world\" {\n\t\tt.Fatal(\"err\")\n\t}\n}\n"
+	_ = os.WriteFile(filepath.Join(tmpDir, "main_test.go"), []byte(goTest), 0644)
+
+	var stdout, stderr bytes.Buffer
+	exitCode := run([]string{"sensor", "-dir", tmpDir, "-json"}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Errorf("sensor -json falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+		t.Fatalf("stdout de sensor -json não é JSON válido: %v (raw: %s)", err, stdout.String())
+	}
+
+	if res["overall"] != "PASS" {
+		t.Errorf("res[\"overall\"] = %v, quer PASS", res["overall"])
+	}
+	if res["ok"] != true {
+		t.Errorf("res[\"ok\"] = %v, quer true", res["ok"])
 	}
 }

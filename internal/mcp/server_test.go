@@ -515,3 +515,72 @@ func TestScaffoldDeliveryWithoutIndex(t *testing.T) {
 		t.Fatalf("pipeline_scaffold_delivery retornou isError=true: %v", result)
 	}
 }
+
+func TestMCPToolsRunSensors(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module testmcp\n\ngo 1.24\n"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "calc.go"), []byte("package calc\n\nfunc Add(a, b int) int {\n\treturn a + b\n}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "calc_test.go"), []byte("package calc\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1, 2) != 3 {\n\t\tt.Fatal(\"err\")\n\t}\n}\n"), 0644)
+
+	s := NewServer(tmpDir)
+
+	// 1. Verifica se a ferramenta pipeline_run_sensors está listada em tools/list
+	reqList := `{"jsonrpc":"2.0","id":110,"method":"tools/list","params":{}}`
+	resList := runRPC(t, s, reqList)
+	resultList, ok := resList["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result ausente em tools/list: %v", resList)
+	}
+
+	tools, ok := resultList["tools"].([]any)
+	if !ok {
+		t.Fatalf("campo tools não é lista: %v", resultList)
+	}
+
+	hasSensors := false
+	for _, raw := range tools {
+		tool, ok := raw.(map[string]any)
+		if ok && tool["name"] == "pipeline_run_sensors" {
+			hasSensors = true
+			break
+		}
+	}
+	if !hasSensors {
+		t.Errorf("ferramenta 'pipeline_run_sensors' não encontrada em tools/list")
+	}
+
+	// 2. Invoca pipeline_run_sensors via tools/call
+	reqCall := `{"jsonrpc":"2.0","id":111,"method":"tools/call","params":{"name":"pipeline_run_sensors","arguments":{"dir":"."}}}`
+	resCall := runRPC(t, s, reqCall)
+	resultCall, ok := resCall["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result ausente em tools/call pipeline_run_sensors: %v", resCall)
+	}
+
+	content, ok := resultCall["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatalf("content vazio no tools/call pipeline_run_sensors: %v", resultCall)
+	}
+
+	first, ok := content[0].(map[string]any)
+	if !ok || first["type"] != "text" {
+		t.Fatalf("formato de content inválido: %v", content)
+	}
+
+	text, ok := first["text"].(string)
+	if !ok {
+		t.Fatalf("campo text não é string")
+	}
+
+	var sensorOutput map[string]any
+	if err := json.Unmarshal([]byte(text), &sensorOutput); err != nil {
+		t.Errorf("saída de pipeline_run_sensors não é JSON válido: %v (raw: %s)", err, text)
+	}
+
+	if _, ok := sensorOutput["overall"]; !ok {
+		t.Errorf("JSON de retorno dos sensores não contém campo 'overall': %s", text)
+	}
+	if _, ok := sensorOutput["ok"]; !ok {
+		t.Errorf("JSON de retorno dos sensores não contém campo 'ok': %s", text)
+	}
+}
