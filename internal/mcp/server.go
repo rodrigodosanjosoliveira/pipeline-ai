@@ -70,7 +70,7 @@ func (s *Server) handleRequest(req *Request, out, errOut io.Writer) {
 			},
 			"serverInfo": map[string]any{
 				"name":    "pipeline-ai",
-				"version": "v0.5.0",
+				"version": "v0.6.0",
 			},
 		}
 		s.sendResult(out, req.ID, res)

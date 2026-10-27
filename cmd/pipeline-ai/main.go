@@ -6,6 +6,8 @@
 //   - validate: valida relatório de delivery e salvaguardas de git
 //   - sync: sincroniza/atualiza skills e regras (.agents/) em projetos existentes
 //   - delivery: gerencia a delivery ativa (open, close, status)
+//   - sensor: executa sensores estruturados do projeto (-json suportado)
+//   - module: gerencia módulos opcionais (list, enable, disable)
 //   - doctor: diagnostica o ambiente local e configurações do projeto
 //   - version: exibe a versão instalada
 //   - help: exibe mensagem de ajuda
@@ -33,7 +35,7 @@ import (
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
 )
 
-const version = "v0.5.0"
+const version = "v0.6.0"
 
 func main() {
 	os.Exit(runWithStdin(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))

@@ -12,8 +12,11 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 |---|---|
 | `pipeline-ai init` | Utilitário de *scaffolding* que inicializa novos projetos completos em 1 comando com templates embutidos. |
 | `pipeline-ai hook` | Hook `PreToolUse` que impede edição direta em caminhos protegidos fora dos agents/skills autorizados (D-11). |
-| `pipeline-ai validate` | Valida o relatório de delivery antes do commit e abertura de PR, garantindo salvaguarda estrita de Git (D-14). |
+| `pipeline-ai validate` | Valida o relatório de delivery antes do commit e abertura de PR, garantindo salvaguarda estrita de Git (D-14). Suporta flag `-json`. |
 | `pipeline-ai sync` | Sincroniza e atualiza skills (`.agents/skills`), regras e hooks em projetos existentes sem tocar em código de negócio. |
+| `pipeline-ai delivery` | Gerencia o ciclo da delivery ativa (`open`, `close`, `status`), com suporte a TTL e governança temporal (D-21). |
+| `pipeline-ai sensor` | Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada e salvaguarda contra falsos positivos (suporta `-json`) (D-24). |
+| `pipeline-ai module` | Gerencia módulos opcionais (`list`, `enable`, `disable`) dinamicamente no `.pipeline-ai.json` (D-25). |
 | `pipeline-ai doctor` | Diagnostica a integridade do ambiente local (Go 1.24+, git, gh, pre-push hook e `.pipeline-ai.json`). Suporta `--json` para automações e CI. |
 | `pipeline-ai mcp` | Servidor MCP nativo (JSON-RPC 2.0 sobre stdio) expondo ferramentas de governança para Antigravity e IDEs. |
 
@@ -32,7 +35,7 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 - Compilado e testado com **100% de sucesso em Go 1.24+** (stdlib pura, compatível com detector de concorrência `-race`).
 - Integrado nativamente ao ecossistema **Antigravity** via `.agents/hooks.json`, regras e **16 skills modulares**.
 - Automação via **`Taskfile.yml`** e workflow completo no **GitHub Actions** (`.github/workflows/ci.yml`).
-- Versão estável atual: **`v0.5.0`**.
+- Versão estável atual: **`v0.6.0`**.
 
 ---
 
@@ -62,10 +65,10 @@ Consulte o [Guia de Criação de Projetos](docs-ai/GUIA-CRIACAO-PROJETOS.md) par
 Requer Go 1.24 ou superior (a diretiva `tool` no `go.mod` é obrigatória):
 
 ```bash
-go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@v0.5.0
+go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@v0.6.0
 ```
 
-*(Os comandos legados `cmd/pipeline-hook@v0.5.0` e `cmd/pipeline-validate@v0.5.0` também permanecem disponíveis).*
+*(Os comandos legados `cmd/pipeline-hook@v0.6.0` e `cmd/pipeline-validate@v0.6.0` também permanecem disponíveis).*
 
 *(Se o repositório for privado, configure `go env -w GOPRIVATE="github.com/rodrigodosanjosoliveira/*"` e autentique o Git via SSH)*.
 
@@ -164,8 +167,43 @@ Antes de abrir o Pull Request, toda entrega é validada pelo binário em Go:
 go tool pipeline-validate docs-ai/deliveries/DEL-001/report.md
 ```
 
+Ou com saída estruturada JSON para automações, bots e esteiras de CI:
+
+```bash
+go tool pipeline-validate -json docs-ai/deliveries/DEL-001/report.md
+```
+
 - **Exit code 0:** Aprovado.
 - **Exit code 1:** Reprovado (bloqueia o commit/PR caso haja marcadores `TODO`, checklist incompleto ou salvaguarda de segurança violada).
+
+---
+
+## Gestão de Entregas, Sensores e Módulos (v0.6.0)
+
+A CLI unificada expande os recursos de governança autônoma e determinística:
+
+### Ciclo de Delivery (`pipeline-ai delivery`)
+Controla o estado e ciclo temporal das entregas (D-21):
+```bash
+pipeline-ai delivery open DEL-015 TASK-015 "Release v0.6.0" 168h  # Abre delivery com TTL de 7 dias
+pipeline-ai delivery status                                      # Exibe status e tempo restante
+pipeline-ai delivery close                                       # Fecha a delivery ativa
+```
+
+### Sensores de Qualidade (`pipeline-ai sensor`)
+Executa a validação de formato, vet e testes com proteção contra falsos positivos e saída estruturada (D-24):
+```bash
+pipeline-ai sensor          # Execução padrão em formato legível
+pipeline-ai sensor -json    # Saída estruturada em JSON para integrações
+```
+
+### Gestão Dinâmica de Módulos (`pipeline-ai module`)
+Permite inspecionar e alterar módulos opcionais em `.pipeline-ai.json` de forma segura (D-25):
+```bash
+pipeline-ai module list                # Lista módulos opcionais e status de ativação
+pipeline-ai module enable release-ops  # Ativa módulo opcional com validação de esquema
+pipeline-ai module disable release-ops # Desativa módulo opcional
+```
 
 ---
 
@@ -188,12 +226,16 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 - **`pipeline://invariants`**: Fornece os invariantes de arquitetura e governança do projeto.
 - **`pipeline://active-delivery`**: Retorna o status da entrega ativa e tabela do `INDEX.md`.
 - **`pipeline://catalog`**: Lista de skills nativas e módulos disponíveis.
+- **`pipeline://delivery/active`**: Metadados, status e expiração da delivery atualmente ativa em JSON (D-21).
 
 ### Ferramentas MCP (Tools)
 - **`pipeline_doctor`**: Executa diagnóstico completo de ambiente e configuração (`dir`).
 - **`pipeline_validate`**: Valida relatórios de entrega (`report_path`, `no_git`, `base_ref`) e salvaguardas de Git.
 - **`pipeline_scaffold_delivery`**: Cria o esqueleto da próxima entrega (`title`, `type`, `task_code`), gera `report.md` com seções obrigatórias e registra no `INDEX.md`.
 - **`pipeline_sync_skills`**: Sincroniza e atualiza `.agents/skills` e regras a partir dos templates embutidos (`dir`).
+- **`pipeline_close_delivery`**: Encerra a delivery ativa no repositório.
+- **`pipeline_run_sensors`**: Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada e salvaguarda contra falsos positivos (`dir`).
+- **`pipeline_manage_modules`**: Gerencia módulos opcionais (`action`: list, enable, disable; `module`, `dir`).
 
 ---
 

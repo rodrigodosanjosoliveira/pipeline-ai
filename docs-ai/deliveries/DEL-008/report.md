@@ -2,7 +2,7 @@
 delivery_id: DEL-008
 task_code: TASK-008
 title: Correção de vulnerabilidades de path traversal e falhas no hook e validador
-status: draft
+status: merged
 require_security: true
 require_migration: false
 require_performance: false

@@ -2,7 +2,7 @@
 delivery_id: DEL-010
 task_code: TASK-010
 title: Modelo híbrido de autorização com gate por delivery ativa, TTL e caminhos imutáveis
-status: draft
+status: merged
 require_security: true
 require_migration: false
 require_performance: false
