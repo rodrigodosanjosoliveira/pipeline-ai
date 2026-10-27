@@ -825,3 +825,133 @@ func TestMCPToolsRunPipeline(t *testing.T) {
 		}
 	})
 }
+
+func TestMCPToolsValidateHandoff(t *testing.T) {
+	s := NewServer(".")
+
+	// 1. tools/list contém pipeline_validate_handoff
+	t.Run("tools/list contem pipeline_validate_handoff", func(t *testing.T) {
+		req := `{"jsonrpc":"2.0","id":110,"method":"tools/list","params":{}}`
+		res := runRPC(t, s, req)
+
+		result, ok := res["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente: %v", res)
+		}
+		tools, ok := result["tools"].([]any)
+		if !ok {
+			t.Fatalf("tools ausente: %v", result)
+		}
+
+		found := false
+		for _, raw := range tools {
+			tool, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			if tool["name"] == "pipeline_validate_handoff" {
+				found = true
+				desc, _ := tool["description"].(string)
+				if desc == "" {
+					t.Errorf("ferramenta pipeline_validate_handoff sem descricao")
+				}
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("ferramenta pipeline_validate_handoff nao encontrada em tools/list")
+		}
+	})
+
+	validHandoff := "DE: architecture-guardrails\n" +
+		"PARA: test-writer\n" +
+		"DELIVERY_ID: DEL-018\n" +
+		"STATUS: ok\n" +
+		"ESCOPO: internal/handoff\n" +
+		"ARQUIVOS: internal/handoff/handoff_test.go\n" +
+		"CONFIRMADO: go test ./... PASS\n" +
+		"ASSUNCOES: nenhuma\n" +
+		"RISCOS: nenhum\n" +
+		"SINAIS:\n" +
+		"  SECURITY: nao\n" +
+		"  SUPPLY_CHAIN: nao\n" +
+		"  MIGRATION: nao\n" +
+		"  PERFORMANCE: nao\n" +
+		"PROXIMO: dev-implementation\n" +
+		"MOTIVO: implementacao TDD"
+
+	invalidHandoff := "DE: architecture-guardrails\n" +
+		"PARA: test-writer\n" +
+		"DELIVERY_ID: DEL-018\n" +
+		"STATUS: status-invalido\n" +
+		"CONFIRMADO: tudo certo\n" +
+		"PROXIMO: dev-implementation\n" +
+		"MOTIVO: teste"
+
+	// 2. tools/call com handoff valido
+	t.Run("tools/call com handoff valido", func(t *testing.T) {
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      111,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_validate_handoff",
+				"arguments": map[string]any{
+					"content": validHandoff,
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		res := runRPC(t, s, string(reqBytes))
+
+		result, ok := res["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente no tools/call: %v", res)
+		}
+		if result["isError"] == true {
+			t.Errorf("esperava isError=false para handoff valido, obteve true: %v", result)
+		}
+		content, ok := result["content"].([]any)
+		if !ok || len(content) == 0 {
+			t.Fatalf("content ausente ou vazio: %v", result)
+		}
+		first, _ := content[0].(map[string]any)
+		text, _ := first["text"].(string)
+
+		var parsed struct {
+			Valid  bool     `json:"valid"`
+			Errors []string `json:"errors"`
+		}
+		if err := json.Unmarshal([]byte(text), &parsed); err != nil {
+			t.Fatalf("resposta nao e JSON de validacao valido: %v; raw:\n%s", err, text)
+		}
+		if !parsed.Valid {
+			t.Errorf("parsed.Valid = false para handoff valido, erros: %v", parsed.Errors)
+		}
+	})
+
+	// 3. tools/call com handoff invalido
+	t.Run("tools/call com handoff invalido", func(t *testing.T) {
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      112,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_validate_handoff",
+				"arguments": map[string]any{
+					"content": invalidHandoff,
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		res := runRPC(t, s, string(reqBytes))
+
+		result, ok := res["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente no tools/call: %v", res)
+		}
+		if result["isError"] != true {
+			t.Errorf("esperava isError=true para handoff invalido: %v", result)
+		}
+	})
+}
