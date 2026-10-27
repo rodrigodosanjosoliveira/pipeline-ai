@@ -2,7 +2,7 @@
 delivery_id: DEL-009
 task_code: TASK-009
 title: Hardening do hook fail-closed, resolução de symlinks e MCP scaffold configurável
-status: draft
+status: merged
 require_security: true
 require_migration: false
 require_performance: false

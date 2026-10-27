@@ -2,7 +2,7 @@
 delivery_id: DEL-012
 task_code: TASK-012
 title: Suporte a relatórios customizados, prefixos de entrega flexíveis e índice opcional
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

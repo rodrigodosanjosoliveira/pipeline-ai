@@ -2,7 +2,7 @@
 delivery_id: DEL-011
 task_code: TASK-011
 title: Formalização do Security Shift-Left com segurança bidirecional no PRE e POST
-status: draft
+status: merged
 require_security: true
 require_migration: false
 require_performance: false

@@ -2,7 +2,7 @@
 delivery_id: DEL-013
 task_code: TASK-013
 title: Sensores com saída estruturada em JSON e autoteste negativo contra falsos positivos
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

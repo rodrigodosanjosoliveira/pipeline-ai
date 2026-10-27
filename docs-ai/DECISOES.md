@@ -443,4 +443,52 @@ Divergências encontradas no kit original que a fase 1 precisa resolver.
 - **Superfície protegida:** `go.mod` e `go.sum` incluídos em `protected_paths` em todos os templates de configuração.
 - **Proteção de branch local:** Script `.githooks/pre-push` configurado para impedir pushes diretos na `main` em repositórios privados, garantindo entrega 100% via Pull Request.
 
+---
+
+## 9. Consolidação Arquitetural da v0.6.0 (Contraditório Técnico)
+
+### D-21 — Modelo Híbrido de Autorização e Delivery Ativa (C3 / DEL-010)
+
+A governança de edição no workspace adota um modelo híbrido e resiliente:
+1. **Autorização Híbrida:** A escrita em caminhos protegidos é autorizada se o agente for um `editor_agent` nominal OU se houver uma delivery ativa válida (`state.IsActive`), eliminando fragilidades de perda de identidade de agentes em runtimes efêmeros (como Antigravity e sessões de pair programming).
+2. **Ciclo de Vida com TTL:** Toda entrega possui ciclo temporal explícito (padrão 7 dias) persistido em `.pipeline-state/active-delivery.json`. Entregas expiradas são bloqueadas deterministicamente (`ErrExpired`).
+3. **Caminhos Imutáveis (`immutable_paths`):** Arquivos essenciais de governança, CI/CD ou integridade arquitetural podem ser marcados como incondicionalmente imutáveis, bloqueando qualquer edição automatizada independentemente do agente ou status de delivery.
+
+---
+
+### D-22 — Security Shift-Left Bidirecional com Modelagem Prévia e Pós-Auditoria (C8 / DEL-011)
+
+A segurança é tratada como um processo contínuo e bidirecional em dois momentos obrigatórios do pipeline:
+1. **No PRE (`architecture-guardrails` e `test-writer`):** Quando `SECURITY: sim`, o guardrails executa modelagem formal de ameaças e emite `REQUISITOS_SEGURANCA` no contrato de handoff, orientando o `test-writer` a elaborar testes adversariais e de borda antes de qualquer código de produção ser escrito.
+2. **No POST (`security-review`):** Auditoria cruzada do diff pós-implementação contra os requisitos contratuais do PRE e checagem de análise estática e vulnerabilidades de símbolos com `govulncheck ./...`.
+
+Isso elimina retrabalhos onde vulnerabilidades eram descobertas apenas no final do ciclo.
+
+---
+
+### D-23 — Governança Flexível de Entregas, Regexes e Relatórios Customizados (C10/C11 / DEL-012)
+
+O pipeline suporta personalização corporativa sem perder o rigor de validação:
+1. **Padrões Customizáveis de Identificadores:** Suporte declarativo a regexes para `delivery_id_pattern` e `task_code_pattern` no `.pipeline-ai.json`, permitindo identificadores como Jira, Wrike ou padrões proprietários (`RIS-NNN`, `PLAT-NNN`).
+2. **Seções Obrigatórias Customizadas (`custom_sections`):** Projetos podem declarar seções adicionais no `report.md` (como `Tenant Isolation`, `Frontend Handoff`, `Checkpoints`) que se tornam gates mandatórios de validação no `pipeline-validate`.
+3. **Índice Central Opcional (`require_index`):** Suporte a desativar a obrigatoriedade do `INDEX.md` (`require_index: false`) para repositórios com fluxos git descentralizados.
+
+---
+
+### D-24 — Sensores Estruturados em JSON e Autoteste Negativo contra Falsos Positivos (C13/C15 / DEL-013)
+
+A automação de qualidade e testes adota salvaguardas estritas contra aprovações indevidas:
+1. **Sensores Estruturados:** Implementação de `pipeline-ai sensor` e flags `-json` no `pipeline-validate`, expondo resultados tipados e estruturados (`fmt`, `vet`, `test`) para agentes de IA, IDEs e CI.
+2. **Salvaguarda contra Falsos Positivos (Autoteste Negativo):** Execuções com zero testes (`tests_run == 0` ou pacotes desprovidos de testes) são tratadas como falha fatal determinística (`Overall: FAIL`), prevenindo aprovação acidental de comandos sem cobertura.
+3. **Evidência Real de Testes:** O validador rejeita relatórios cuja seção `# Testes` contenha saídas vazias, declarações genéricas ou apenas `[no test files]`.
+
+---
+
+### D-25 — Invariantes, Critérios de Reversibilidade/Rollback e Gestão Dinâmica de Módulos (C14/C16 / DEL-014)
+
+A prontidão operacional e a integridade de módulos são formalizadas:
+1. **Obrigatoriedade de Reversibilidade/Rollback (`require_rollback`):** Entregas críticas exigem formalmente a seção `# Rollback Plan` / `# Reversibilidade`, detalhando procedimentos de contingência e reversão antes do merge. Tentativas de evasão (`N/A`, `não se aplica`) são rejeitadas deterministicamente.
+2. **Gestão Segura de Módulos Opcionais:** A CLI (`pipeline-ai module list|enable|disable`) e a MCP tool `pipeline_manage_modules` gerenciam o catálogo de módulos com validação de esquema, impedindo corrupção manual do arquivo `.pipeline-ai.json`.
+3. **Checkpoints de Integridade no Diagnóstico:** O utilitário `doctor` valida e audita o estado dos módulos ativos e conformidade com as diretivas do projeto.
+
 
