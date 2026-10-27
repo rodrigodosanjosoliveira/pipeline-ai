@@ -558,3 +558,137 @@ func TestCLIModuleCommands(t *testing.T) {
 		}
 	})
 }
+
+func TestCLIRunCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	writeMainFile := func(path, content string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir falhou: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("write falhou: %v", err)
+		}
+	}
+
+	cfgContent := `{
+  "version": 1,
+  "project_type": "api",
+  "protected_paths": ["internal/"],
+  "editor_agents": ["dev-implementation", "test-writer", "docs-update"]
+}`
+	writeMainFile(filepath.Join(tmpDir, ".pipeline-ai.json"), cfgContent)
+	writeMainFile(filepath.Join(tmpDir, "go.mod"), "module cli_run_test\n\ngo 1.24\n")
+	writeMainFile(filepath.Join(tmpDir, "calc.go"), "package calc\n\nfunc Add(a, b int) int {\n\treturn a + b\n}\n")
+	writeMainFile(filepath.Join(tmpDir, "calc_test.go"), "package calc\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1, 1) != 2 {\n\t\tt.Fatal(\"err\")\n\t}\n}\n")
+	writeMainFile(filepath.Join(tmpDir, ".githooks", "pre-push"), "#!/bin/sh\nexit 0\n")
+	writeMainFile(filepath.Join(tmpDir, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeMainFile(filepath.Join(tmpDir, ".agents", "hooks.json"), "{}")
+	writeMainFile(filepath.Join(tmpDir, ".agents", "skills", "test-writer", "SKILL.md"), "# Test Writer")
+
+	// Abre delivery e cria report válido
+	var stdout, stderr bytes.Buffer
+	exitCode := run([]string{"delivery", "open", "DEL-017", "-task", "TASK-017", "-dir", tmpDir}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("run(delivery open) falhou: exitCode=%d, stderr:\n%s", exitCode, stderr.String())
+	}
+
+	reportContent := `---
+delivery_id: DEL-017
+task_code: TASK-017
+title: Pipeline Runner
+status: ready
+require_security: false
+require_migration: false
+require_performance: false
+---
+
+# Contexto
+
+Contexto.
+
+# Escopo
+
+Escopo.
+
+# Implementação
+
+Implementação.
+
+# Testes
+
+=== RUN   TestAdd
+--- PASS: TestAdd (0.00s)
+PASS
+ok  	cli_run_test	0.001s
+
+# Code Review
+
+Aprovado sem ressalvas.
+
+# Final Checklist
+
+- [x] Item 1
+`
+	writeMainFile(filepath.Join(tmpDir, "docs-ai", "deliveries", "DEL-017", "report.md"), reportContent)
+	writeMainFile(filepath.Join(tmpDir, "docs-ai", "deliveries", "INDEX.md"), "| DEL-017 | TASK-017 | Pipeline Runner | ready |\n")
+
+	t.Run("modo textual padrao", func(t *testing.T) {
+		var out, errOut bytes.Buffer
+		code := run([]string{"run", "-dir", tmpDir, "-no-git"}, &out, &errOut)
+		if code != 0 {
+			t.Errorf("run textual retornou exitCode = %d, esperado 0. stderr: %s", code, errOut.String())
+		}
+		outStr := out.String()
+		if !strings.Contains(strings.ToLower(outStr), "doctor") || !strings.Contains(strings.ToLower(outStr), "sensor") {
+			t.Errorf("saída textual não contém steps esperados:\n%s", outStr)
+		}
+	})
+
+	t.Run("modo json estruturado", func(t *testing.T) {
+		var out, errOut bytes.Buffer
+		code := run([]string{"run", "-dir", tmpDir, "-no-git", "-json"}, &out, &errOut)
+		if code != 0 {
+			t.Errorf("run -json retornou exitCode = %d, esperado 0. stderr: %s", code, errOut.String())
+		}
+
+		var parsed struct {
+			Overall    string `json:"overall"`
+			OK         bool   `json:"ok"`
+			DeliveryID string `json:"delivery_id"`
+			Steps      []struct {
+				Name   string `json:"name"`
+				Status string `json:"status"`
+			} `json:"steps"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
+			t.Fatalf("saída não é JSON válido: %v; saída:\n%s", err, out.String())
+		}
+		if parsed.Overall != "PASS" || !parsed.OK {
+			t.Errorf("overall = %q, ok = %v, esperado PASS/true", parsed.Overall, parsed.OK)
+		}
+		if len(parsed.Steps) == 0 {
+			t.Errorf("steps vazio no JSON de saída")
+		}
+	})
+
+	t.Run("flags -dir, -no-git e -delivery explicita", func(t *testing.T) {
+		var out, errOut bytes.Buffer
+		code := run([]string{"run", "-dir", tmpDir, "-delivery", "DEL-017", "-no-git", "-json"}, &out, &errOut)
+		if code != 0 {
+			t.Errorf("run com flag -delivery retornou exitCode = %d, esperado 0. stderr: %s", code, errOut.String())
+		}
+		var parsed struct {
+			DeliveryID string `json:"delivery_id"`
+			Overall    string `json:"overall"`
+			OK         bool   `json:"ok"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
+			t.Fatalf("JSON inválido: %v", err)
+		}
+		if parsed.DeliveryID != "DEL-017" {
+			t.Errorf("DeliveryID = %q, esperado %q", parsed.DeliveryID, "DEL-017")
+		}
+	})
+}
