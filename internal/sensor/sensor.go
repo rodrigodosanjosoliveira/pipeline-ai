@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 )
 
 // SensorStatus representa o status de execução de um sensor.
@@ -60,6 +62,12 @@ func Run(dir string) (*Result, error) {
 		return nil, fmt.Errorf("caminho inválido: %w", err)
 	}
 
+	cfg, _ := config.Load(absDir)
+	var cmdEnv []string
+	if cfg != nil && cfg.ProjectType == "desktop" {
+		cmdEnv = append(os.Environ(), "CGO_ENABLED=0", "GOOS=windows", "GOARCH=amd64")
+	}
+
 	var checks []CheckResult
 	overallOK := true
 
@@ -92,6 +100,9 @@ func Run(dir string) (*Result, error) {
 	goBin := findBinary("go")
 	vetCmd := exec.Command(goBin, "vet", "./...")
 	vetCmd.Dir = absDir
+	if cmdEnv != nil {
+		vetCmd.Env = cmdEnv
+	}
 	vetOut, vetErr := vetCmd.CombinedOutput()
 	trimmedVet := strings.TrimSpace(string(vetOut))
 
@@ -111,6 +122,9 @@ func Run(dir string) (*Result, error) {
 	// 3. Sensor TEST: go test -v ./...
 	testCmd := exec.Command(goBin, "test", "-v", "./...")
 	testCmd.Dir = absDir
+	if cmdEnv != nil {
+		testCmd.Env = cmdEnv
+	}
 	testOut, testErr := testCmd.CombinedOutput()
 	testStr := string(testOut)
 
