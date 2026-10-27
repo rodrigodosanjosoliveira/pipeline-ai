@@ -6,6 +6,7 @@ status: draft
 require_security: false
 require_migration: false
 require_performance: false
+require_rollback: false
 ---
 
 # Contexto
@@ -58,6 +59,10 @@ $ go test ./...
 **Sugestões acatadas:** {{o que foi ajustado}}
 
 **Sugestões recusadas:** {{o que não foi, e por quê}}
+
+# Rollback Plan
+
+{{Obrigatório se require_rollback=true ou exigido pela política do projeto. Descreva passos de reversão, comandos operacionais e impacto.}}
 
 # Final Checklist
 

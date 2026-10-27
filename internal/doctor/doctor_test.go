@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -172,5 +173,96 @@ func TestRunDoctorJSON(t *testing.T) {
 		if r.Status == "" {
 			t.Errorf("resultado sem campo 'status'")
 		}
+	}
+}
+
+func TestDoctorModuleAndInvariantIntegrity(t *testing.T) {
+	tests := []struct {
+		name        string
+		cfgJSON     string
+		wantStatus  CheckStatus
+		msgContains string
+	}{
+		{
+			name: "config válida com módulos e invariantes preservados",
+			cfgJSON: `{
+				"version": 1,
+				"project_type": "desktop",
+				"protected_paths": ["internal/", "cmd/"],
+				"editor_agents": ["dev-implementation"],
+				"enabled_modules": ["release-ops", "data-model"]
+			}`,
+			wantStatus:  StatusPass,
+			msgContains: "módulos",
+		},
+		{
+			name: "config com require_rollback ativo reportado no diagnóstico",
+			cfgJSON: `{
+				"version": 1,
+				"project_type": "desktop",
+				"protected_paths": ["internal/"],
+				"require_rollback": true
+			}`,
+			wantStatus:  StatusPass,
+			msgContains: "rollback",
+		},
+		{
+			name: "módulo desconhecido ou inválido em enabled_modules",
+			cfgJSON: `{
+				"version": 1,
+				"project_type": "desktop",
+				"protected_paths": ["internal/"],
+				"enabled_modules": ["modulo-fantasma"]
+			}`,
+			wantStatus:  StatusFail,
+			msgContains: "inválido",
+		},
+		{
+			name: "invariante violado - protected_paths vazio",
+			cfgJSON: `{
+				"version": 1,
+				"project_type": "desktop",
+				"protected_paths": []
+			}`,
+			wantStatus:  StatusFail,
+			msgContains: "protected_paths",
+		},
+		{
+			name: "invariante violado - project_type inválido",
+			cfgJSON: `{
+				"version": 1,
+				"project_type": "mobile",
+				"protected_paths": ["internal/"]
+			}`,
+			wantStatus:  StatusFail,
+			msgContains: "project_type",
+		},
+		{
+			name: "invariante violado - version não suportada",
+			cfgJSON: `{
+				"version": 99,
+				"project_type": "desktop",
+				"protected_paths": ["internal/"]
+			}`,
+			wantStatus:  StatusFail,
+			msgContains: "version",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(tmpDir, ".pipeline-ai.json"), []byte(tt.cfgJSON), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			res := CheckConfig(tmpDir)
+			if res.Status != tt.wantStatus {
+				t.Errorf("CheckConfig status = %v (msg: %s), esperado %v", res.Status, res.Message, tt.wantStatus)
+			}
+			if tt.msgContains != "" && !strings.Contains(strings.ToLower(res.Message), strings.ToLower(tt.msgContains)) {
+				t.Errorf("CheckConfig message = %q, esperava conter %q", res.Message, tt.msgContains)
+			}
+		})
 	}
 }

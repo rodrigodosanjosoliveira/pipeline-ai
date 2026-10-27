@@ -73,6 +73,9 @@ type Config struct {
 	// RequireIndex define se o arquivo INDEX.md é obrigatório. Padrão: true.
 	RequireIndex *bool `json:"require_index"`
 
+	// RequireRollback indica se a política de rollback é mandatória em deliveries (C16).
+	RequireRollback *bool `json:"require_rollback,omitempty"`
+
 	// root é a raiz do projeto, preenchida no carregamento.
 	root string
 }
@@ -193,6 +196,78 @@ func (c *Config) IsIndexRequired() bool {
 		return true
 	}
 	return *c.RequireIndex
+}
+
+// IsRollbackRequired informa se o plano de rollback é mandatório em relatórios de delivery (C16).
+// Se omitido na configuração (nil), o padrão é false.
+func (c *Config) IsRollbackRequired() bool {
+	if c == nil || c.RequireRollback == nil {
+		return false
+	}
+	return *c.RequireRollback
+}
+
+// EnableModule adiciona um módulo opcional a EnabledModules de forma idempotente e valida a configuração.
+func (c *Config) EnableModule(mod string) error {
+	if c == nil {
+		return errors.New("config: config nula")
+	}
+	normalized := strings.ToLower(strings.TrimSpace(mod))
+	if normalized == "" || !AllowedModules[normalized] {
+		return fmt.Errorf("config: módulo inválido ou desconhecido: %q", mod)
+	}
+	if c.IsModuleEnabled(normalized) {
+		return nil
+	}
+	c.EnabledModules = append(c.EnabledModules, normalized)
+	if err := c.validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// DisableModule remove um módulo de EnabledModules de forma idempotente.
+func (c *Config) DisableModule(mod string) error {
+	if c == nil {
+		return errors.New("config: config nula")
+	}
+	normalized := strings.ToLower(strings.TrimSpace(mod))
+	if normalized == "" {
+		return nil
+	}
+	filtered := make([]string, 0, len(c.EnabledModules))
+	for _, m := range c.EnabledModules {
+		if !strings.EqualFold(strings.TrimSpace(m), normalized) {
+			filtered = append(filtered, m)
+		}
+	}
+	c.EnabledModules = filtered
+	return nil
+}
+
+// Save serializa a configuração em JSON formatado e grava no arquivo especificado ou no arquivo raiz padrão.
+func (c *Config) Save(targetPath ...string) error {
+	if c == nil {
+		return errors.New("config: config nula")
+	}
+	var dest string
+	if len(targetPath) > 0 && targetPath[0] != "" {
+		dest = targetPath[0]
+	} else {
+		if c.root == "" {
+			return errors.New("config: root não definido para salvar configuração")
+		}
+		dest = filepath.Join(c.root, FileName)
+	}
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return fmt.Errorf("config: falha ao serializar json: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(dest, data, 0644); err != nil {
+		return fmt.Errorf("config: falha ao escrever %s: %w", dest, err)
+	}
+	return nil
 }
 
 // ValidateDeliveryID valida se o deliveryID atende ao padrão configurado (ou ao padrão default).

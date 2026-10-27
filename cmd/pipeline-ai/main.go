@@ -19,9 +19,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/hook"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/mcp"
@@ -77,6 +79,9 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	case "doctor":
 		return runDoctor(cmdArgs, stdout, stderr)
 
+	case "module":
+		return runModule(cmdArgs, stdout, stderr)
+
 	case "sensor":
 		return runSensor(cmdArgs, stdout, stderr)
 
@@ -99,6 +104,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  sync       Sincroniza skills, regras e hooks em .agents/ a partir dos templates")
 	fmt.Fprintln(w, "  delivery   Gerencia o ciclo de vida da delivery ativa (open, close, status)")
 	fmt.Fprintln(w, "  doctor     Diagnostica o ambiente local (Go 1.24+, git, gh, hooks e .pipeline-ai.json)")
+	fmt.Fprintln(w, "  module     Gerencia módulos opcionais do pipeline (list, enable, disable)")
 	fmt.Fprintln(w, "  sensor     Executa os sensores de qualidade (fmt, vet, test) com saída estruturada")
 	fmt.Fprintln(w, "  mcp        Executa o servidor MCP sobre stdio (JSON-RPC 2.0)")
 	fmt.Fprintln(w, "  version    Exibe a versão do pipeline-ai")
@@ -197,6 +203,104 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 		return doctor.RunJSON(*dir, stdout)
 	}
 	return doctor.Run(*dir, stdout, stderr)
+}
+
+func runModule(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "uso: pipeline-ai module <list|enable|disable> [nome] [-dir <caminho>]")
+		return 1
+	}
+
+	dir := "."
+	var filtered []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "-dir" && i+1 < len(args) {
+			dir = args[i+1]
+			i++
+		} else if strings.HasPrefix(arg, "-dir=") {
+			dir = strings.TrimPrefix(arg, "-dir=")
+		} else {
+			filtered = append(filtered, arg)
+		}
+	}
+
+	if len(filtered) == 0 {
+		fmt.Fprintln(stderr, "uso: pipeline-ai module <list|enable|disable> [nome] [-dir <caminho>]")
+		return 1
+	}
+
+	subcmd := strings.ToLower(filtered[0])
+	switch subcmd {
+	case "list":
+		cfg, err := config.Load(dir)
+		if err != nil {
+			fmt.Fprintf(stderr, "module: erro ao carregar configuração: %v\n", err)
+			return 1
+		}
+		var mods []string
+		for m := range config.AllowedModules {
+			mods = append(mods, m)
+		}
+		sort.Strings(mods)
+		fmt.Fprintln(stdout, "Módulos opcionais do pipeline-ai:")
+		for _, m := range mods {
+			status := "[desabilitado]"
+			if cfg.IsModuleEnabled(m) {
+				status = "[habilitado / ativo]"
+			}
+			fmt.Fprintf(stdout, "  - %-20s %s\n", m, status)
+		}
+		return 0
+
+	case "enable":
+		if len(filtered) < 2 {
+			fmt.Fprintln(stderr, "module enable: nome do módulo não especificado")
+			return 1
+		}
+		modName := filtered[1]
+		cfg, err := config.Load(dir)
+		if err != nil {
+			fmt.Fprintf(stderr, "module: erro ao carregar configuração: %v\n", err)
+			return 1
+		}
+		if err := cfg.EnableModule(modName); err != nil {
+			fmt.Fprintf(stderr, "module enable: erro: %v\n", err)
+			return 1
+		}
+		if err := cfg.Save(); err != nil {
+			fmt.Fprintf(stderr, "module enable: erro ao salvar: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "Módulo %q habilitado com sucesso.\n", modName)
+		return 0
+
+	case "disable":
+		if len(filtered) < 2 {
+			fmt.Fprintln(stderr, "module disable: nome do módulo não especificado")
+			return 1
+		}
+		modName := filtered[1]
+		cfg, err := config.Load(dir)
+		if err != nil {
+			fmt.Fprintf(stderr, "module: erro ao carregar configuração: %v\n", err)
+			return 1
+		}
+		if err := cfg.DisableModule(modName); err != nil {
+			fmt.Fprintf(stderr, "module disable: erro: %v\n", err)
+			return 1
+		}
+		if err := cfg.Save(); err != nil {
+			fmt.Fprintf(stderr, "module disable: erro ao salvar: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "Módulo %q desabilitado com sucesso.\n", modName)
+		return 0
+
+	default:
+		fmt.Fprintf(stderr, "module: subcomando inválido ou desconhecido: %q\n", subcmd)
+		return 1
+	}
 }
 
 func runMCP(args []string, stdin io.Reader, stdout, stderr io.Writer) int {

@@ -1,6 +1,8 @@
 package report
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -469,4 +471,255 @@ func TestSalvaguardaSecaoTestes_EvidenciaExecucao(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidate_RequireRollback(t *testing.T) {
+	baseFront := func(requireRollback string) string {
+		var extra string
+		if requireRollback != "" {
+			extra = "\nrequire_rollback: " + requireRollback
+		}
+		return `---
+delivery_id: DEL-001
+task_code: TASK-42
+title: Ajuste no parser de tokens
+status: done
+require_security: false` + extra + `
+---
+
+# Contexto
+Parser rejeitava tokens com padding.
+
+# Escopo
+internal/auth/parser.go
+
+# Implementação
+Normalização antes do decode.
+
+# Testes
+` + "```\n$ go test ./...\nok  \tpkg\t0.01s\nPASS\n```" + `
+
+# Code Review
+Aprovado sem ressalvas.
+
+# Final Checklist
+- [x] build passa
+- [x] testes passam
+- [x] vet limpo
+`
+	}
+
+	tests := []struct {
+		name            string
+		frontRollback   string
+		rollbackSection string
+		rollbackBody    string
+		wantErr         bool
+	}{
+		{
+			name:            "require_rollback true com Rollback Plan válido",
+			frontRollback:   "true",
+			rollbackSection: "Rollback Plan",
+			rollbackBody:    "1. Reverter commit via git revert\n2. Executar script de rollback do banco de dados.",
+			wantErr:         false,
+		},
+		{
+			name:            "require_rollback true com Plano de Rollback válido",
+			frontRollback:   "true",
+			rollbackSection: "Plano de Rollback",
+			rollbackBody:    "Comandos de rollback e reversão de migração.",
+			wantErr:         false,
+		},
+		{
+			name:            "require_rollback true com Reversibilidade válida",
+			frontRollback:   "true",
+			rollbackSection: "Reversibilidade",
+			rollbackBody:    "Desativar flag de feature via painel de administração.",
+			wantErr:         false,
+		},
+		{
+			name:            "require_rollback true com Plano de Reversibilidade válido",
+			frontRollback:   "true",
+			rollbackSection: "Plano de Reversibilidade",
+			rollbackBody:    "Passos de mitigação e reversão.",
+			wantErr:         false,
+		},
+		{
+			name:            "require_rollback true sem seção de rollback",
+			frontRollback:   "true",
+			rollbackSection: "",
+			wantErr:         true,
+		},
+		{
+			name:            "require_rollback true com seção de rollback vazia",
+			frontRollback:   "true",
+			rollbackSection: "Rollback Plan",
+			rollbackBody:    "   \n",
+			wantErr:         true,
+		},
+		{
+			name:            "require_rollback true com seção contendo N/A",
+			frontRollback:   "true",
+			rollbackSection: "Rollback Plan",
+			rollbackBody:    "N/A",
+			wantErr:         true,
+		},
+		{
+			name:            "require_rollback true com seção contendo não se aplica",
+			frontRollback:   "true",
+			rollbackSection: "Plano de Rollback",
+			rollbackBody:    "não se aplica",
+			wantErr:         true,
+		},
+		{
+			name:            "require_rollback false sem seção de rollback",
+			frontRollback:   "false",
+			rollbackSection: "",
+			wantErr:         false,
+		},
+		{
+			name:            "require_rollback omitido no frontmatter sem seção",
+			frontRollback:   "",
+			rollbackSection: "",
+			wantErr:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw := baseFront(tt.frontRollback)
+			if tt.rollbackSection != "" {
+				raw += "\n# " + tt.rollbackSection + "\n" + tt.rollbackBody + "\n"
+			}
+
+			rep, err := Parse(raw)
+			if err != nil {
+				t.Fatalf("Parse falhou: %v", err)
+			}
+
+			findings := rep.Validate()
+			hasRollbackErr := false
+			for _, f := range findings {
+				if f.Level == "ERRO" && strings.Contains(strings.ToLower(f.Message), "rollback") {
+					hasRollbackErr = true
+					break
+				}
+			}
+
+			if tt.wantErr && !hasRollbackErr {
+				t.Errorf("esperava erro de rollback em Validate(), obteve findings: %v", findings)
+			}
+			if !tt.wantErr && hasRollbackErr {
+				t.Errorf("não esperava erro de rollback em Validate(), obteve: %v", findings)
+			}
+		})
+	}
+
+	t.Run("politica de projeto require_rollback via ValidateWithConfig", func(t *testing.T) {
+		// 1. Projeto exige rollback no .pipeline-ai.json mas relatório omitiu flag e seção
+		tmpDir := t.TempDir()
+		cfgJSON := `{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"], "require_rollback": true}`
+		if err := os.WriteFile(filepath.Join(tmpDir, ".pipeline-ai.json"), []byte(cfgJSON), 0644); err != nil {
+			t.Fatal(err)
+		}
+		cfgRequired, err := config.Load(tmpDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		rawNoSection := baseFront("")
+		rep1, err := Parse(rawNoSection)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs1 := rep1.ValidateWithConfig(cfgRequired)
+		hasErr1 := false
+		for _, f := range fs1 {
+			if f.Level == "ERRO" && strings.Contains(strings.ToLower(f.Message), "rollback") {
+				hasErr1 = true
+				break
+			}
+		}
+		if !hasErr1 {
+			t.Errorf("esperava erro ao exigir rollback pelo config do projeto, findings: %v", fs1)
+		}
+
+		// 2. Projeto exige rollback e relatório possui Rollback Plan preenchido
+		rawWithSection := baseFront("") + "\n# Rollback Plan\nComandos de reversão: git revert HEAD\n"
+		rep2, err := Parse(rawWithSection)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs2 := rep2.ValidateWithConfig(cfgRequired)
+		for _, f := range fs2 {
+			if f.Level == "ERRO" && strings.Contains(strings.ToLower(f.Message), "rollback") {
+				t.Errorf("erro inesperado de rollback com seção válida: %v", f)
+			}
+		}
+
+		// 3. Projeto com require_rollback: false e relatório sem seção
+		tmpDirFalse := t.TempDir()
+		cfgFalseJSON := `{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"], "require_rollback": false}`
+		if err := os.WriteFile(filepath.Join(tmpDirFalse, ".pipeline-ai.json"), []byte(cfgFalseJSON), 0644); err != nil {
+			t.Fatal(err)
+		}
+		cfgNotRequired, err := config.Load(tmpDirFalse)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		fs3 := rep1.ValidateWithConfig(cfgNotRequired)
+		for _, f := range fs3 {
+			if f.Level == "ERRO" && strings.Contains(strings.ToLower(f.Message), "rollback") {
+				t.Errorf("erro inesperado de rollback quando require_rollback=false: %v", f)
+			}
+		}
+	})
+}
+
+func FuzzValidate_RequireRollback(f *testing.F) {
+	f.Add("true", "Rollback Plan", "passos de rollback")
+	f.Add("false", "", "")
+	f.Add("", "Reversibilidade", "reverter imediatamente")
+	f.Add("true", "Plano de Rollback", "N/A")
+	f.Add("1", "Rollback Plan", "123")
+	f.Add("invalid", "Rollback Plan", "todo")
+
+	f.Fuzz(func(t *testing.T, reqRollback, secName, body string) {
+		raw := `---
+delivery_id: DEL-001
+task_code: TASK-42
+title: Fuzz Rollback
+status: done
+require_rollback: ` + reqRollback + `
+---
+
+# Contexto
+Contexto
+
+# Escopo
+internal/test.go
+
+# Implementação
+Implementacao
+
+# Testes
+` + "```\nPASS\n```" + `
+
+# Code Review
+OK
+
+# Final Checklist
+- [x] item 1
+`
+		if secName != "" {
+			raw += "\n# " + secName + "\n" + body + "\n"
+		}
+
+		rep, err := Parse(raw)
+		if err != nil {
+			return
+		}
+		_ = rep.Validate()
+	})
 }

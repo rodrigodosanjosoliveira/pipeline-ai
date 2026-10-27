@@ -133,6 +133,12 @@ func CheckConfig(rootDir string) CheckResult {
 
 	details := fmt.Sprintf("tipo=%s, %d caminhos protegidos, %d agentes editores",
 		cfg.ProjectType, len(cfg.ProtectedPaths), len(cfg.EditorAgents))
+	if len(cfg.EnabledModules) > 0 {
+		details += fmt.Sprintf(", %d módulos habilitados (%s)", len(cfg.EnabledModules), strings.Join(cfg.EnabledModules, ", "))
+	}
+	if cfg.IsRollbackRequired() {
+		details += ", política de rollback mandatória"
+	}
 	return CheckResult{
 		Name:    "Configuração (.pipeline-ai.json)",
 		Status:  StatusPass,

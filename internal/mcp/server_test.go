@@ -584,3 +584,138 @@ func TestMCPToolsRunSensors(t *testing.T) {
 		t.Errorf("JSON de retorno dos sensores não contém campo 'ok': %s", text)
 	}
 }
+
+func TestMCPToolsManageModules(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := `{
+		"version": 1,
+		"project_type": "desktop",
+		"protected_paths": ["internal/"],
+		"editor_agents": ["dev-implementation"],
+		"enabled_modules": ["release-ops"]
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".pipeline-ai.json"), []byte(cfg), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(tmpDir)
+
+	// 1. Presença de pipeline_manage_modules em tools/list
+	t.Run("presenca em tools/list", func(t *testing.T) {
+		reqList := `{"jsonrpc":"2.0","id":120,"method":"tools/list","params":{}}`
+		resList := runRPC(t, s, reqList)
+		resultList, ok := resList["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente em tools/list: %v", resList)
+		}
+
+		tools, ok := resultList["tools"].([]any)
+		if !ok {
+			t.Fatalf("campo tools não é lista: %v", resultList)
+		}
+
+		var toolDef map[string]any
+		for _, raw := range tools {
+			tool, ok := raw.(map[string]any)
+			if ok && tool["name"] == "pipeline_manage_modules" {
+				toolDef = tool
+				break
+			}
+		}
+		if toolDef == nil {
+			t.Fatalf("ferramenta 'pipeline_manage_modules' não encontrada em tools/list")
+		}
+
+		schema, ok := toolDef["inputSchema"].(map[string]any)
+		if !ok {
+			t.Fatalf("inputSchema inválido para pipeline_manage_modules")
+		}
+		props, ok := schema["properties"].(map[string]any)
+		if !ok || props["action"] == nil {
+			t.Errorf("inputSchema deve conter propriedade 'action'")
+		}
+	})
+
+	// 2. tools/call com action: "list"
+	t.Run("action list", func(t *testing.T) {
+		reqCall := fmt.Sprintf(`{"jsonrpc":"2.0","id":121,"method":"tools/call","params":{"name":"pipeline_manage_modules","arguments":{"action":"list","dir":%q}}}`, tmpDir)
+		resCall := runRPC(t, s, reqCall)
+		resultCall, ok := resCall["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente em tools/call list: %v", resCall)
+		}
+		if resultCall["isError"] == true {
+			t.Fatalf("action list retornou isError=true: %v", resultCall)
+		}
+
+		content, ok := resultCall["content"].([]any)
+		if !ok || len(content) == 0 {
+			t.Fatalf("content vazio")
+		}
+		first := content[0].(map[string]any)
+		text := first["text"].(string)
+
+		if !strings.Contains(text, "release-ops") || !strings.Contains(text, "data-model") {
+			t.Errorf("listagem de módulos não contém módulos conhecidos: %s", text)
+		}
+	})
+
+	// 3. tools/call com action: "enable"
+	t.Run("action enable", func(t *testing.T) {
+		reqCall := fmt.Sprintf(`{"jsonrpc":"2.0","id":122,"method":"tools/call","params":{"name":"pipeline_manage_modules","arguments":{"action":"enable","module":"data-model","dir":%q}}}`, tmpDir)
+		resCall := runRPC(t, s, reqCall)
+		resultCall, ok := resCall["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente em tools/call enable: %v", resCall)
+		}
+		if resultCall["isError"] == true {
+			t.Fatalf("action enable retornou isError=true: %v", resultCall)
+		}
+
+		data, err := os.ReadFile(filepath.Join(tmpDir, ".pipeline-ai.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "data-model") {
+			t.Errorf("data-model não persistido após enable: %s", string(data))
+		}
+	})
+
+	// 4. tools/call com action: "disable"
+	t.Run("action disable", func(t *testing.T) {
+		reqCall := fmt.Sprintf(`{"jsonrpc":"2.0","id":123,"method":"tools/call","params":{"name":"pipeline_manage_modules","arguments":{"action":"disable","module":"release-ops","dir":%q}}}`, tmpDir)
+		resCall := runRPC(t, s, reqCall)
+		resultCall, ok := resCall["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente em tools/call disable: %v", resCall)
+		}
+		if resultCall["isError"] == true {
+			t.Fatalf("action disable retornou isError=true: %v", resultCall)
+		}
+
+		data, err := os.ReadFile(filepath.Join(tmpDir, ".pipeline-ai.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), `"release-ops"`) {
+			t.Errorf("release-ops ainda presente após disable: %s", string(data))
+		}
+	})
+
+	// 5. Chamadas de erro
+	t.Run("erros modulo invalido e acao invalida", func(t *testing.T) {
+		reqCallInvMod := fmt.Sprintf(`{"jsonrpc":"2.0","id":124,"method":"tools/call","params":{"name":"pipeline_manage_modules","arguments":{"action":"enable","module":"invalido","dir":%q}}}`, tmpDir)
+		resCallInvMod := runRPC(t, s, reqCallInvMod)
+		res1, _ := resCallInvMod["result"].(map[string]any)
+		if res1 == nil || res1["isError"] != true {
+			t.Errorf("esperava isError=true ao ativar módulo inválido")
+		}
+
+		reqCallInvAction := fmt.Sprintf(`{"jsonrpc":"2.0","id":125,"method":"tools/call","params":{"name":"pipeline_manage_modules","arguments":{"action":"invalida","dir":%q}}}`, tmpDir)
+		resCallInvAction := runRPC(t, s, reqCallInvAction)
+		res2, _ := resCallInvAction["result"].(map[string]any)
+		if res2 == nil || res2["isError"] != true {
+			t.Errorf("esperava isError=true com action desconhecida")
+		}
+	})
+}
