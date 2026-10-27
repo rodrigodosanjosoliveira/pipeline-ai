@@ -43,6 +43,7 @@ Uma revisão que só produz `SUGESTAO`, em um diff com problema real, é `DRIFT`
 - Segredo em código
 - Nome que não diz o que a coisa faz
 - Teste alterado junto com a implementação que ele deveria testar
+- Reversibilidade e rollback: verificar se a entrega possui plano de reversão viável e sem estados irreversíveis quando `require_rollback` estiver ativo (C16)
 
 ## O que NÃO fazer
 

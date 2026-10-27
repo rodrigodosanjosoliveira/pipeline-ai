@@ -8,9 +8,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
@@ -327,6 +329,29 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 				},
 			},
 		},
+		{
+			Name:        "pipeline_manage_modules",
+			Description: "Gerencia módulos opcionais do pipeline-ai (.pipeline-ai.json): listar, ativar ou desativar.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action": map[string]any{
+						"type":        "string",
+						"description": "Ação a executar: 'list', 'enable' ou 'disable'",
+						"enum":        []string{"list", "enable", "disable"},
+					},
+					"module": map[string]any{
+						"type":        "string",
+						"description": "Nome do módulo opcional a ativar ou desativar",
+					},
+					"dir": map[string]any{
+						"type":        "string",
+						"description": "Diretório raiz do projeto (padrão: raiz atual)",
+					},
+				},
+				"required": []string{"action"},
+			},
+		},
 	}
 
 	s.sendResult(out, req.ID, map[string]any{
@@ -553,6 +578,167 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			},
 			IsError: !res.OK,
 		})
+
+	case "pipeline_manage_modules":
+		targetDir := s.RootDir
+		if rawDir, ok := params.Arguments["dir"].(string); ok && strings.TrimSpace(rawDir) != "" {
+			if filepath.IsAbs(rawDir) {
+				targetDir = rawDir
+			} else {
+				targetDir = filepath.Join(s.RootDir, rawDir)
+			}
+		}
+
+		action, _ := params.Arguments["action"].(string)
+		action = strings.ToLower(strings.TrimSpace(action))
+
+		cfg, err := config.Load(targetDir)
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO ao carregar configuração: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		switch action {
+		case "list":
+			var mods []string
+			for m := range config.AllowedModules {
+				mods = append(mods, m)
+			}
+			sort.Strings(mods)
+			var sb strings.Builder
+			sb.WriteString("Módulos opcionais do pipeline-ai:\n")
+			for _, m := range mods {
+				status := "[desabilitado]"
+				if cfg.IsModuleEnabled(m) {
+					status = "[habilitado / ativo]"
+				}
+				sb.WriteString(fmt.Sprintf("- %s: %s\n", m, status))
+			}
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: sb.String(),
+					},
+				},
+				IsError: false,
+			})
+
+		case "enable":
+			modName, _ := params.Arguments["module"].(string)
+			if strings.TrimSpace(modName) == "" {
+				s.sendResult(out, req.ID, ToolResult{
+					Content: []ToolContent{
+						{
+							Type: "text",
+							Text: "ERRO: módulo não informado",
+						},
+					},
+					IsError: true,
+				})
+				return
+			}
+			if err := cfg.EnableModule(modName); err != nil {
+				s.sendResult(out, req.ID, ToolResult{
+					Content: []ToolContent{
+						{
+							Type: "text",
+							Text: fmt.Sprintf("ERRO ao habilitar módulo: %v", err),
+						},
+					},
+					IsError: true,
+				})
+				return
+			}
+			if err := cfg.Save(); err != nil {
+				s.sendResult(out, req.ID, ToolResult{
+					Content: []ToolContent{
+						{
+							Type: "text",
+							Text: fmt.Sprintf("ERRO ao salvar configuração: %v", err),
+						},
+					},
+					IsError: true,
+				})
+				return
+			}
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("Módulo %q habilitado com sucesso.", modName),
+					},
+				},
+				IsError: false,
+			})
+
+		case "disable":
+			modName, _ := params.Arguments["module"].(string)
+			if strings.TrimSpace(modName) == "" {
+				s.sendResult(out, req.ID, ToolResult{
+					Content: []ToolContent{
+						{
+							Type: "text",
+							Text: "ERRO: módulo não informado",
+						},
+					},
+					IsError: true,
+				})
+				return
+			}
+			if err := cfg.DisableModule(modName); err != nil {
+				s.sendResult(out, req.ID, ToolResult{
+					Content: []ToolContent{
+						{
+							Type: "text",
+							Text: fmt.Sprintf("ERRO ao desabilitar módulo: %v", err),
+						},
+					},
+					IsError: true,
+				})
+				return
+			}
+			if err := cfg.Save(); err != nil {
+				s.sendResult(out, req.ID, ToolResult{
+					Content: []ToolContent{
+						{
+							Type: "text",
+							Text: fmt.Sprintf("ERRO ao salvar configuração: %v", err),
+						},
+					},
+					IsError: true,
+				})
+				return
+			}
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("Módulo %q desabilitado com sucesso.", modName),
+					},
+				},
+				IsError: false,
+			})
+
+		default:
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ação desconhecida: %q (use 'list', 'enable' ou 'disable')", action),
+					},
+				},
+				IsError: true,
+			})
+		}
 
 	default:
 		s.sendError(out, req.ID, CodeInvalidParams, fmt.Sprintf("ferramenta desconhecida: %s", params.Name))

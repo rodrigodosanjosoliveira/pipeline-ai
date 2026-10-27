@@ -179,6 +179,7 @@ func (r *Report) Validate() []Finding {
 
 	out = append(out, r.checkFrontMatter()...)
 	out = append(out, r.checkSections()...)
+	out = append(out, r.checkRollback()...)
 	out = append(out, r.checkTestEvidence()...)
 	out = append(out, r.checkPlaceholders()...)
 	out = append(out, r.checkChecklist()...)
@@ -191,6 +192,16 @@ func (r *Report) ValidateWithConfig(cfg *config.Config) []Finding {
 	out := r.Validate()
 	if cfg == nil {
 		return out
+	}
+
+	if cfg.IsRollbackRequired() && !r.Flag("require_rollback") {
+		body, ok := r.findRollbackSection()
+		if !ok || strings.TrimSpace(body) == "" || isNA(strings.TrimSpace(body)) {
+			out = append(out, Finding{
+				Level:   "ERRO",
+				Message: "política do projeto exige plano de rollback mas a seção de rollback não foi fornecida",
+			})
+		}
 	}
 
 	if err := cfg.ValidateDeliveryID(r.Front["delivery_id"]); err != nil {
@@ -274,6 +285,41 @@ func (r *Report) checkSections() []Finding {
 	}
 
 	return out
+}
+
+var rollbackSectionCandidates = []string{
+	"rollback plan",
+	"plano de rollback",
+	"reversibilidade",
+	"plano de reversibilidade",
+}
+
+func (r *Report) findRollbackSection() (string, bool) {
+	for _, cand := range rollbackSectionCandidates {
+		norm := normalize(cand)
+		if body, ok := r.Sections[norm]; ok {
+			return body, true
+		}
+	}
+	return "", false
+}
+
+func (r *Report) checkRollback() []Finding {
+	if !r.Flag("require_rollback") {
+		return nil
+	}
+	body, ok := r.findRollbackSection()
+	if !ok {
+		return []Finding{{"ERRO", `require_rollback=true exige a seção "Rollback Plan" (ou "Plano de Rollback" / "Reversibilidade"), que não existe`}}
+	}
+	trimmed := strings.TrimSpace(body)
+	if trimmed == "" {
+		return []Finding{{"ERRO", `require_rollback=true mas a seção de rollback está vazia`}}
+	}
+	if isNA(trimmed) {
+		return []Finding{{"ERRO", `require_rollback=true mas a seção de rollback está marcada como N/A`}}
+	}
+	return nil
 }
 
 func isNA(s string) bool {

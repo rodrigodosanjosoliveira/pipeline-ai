@@ -29,7 +29,10 @@ Handoff do `pm-triage`.
    - dependência que force CGO em projeto desktop → **BLOQUEIO**
    - abstração que a stdlib já cobre → questionar
    - mudança de contrato entre Go e frontend → registrar em `RISCOS`
-7. Se a abordagem exigir mudança de arquitetura, `STATUS: bloqueado` e escalonamento para aprovação humana.
+7. Avaliar reversibilidade e rollback (C16):
+   - Verificar se a mudança introduz migrações destrutivas, locks prolongados ou estados irreversíveis.
+   - Definir a estratégia e plano de rollback quando `require_rollback` for mandatória na política do projeto ou na delivery.
+8. Se a abordagem exigir mudança de arquitetura, `STATUS: bloqueado` e escalonamento para aprovação humana.
 
 ## O que NÃO fazer
 

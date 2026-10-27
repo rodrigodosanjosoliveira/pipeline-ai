@@ -801,3 +801,242 @@ func FuzzValidateDeliveryID(f *testing.F) {
 		_ = cfg.ValidateDeliveryID(s)
 	})
 }
+
+func TestConfig_RequireRollback(t *testing.T) {
+	tests := []struct {
+		name         string
+		body         string
+		wantRequired bool
+	}{
+		{
+			name:         "omitido assume default false",
+			body:         `{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"]}`,
+			wantRequired: false,
+		},
+		{
+			name:         "explicitamente false",
+			body:         `{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"], "require_rollback": false}`,
+			wantRequired: false,
+		},
+		{
+			name:         "explicitamente true",
+			body:         `{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"], "require_rollback": true}`,
+			wantRequired: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeConfig(t, dir, tt.body)
+
+			cfg, err := Load(dir)
+			if err != nil {
+				t.Fatalf("Load falhou: %v", err)
+			}
+
+			if got := cfg.IsRollbackRequired(); got != tt.wantRequired {
+				t.Errorf("cfg.IsRollbackRequired() = %v, quer %v", got, tt.wantRequired)
+			}
+		})
+	}
+
+	t.Run("nil receiver safe", func(t *testing.T) {
+		var nilCfg *Config
+		if nilCfg.IsRollbackRequired() != false {
+			t.Errorf("nilCfg.IsRollbackRequired() deveria retornar false")
+		}
+	})
+}
+
+func TestConfig_ModuleManagement(t *testing.T) {
+	t.Run("EnableModule", func(t *testing.T) {
+		dir := t.TempDir()
+		body := `{
+			"version": 1,
+			"project_type": "desktop",
+			"protected_paths": ["internal/"],
+			"enabled_modules": ["release-ops"]
+		}`
+		writeConfig(t, dir, body)
+
+		cfg, err := Load(dir)
+		if err != nil {
+			t.Fatalf("Load falhou: %v", err)
+		}
+
+		// 1. Ativa módulo válido
+		if err := cfg.EnableModule("data-model"); err != nil {
+			t.Fatalf("EnableModule(\"data-model\") retornou erro: %v", err)
+		}
+		if !cfg.IsModuleEnabled("data-model") {
+			t.Errorf("módulo data-model deveria estar habilitado")
+		}
+
+		// 2. Idempotência: ativar novamente não duplica
+		countBefore := len(cfg.EnabledModules)
+		if err := cfg.EnableModule("data-model"); err != nil {
+			t.Fatalf("EnableModule repetido falhou: %v", err)
+		}
+		if len(cfg.EnabledModules) != countBefore {
+			t.Errorf("EnableModule duplicou módulo: len antes=%d, depois=%d", countBefore, len(cfg.EnabledModules))
+		}
+
+		// 3. Normalização case-insensitive e trim
+		if err := cfg.EnableModule("  agent-auditor  "); err != nil {
+			t.Fatalf("EnableModule com espaços falhou: %v", err)
+		}
+		if !cfg.IsModuleEnabled("agent-auditor") {
+			t.Errorf("módulo agent-auditor deveria estar habilitado")
+		}
+
+		// 4. Erro ao tentar ativar módulo inexistente/inválido
+		invalidCases := []string{
+			"modulo-desconhecido",
+			"",
+			"   ",
+			"../escape",
+		}
+		for _, inv := range invalidCases {
+			if err := cfg.EnableModule(inv); err == nil {
+				t.Errorf("EnableModule(%q) esperava erro, retornou nil", inv)
+			}
+		}
+
+		// 5. Nil receiver safe
+		var nilCfg *Config
+		if err := nilCfg.EnableModule("data-model"); err == nil {
+			t.Errorf("nilCfg.EnableModule esperava erro, retornou nil")
+		}
+	})
+
+	t.Run("DisableModule", func(t *testing.T) {
+		dir := t.TempDir()
+		body := `{
+			"version": 1,
+			"project_type": "desktop",
+			"protected_paths": ["internal/"],
+			"enabled_modules": ["release-ops", "data-model"]
+		}`
+		writeConfig(t, dir, body)
+
+		cfg, err := Load(dir)
+		if err != nil {
+			t.Fatalf("Load falhou: %v", err)
+		}
+
+		// 1. Desativa módulo existente
+		if err := cfg.DisableModule("release-ops"); err != nil {
+			t.Fatalf("DisableModule(\"release-ops\") retornou erro: %v", err)
+		}
+		if cfg.IsModuleEnabled("release-ops") {
+			t.Errorf("módulo release-ops deveria estar desabilitado")
+		}
+
+		// 2. Idempotência: desativar módulo já inativo não falha
+		if err := cfg.DisableModule("release-ops"); err != nil {
+			t.Errorf("DisableModule repetido retornou erro: %v", err)
+		}
+		if err := cfg.DisableModule("query-performance"); err != nil {
+			t.Errorf("DisableModule em módulo nunca ativado retornou erro: %v", err)
+		}
+
+		// 3. Case-insensibilidade ao desativar
+		if err := cfg.DisableModule("DATA-MODEL"); err != nil {
+			t.Errorf("DisableModule case-insensitive retornou erro: %v", err)
+		}
+		if cfg.IsModuleEnabled("data-model") {
+			t.Errorf("módulo data-model ainda está ativo")
+		}
+
+		// 4. Nil receiver safe
+		var nilCfg *Config
+		if err := nilCfg.DisableModule("data-model"); err == nil {
+			t.Errorf("nilCfg.DisableModule esperava erro, retornou nil")
+		}
+	})
+
+	t.Run("Save", func(t *testing.T) {
+		dir := t.TempDir()
+		body := `{
+			"version": 1,
+			"project_type": "desktop",
+			"protected_paths": ["internal/", "cmd/"],
+			"editor_agents": ["dev-implementation", "test-writer"],
+			"enabled_modules": ["release-ops"]
+		}`
+		writeConfig(t, dir, body)
+
+		cfg, err := Load(dir)
+		if err != nil {
+			t.Fatalf("Load falhou: %v", err)
+		}
+
+		// Habilita novo módulo e salva
+		if err := cfg.EnableModule("context-loader"); err != nil {
+			t.Fatalf("EnableModule falhou: %v", err)
+		}
+
+		if err := cfg.Save(); err != nil {
+			t.Fatalf("Save falhou: %v", err)
+		}
+
+		// Recarrega do disco e valida persistência
+		reloaded, err := Load(dir)
+		if err != nil {
+			t.Fatalf("Load após Save falhou: %v", err)
+		}
+
+		if !reloaded.IsModuleEnabled("context-loader") {
+			t.Errorf("módulo context-loader não persistido após Save")
+		}
+		if !reloaded.IsModuleEnabled("release-ops") {
+			t.Errorf("módulo release-ops perdido após Save")
+		}
+		if reloaded.ProjectType != "desktop" {
+			t.Errorf("project_type corrompido: %q", reloaded.ProjectType)
+		}
+		if len(reloaded.ProtectedPaths) != 2 {
+			t.Errorf("protected_paths corrompido: %v", reloaded.ProtectedPaths)
+		}
+
+		// Nil receiver e root vazio
+		var nilCfg *Config
+		if err := nilCfg.Save(); err == nil {
+			t.Errorf("nilCfg.Save esperava erro, obteve nil")
+		}
+
+		emptyRootCfg := &Config{}
+		if err := emptyRootCfg.Save(); err == nil {
+			t.Errorf("Save com root vazio esperava erro, obteve nil")
+		}
+	})
+}
+
+func FuzzModuleManagement(f *testing.F) {
+	f.Add("data-model")
+	f.Add("release-ops")
+	f.Add("query-performance")
+	f.Add("migration-reviewer")
+	f.Add("agent-auditor")
+	f.Add("context-loader")
+	f.Add("unknown-mod")
+	f.Add("")
+	f.Add("   ")
+	f.Add("../path/traversal")
+	f.Add("DATA-MODEL")
+
+	dir := f.TempDir()
+	cfg := &Config{
+		root:           dir,
+		Version:        1,
+		ProjectType:    "desktop",
+		ProtectedPaths: []string{"internal/"},
+	}
+
+	f.Fuzz(func(t *testing.T, mod string) {
+		// Enable e Disable não devem entrar em panic com nenhuma entrada
+		_ = cfg.EnableModule(mod)
+		_ = cfg.DisableModule(mod)
+	})
+}

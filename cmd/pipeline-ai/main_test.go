@@ -436,3 +436,125 @@ func TestCLISensorJSON(t *testing.T) {
 		t.Errorf("res[\"ok\"] = %v, quer true", res["ok"])
 	}
 }
+
+func TestCLIModuleCommands(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := `{
+		"version": 1,
+		"project_type": "desktop",
+		"protected_paths": ["internal/"],
+		"editor_agents": ["dev-implementation"],
+		"enabled_modules": ["release-ops"]
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".pipeline-ai.json"), []byte(cfg), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. pipeline-ai module list
+	t.Run("module list", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"module", "list", "-dir", tmpDir}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Errorf("module list falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "release-ops") || !strings.Contains(out, "data-model") {
+			t.Errorf("module list não listou módulos esperados. Saída:\n%s", out)
+		}
+		// Deve indicar que release-ops está ativo
+		if !strings.Contains(strings.ToLower(out), "ativo") && !strings.Contains(strings.ToLower(out), "enabled") {
+			t.Errorf("module list não indicou status de ativação. Saída:\n%s", out)
+		}
+	})
+
+	// 2. pipeline-ai module enable <modulo>
+	t.Run("module enable valido", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"module", "enable", "data-model", "-dir", tmpDir}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("module enable falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+
+		data, err := os.ReadFile(filepath.Join(tmpDir, ".pipeline-ai.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var parsed struct {
+			EnabledModules []string `json:"enabled_modules"`
+		}
+		if err := json.Unmarshal(data, &parsed); err != nil {
+			t.Fatalf("JSON corrompido após enable: %v", err)
+		}
+		found := false
+		for _, m := range parsed.EnabledModules {
+			if m == "data-model" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("módulo data-model não foi persistido em enabled_modules: %v", parsed.EnabledModules)
+		}
+	})
+
+	// 3. pipeline-ai module disable <modulo>
+	t.Run("module disable valido", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"module", "disable", "release-ops", "-dir", tmpDir}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("module disable falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+
+		data, err := os.ReadFile(filepath.Join(tmpDir, ".pipeline-ai.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var parsed struct {
+			EnabledModules []string `json:"enabled_modules"`
+		}
+		if err := json.Unmarshal(data, &parsed); err != nil {
+			t.Fatalf("JSON corrompido após disable: %v", err)
+		}
+		for _, m := range parsed.EnabledModules {
+			if m == "release-ops" {
+				t.Errorf("módulo release-ops ainda consta em enabled_modules após disable")
+			}
+		}
+	})
+
+	// 4. pipeline-ai module enable <modulo-invalido>
+	t.Run("module enable invalido", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"module", "enable", "modulo-inexistente", "-dir", tmpDir}, &stdout, &stderr)
+		if exitCode == 0 {
+			t.Errorf("module enable com módulo inválido deveria falhar, obteve exitCode 0")
+		}
+		errStr := strings.ToLower(stderr.String())
+		if !strings.Contains(errStr, "inválido") && !strings.Contains(errStr, "invalido") && !strings.Contains(errStr, "desconhecido") {
+			t.Errorf("stderr esperava mensagem sobre módulo inválido, obteve: %s", stderr.String())
+		}
+	})
+
+	// 5. subcomandos inválidos ou argumentos ausentes
+	t.Run("subcomandos invalidos", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"module"}, &stdout, &stderr)
+		if exitCode == 0 {
+			t.Errorf("pipeline-ai module sem argumentos deveria falhar")
+		}
+
+		stdout.Reset()
+		stderr.Reset()
+		exitCode = run([]string{"module", "enable", "-dir", tmpDir}, &stdout, &stderr)
+		if exitCode == 0 {
+			t.Errorf("module enable sem nome do módulo deveria falhar")
+		}
+
+		stdout.Reset()
+		stderr.Reset()
+		exitCode = run([]string{"module", "comando-invalido"}, &stdout, &stderr)
+		if exitCode == 0 {
+			t.Errorf("module com comando inválido deveria falhar")
+		}
+	})
+}
