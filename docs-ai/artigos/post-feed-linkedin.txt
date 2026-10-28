@@ -1,0 +1,28 @@
+No meu último artigo, mostrei como construímos hooks de ciclo de vida em Go para impedir agentes de IA de quebrarem a branch principal.
+
+A governança funcionou. Mas logo surgiu o próximo grande vilão:
+
+👉 A FADIGA DE CONFIRMAÇÃO.
+
+Se você tem uma esteira de 16 skills especializadas e o orquestrador para a cada 90 segundos perguntando:
+"Testes escritos. Posso avançar? (Sim/Não)"
+
+...você deixa de ser um engenheiro de software e vira um apertador de botão em tempo integral.
+
+Para resolver isso e marcar o lançamento da v0.6.1 do Pipeline-AI, acabei de publicar o artigo sequencial:
+
+"Além dos Hooks: Como Construí uma Esteira de IA Autônoma sem Fadiga de Confirmação com Go e Antigravity"
+
+Neste artigo, compartilho:
+🔹 O Princípio da Não-Interrupção: autonomia contínua da issue ao Pull Request sem microgestão.
+🔹 Contratos Formais de Handoff: como evitar que a IA "engula" contexto entre etapas (com validação em Go e Fuzzing).
+🔹 Pipeline Runner Unificado (pipeline-ai run): cascata determinística (Doctor ➔ Sensor ➔ Validate) integrada via Model Context Protocol (MCP).
+🔹 A Armadilha do Autoteste Negativo: por que "0 erros" engana modelos e humanos quando nenhum teste foi executado, e como blindamos isso.
+🔹 Caminhos Imutáveis (immutable_paths): impedindo a IA de alterar as próprias regras de segurança para "fazer o build passar".
+🔹 Caso real com mais de 640 testes passando em produção (Desktop Wails v3 + API Go/PostgreSQL).
+
+Confira o artigo completo na minha newsletter / artigos do LinkedIn! 👇
+
+Link do repositório open-source: https://github.com/rodrigodosanjosoliveira/pipeline-ai
+
+#EngenhariaDeSoftware #Go #InteligenciaArtificial #GoogleAntigravity #AgentesAutonomos #DevOps #Testing
