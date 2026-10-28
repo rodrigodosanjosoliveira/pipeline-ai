@@ -996,3 +996,62 @@ func TestMCPToolsGetMetrics(t *testing.T) {
 		t.Fatalf("esperava isError=false para pipeline_get_metrics: %v", callResult)
 	}
 }
+
+func TestMCPToolsGetDashboardHTML(t *testing.T) {
+	dir := t.TempDir()
+	s := NewServer(dir)
+
+	// 1. tools/list contém pipeline_get_dashboard_html
+	listPayload := `{"jsonrpc":"2.0","id":130,"method":"tools/list"}`
+	res := runRPC(t, s, listPayload)
+	result, ok := res["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result inválido no tools/list: %v", res)
+	}
+	tools, ok := result["tools"].([]any)
+	if !ok {
+		t.Fatalf("tools inválido no tools/list: %v", result)
+	}
+	var found bool
+	for _, raw := range tools {
+		tool, ok := raw.(map[string]any)
+		if ok && tool["name"] == "pipeline_get_dashboard_html" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("pipeline_get_dashboard_html não encontrado em tools/list")
+	}
+
+	// 2. tools/call pipeline_get_dashboard_html
+	callPayload := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      131,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "pipeline_get_dashboard_html",
+			"arguments": map[string]any{
+				"dir": dir,
+			},
+		},
+	}
+	reqBytes, _ := json.Marshal(callPayload)
+	callRes := runRPC(t, s, string(reqBytes))
+	callResult, ok := callRes["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("esperava result em tools/call pipeline_get_dashboard_html, obteve: %v", callRes)
+	}
+	if callResult["isError"] == true {
+		t.Fatalf("esperava isError=false para pipeline_get_dashboard_html: %v", callResult)
+	}
+	content, ok := callResult["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatalf("esperava content no retorno do dashboard HTML: %v", callResult)
+	}
+	firstItem, _ := content[0].(map[string]any)
+	htmlText, _ := firstItem["text"].(string)
+	if !strings.Contains(htmlText, "<html") {
+		t.Errorf("conteúdo retornado não contém tag <html: %q", htmlText)
+	}
+}

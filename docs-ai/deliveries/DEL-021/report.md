@@ -2,7 +2,7 @@
 delivery_id: DEL-021
 task_code: TASK-021
 title: "Release v0.7.0: Consolidação de telemetria, métricas DORA, pipeline runner e orquestração autônoma"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

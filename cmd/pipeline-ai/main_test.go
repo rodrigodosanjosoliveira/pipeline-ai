@@ -847,3 +847,54 @@ func TestCLIMetricsCommand(t *testing.T) {
 		}
 	})
 }
+
+func TestCLIDashboard(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Configura ambiente mínimo com INDEX.md
+	delivDir := filepath.Join(tmpDir, "docs-ai", "deliveries")
+	if err := os.MkdirAll(delivDir, 0755); err != nil {
+		t.Fatalf("falha ao criar docs-ai/deliveries: %v", err)
+	}
+	indexContent := "| ID | Task | Título | Tipo | Data | Status |\n|---|---|---|---|---|---|\n| DEL-001 | TASK-001 | Teste Dashboard | feat | 2026-10-28 | merged |\n"
+	if err := os.WriteFile(filepath.Join(delivDir, "INDEX.md"), []byte(indexContent), 0644); err != nil {
+		t.Fatalf("falha ao criar INDEX.md: %v", err)
+	}
+
+	t.Run("dashboard saída padrão stdout", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"dashboard", "-dir", tmpDir}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("dashboard falhou: code=%d, stderr:\n%s", code, stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "<!DOCTYPE html>") && !strings.Contains(out, "<html") {
+			t.Errorf("saída esperada contendo HTML, obteve:\n%s", out)
+		}
+	})
+
+	t.Run("dashboard com flag -output", func(t *testing.T) {
+		outFile := filepath.Join(tmpDir, "relatorio-dashboard.html")
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"dashboard", "-dir", tmpDir, "-output", outFile}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("dashboard -output falhou: code=%d, stderr:\n%s", code, stderr.String())
+		}
+		content, err := os.ReadFile(outFile)
+		if err != nil {
+			t.Fatalf("falha ao ler arquivo gerado %s: %v", outFile, err)
+		}
+		if !strings.Contains(string(content), "<html") {
+			t.Errorf("arquivo gerado não contém tags html: %s", string(content))
+		}
+	})
+
+	t.Run("dashboard com diretório inválido para -output", func(t *testing.T) {
+		invalidOutput := filepath.Join(tmpDir, "inexistente", "sub", "dashboard.html")
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"dashboard", "-dir", tmpDir, "-output", invalidOutput}, &stdout, &stderr)
+		if code == 0 {
+			t.Errorf("esperava código de erro para caminho inválido de saída, obteve 0")
+		}
+	})
+}

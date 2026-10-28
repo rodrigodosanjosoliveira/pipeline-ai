@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/dashboard"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/handoff"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/metrics"
@@ -414,6 +415,19 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 					"window_days": map[string]any{
 						"type":        "number",
 						"description": "Janela temporal de cálculo em dias (opcional)",
+					},
+				},
+			},
+		},
+		{
+			Name:        "pipeline_get_dashboard_html",
+			Description: "Gera o dashboard HTML interativo, autocontido e responsivo com métricas DORA, histórico de entregas e governança do pipeline.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"dir": map[string]any{
+						"type":        "string",
+						"description": "Diretório raiz do projeto a ser analisado (padrão: raiz atual)",
 					},
 				},
 			},
@@ -1014,6 +1028,54 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 				{
 					Type: "text",
 					Text: string(rawJSON),
+				},
+			},
+			IsError: false,
+		})
+
+	case "pipeline_get_dashboard_html":
+		targetDir := s.RootDir
+		if rawDir, ok := params.Arguments["dir"].(string); ok && strings.TrimSpace(rawDir) != "" {
+			if filepath.IsAbs(rawDir) {
+				targetDir = rawDir
+			} else {
+				targetDir = filepath.Join(s.RootDir, rawDir)
+			}
+		}
+
+		data, err := dashboard.CollectDashboardData(targetDir)
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("erro ao coletar dados do dashboard: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		html, err := dashboard.RenderHTML(data)
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("erro ao renderizar dashboard HTML: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		s.sendResult(out, req.ID, ToolResult{
+			Content: []ToolContent{
+				{
+					Type: "text",
+					Text: html,
 				},
 			},
 			IsError: false,

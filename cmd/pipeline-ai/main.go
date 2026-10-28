@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/dashboard"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/handoff"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/hook"
@@ -100,6 +101,9 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	case "metrics":
 		return runMetrics(cmdArgs, stdout, stderr)
 
+	case "dashboard":
+		return runDashboard(cmdArgs, stdout, stderr)
+
 	case "mcp":
 		return runMCP(cmdArgs, stdin, stdout, stderr)
 
@@ -124,6 +128,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  module     Gerencia módulos opcionais do pipeline (list, enable, disable)")
 	fmt.Fprintln(w, "  sensor     Executa os sensores de qualidade (fmt, vet, test) com saída estruturada")
 	fmt.Fprintln(w, "  metrics    Exibe métricas de engenharia e governança DORA (summary, list)")
+	fmt.Fprintln(w, "  dashboard  Gera e renderiza dashboard HTML interativo de engenharia e métricas")
 	fmt.Fprintln(w, "  mcp        Executa o servidor MCP sobre stdio (JSON-RPC 2.0)")
 	fmt.Fprintln(w, "  version    Exibe a versão do pipeline-ai")
 	fmt.Fprintln(w, "  help       Exibe esta mensagem de ajuda")
@@ -823,4 +828,56 @@ func runMetrics(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "metrics: subcomando desconhecido: %q (use 'summary' ou 'list')\n", subcmd)
 		return 1
 	}
+}
+
+func runDashboard(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("dashboard", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	dir := fs.String("dir", ".", "diretório raiz do projeto")
+	output := fs.String("output", "", "caminho para gravar o arquivo HTML")
+	asJSON := fs.Bool("json", false, "emite os dados do dashboard em JSON")
+
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	absDir, err := filepath.Abs(*dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "dashboard: diretório inválido: %v\n", err)
+		return 1
+	}
+
+	data, err := dashboard.CollectDashboardData(absDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "dashboard: erro ao coletar dados: %v\n", err)
+		return 1
+	}
+
+	if *asJSON {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(data); err != nil {
+			fmt.Fprintf(stderr, "dashboard: erro ao serializar JSON: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
+	html, err := dashboard.RenderHTML(data)
+	if err != nil {
+		fmt.Fprintf(stderr, "dashboard: erro ao renderizar HTML: %v\n", err)
+		return 1
+	}
+
+	if *output != "" {
+		if err := os.WriteFile(*output, []byte(html), 0644); err != nil {
+			fmt.Fprintf(stderr, "dashboard: erro ao gravar arquivo %s: %v\n", *output, err)
+			return 1
+		}
+		return 0
+	}
+
+	fmt.Fprint(stdout, html)
+	return 0
 }
