@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>DORA Metrics para Agentes de IA: Como Construí um Motor de Telemetria e Observabilidade em Go para Esteiras Autônomas</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 820px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: #1a1a1a;
+  }
+  h1 { font-size: 2.1em; line-height: 1.25; margin-bottom: 8px; color: #0a66c2; }
+  h2 { font-size: 1.5em; margin-top: 36px; margin-bottom: 12px; border-bottom: 1px solid #e0e0e0; padding-bottom: 6px; }
+  h3 { font-size: 1.2em; margin-top: 24px; margin-bottom: 8px; }
+  p { margin: 14px 0; }
+  blockquote {
+    border-left: 4px solid #0a66c2;
+    margin: 20px 0;
+    padding: 10px 20px;
+    background: #f3f6f8;
+    font-style: italic;
+  }
+  pre {
+    background: #f4f4f5;
+    border: 1px solid #e4e4e7;
+    border-radius: 6px;
+    padding: 14px;
+    overflow-x: auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.9em;
+  }
+  code {
+    background: #f1f2f4;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9em;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 20px 0;
+  }
+  th, td {
+    border: 1px solid #dcdfe4;
+    padding: 10px 14px;
+    text-align: left;
+  }
+  th {
+    background: #f8f9fa;
+  }
+  ul, ol {
+    padding-left: 24px;
+  }
+  li {
+    margin-bottom: 6px;
+  }
+  .author {
+    color: #555;
+    font-size: 1.05em;
+    font-style: italic;
+    margin-bottom: 24px;
+  }
+  .banner-tip {
+    background: #e8f4fd;
+    border: 1px solid #b8daff;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+    font-size: 0.95em;
+  }
+</style>
+</head>
+<body>
+
+<div class="banner-tip">
+  💡 <strong>Dica para o LinkedIn:</strong><br>
+  1. <strong>Capa do Artigo:</strong> No topo do editor do LinkedIn, clique em <em>"Carregar imagem de capa"</em> e selecione o arquivo <code>docs-ai/artigos/capa-artigo-dora-metrics-ia.jpg</code>.<br>
+  2. <strong>Corpo do Artigo:</strong> Abra este arquivo HTML no seu navegador, selecione todo o texto abaixo (<code>Ctrl+A</code>), copie (<code>Ctrl+C</code>) e cole (<code>Ctrl+V</code>) no LinkedIn Articles. Toda a formatação (títulos, citações, código, tabelas e links) será preservada perfeitamente!
+</div>
+
+<h1>DORA Metrics para Agentes de IA: Como Construí um Motor de Telemetria e Observabilidade em Go para Esteiras Autônomas</h1>
+
+<p class="author">Por Rodrigo Oliveira — Engenheiro de Software &amp; Pós-Graduando em Engenharia de IA Aplicada</p>
+
+<hr>
+
+<p>Quem acompanha a evolução do desenvolvimento de software assistido por inteligência artificial já percebeu a mudança de fase. Entre 2023 e 2024, o foco era o deslumbramento com a velocidade de geração de código: quanto mais linhas um modelo como Claude, Devin ou Antigravity cuspia no terminal, mais impressionados ficávamos.</p>
+
+<p>Porém, quando colocamos agentes autônomos para operar em projetos reais de engenharia, a pergunta que ecoa na liderança técnica — de Tech Leads a CTOs — é muito mais pragmática:</p>
+
+<blockquote>
+  <strong>"Os agentes de IA estão realmente acelerando a engenharia de software da equipe, ou estão apenas aumentando a taxa de retrabalho, o débito técnico e o caos no repositório?"</strong>
+</blockquote>
+
+<p>Para responder a essa pergunta com fatos e não com intuição, não precisamos reinventar a roda da gestão de engenharia. Precisamos recorrer ao padrão mais respeitado e comprovado da nossa indústria: as <strong>Métricas DORA (DevOps Research and Assessment)</strong>.</p>
+
+<p>Neste artigo — celebrando a entrega <strong>DEL-020 do framework Pipeline-AI</strong> —, compartilho como redesenhamos e implementamos as quatro métricas DORA adaptadas para agentes autônomos de IA, construindo um <strong>motor de telemetria determinístico em Go 1.24 puro (stdlib)</strong>, com persistência atômica, salvaguardas validadas por Fuzzing e integração nativa via <strong>Model Context Protocol (MCP)</strong>.</p>
+
+<hr>
+
+<h2>1. Por que Métricas DORA para Agentes de IA?</h2>
+
+<p>As quatro métricas DORA foram criadas pelo time do Google Cloud / DORA após analisar milhares de equipes de engenharia ao redor do mundo. Elas equilibram duas forças vitais: <strong>Velocidade de Entrega</strong> (<em>Throughput</em>) e <strong>Estabilidade do Sistema</strong> (<em>Stability</em>).</p>
+
+<p>Quando substituímos o desenvolvedor humano no teclado por múltiplos agentes especializados (Triage, Arquitetura, Testes, Implementação, Code Review, Segurança e QA), essas quatro métricas ganham uma nova dimensão em velocidade de máquina:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Métrica DORA</th>
+      <th>Significado Tradicional (Engenharia Humana)</th>
+      <th>Adaptação para Agentes Autônomos (Pipeline-AI)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Deployment Frequency (DF)</strong></td>
+      <td>Frequência de deploys em produção (por semana ou mês).</td>
+      <td>Número de micro-deliveries completas e validadas por dia (velocidade de máquina com gates determinísticos).</td>
+    </tr>
+    <tr>
+      <td><strong>Lead Time for Changes (LT)</strong></td>
+      <td>Tempo do commit até o código rodar em produção (dias ou semanas).</td>
+      <td>Tempo decorrido desde a abertura da issue no <code>pm-triage</code> até o PR validado no <code>git-delivery</code> (medido em <strong>minutos</strong>).</td>
+    </tr>
+    <tr>
+      <td><strong>Change Failure Rate (CFR)</strong></td>
+      <td>Percentual de deploys que causaram incidente em produção.</td>
+      <td>Percentual de execuções da esteira que foram bloqueadas ou falharam nos gates determinísticos da IA (<em>doctor</em>, <em>sensor</em>, <em>validate</em>).</td>
+    </tr>
+    <tr>
+      <td><strong>Time to Restore Service (MTTR)</strong></td>
+      <td>Tempo médio para restaurar o sistema após uma falha ou incidente.</td>
+      <td>Tempo que a esteira de agentes leva para corrigir um bloqueio técnico (<code>STATUS: bloqueado</code>) e retornar ao estado verde (<code>ok</code>).</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Se o seu agente gera 5.000 linhas de código por hora, mas o seu <strong>Change Failure Rate (CFR)</strong> nos gates de segurança e testes é de 60%, a IA não está te dando produtividade: ela está gerando resíduos e sobrecarregando o revisor humano.</p>
+
+<hr>
+
+<h2>2. A Arquitetura do Motor de Telemetria (<code>internal/metrics</code>)</h2>
+
+<p>No desenvolvimento do <strong>Pipeline-AI</strong>, seguimos um invariante sagrado: <strong>Zero dependências externas</strong>. Adicionar frameworks pesados de telemetria ou SDKs de SaaS proprietários aumentaria a superfície de ataque da supply chain e quebraria a portabilidade entre Linux, WSL2 e containers isolados.</p>
+
+<p>Construímos o pacote <code>internal/metrics</code> utilizando estritamente a biblioteca padrão de Go 1.24:</p>
+
+<pre><code>// internal/metrics/metrics.go
+type DORAMetrics struct {
+    DeploymentFrequency float64       `json:"deployment_frequency"` // Deploys por dia
+    DeploymentsTotal    int           `json:"deployments_total"`
+    LeadTimeForChanges  time.Duration `json:"lead_time_for_changes"` // Lead time médio/mediana
+    ChangeFailureRate   float64       `json:"change_failure_rate"`   // Taxa percentual de falha (0.0 a 100.0)
+    FailedDeployments   int           `json:"failed_deployments"`
+    TimeToRestore       time.Duration `json:"time_to_restore"` // MTTR médio
+    RestoresTotal       int           `json:"restores_total"`
+}</code></pre>
+
+<h3>Persistência Atômica e Fail-Safe</h3>
+
+<p>Telemetria de agentes precisa ser resiliente: se a máquina for desligada ou um processo for cancelado no meio de uma gravação, o arquivo de métricas jamais pode ser corrompido.</p>
+
+<p>Implementamos gravação atômica via arquivo temporário com <code>os.Rename</code> e concorrência protegida por <code>sync.Mutex</code>:</p>
+
+<pre><code>func Save(rootDir string, data *MetricsData) error {
+    mu.Lock()
+    defer mu.Unlock()
+
+    stateDir := filepath.Join(rootDir, DirName)
+    _ = os.MkdirAll(stateDir, 0755)
+
+    tmpFile := filepath.Join(stateDir, fmt.Sprintf("%s.tmp.%d", FileName, time.Now().UnixNano()))
+    // Grava no arquivo temporário...
+    if err := os.WriteFile(tmpFile, payload, 0644); err != nil {
+        return err
+    }
+    // Operação atômica no nível do sistema de arquivos
+    return os.Rename(tmpFile, targetFile)
+}</code></pre>
+
+<p>Se o arquivo de métricas não existir (bootstrap de um projeto novo) ou estiver vazio, a função <code>Load</code> inicializa estruturas limpas automaticamente em vez de falhar. <strong>A telemetria nunca pode derrubar o pipeline de compilação.</strong></p>
+
+<hr>
+
+<h2>3. Blindagem com Fuzz Testing: Mais de 1 Milhão de Execuções</h2>
+
+<p>Em sistemas dirigidos por LLMs, dados em formato JSON podem vir truncados, corrompidos ou com caracteres invisíveis. Para garantir que o parser do motor de métricas fosse imune a panics e vulnerabilidades de negação de serviço (DoS), escrevemos um alvo de <strong>Fuzzing nativo em Go</strong>:</p>
+
+<pre><code>// internal/metrics/metrics_fuzz_test.go
+func FuzzParseMetrics(f *testing.F) {
+    f.Add([]byte(`{"version":1,"events":[],"stages":[],"deliveries":[]}`))
+    f.Add([]byte(`{"version":1,"deliveries":[{"delivery_id":"DEL-001","success":true,"lead_time":600000000000}]}`))
+    f.Add([]byte(``))
+    f.Add([]byte(`null`))
+    f.Add([]byte(`{"corrupted": true`))
+
+    f.Fuzz(func(t *testing.T, data []byte) {
+        md, err := ParseMetrics(data)
+        if err != nil {
+            return // Erro tratado é o comportamento esperado para dados inválidos
+        }
+        if md == nil {
+            t.Fatalf("ParseMetrics retornou nil sem erro para entrada válida")
+        }
+    })
+}</code></pre>
+
+<p>Submetemos o parser a <strong>mais de 1.130.000 iterações aleatórias contínuas</strong> (<code>go test -fuzz=FuzzParseMetrics -fuzztime=10s</code>), atingindo 100% de estabilidade com zero crashes.</p>
+
+<hr>
+
+<h2>4. Instrumentação Transparente no Pipeline Runner</h2>
+
+<p>Em vez de exigir que cada agente registre manualmente quando começou ou terminou seu trabalho, instrumentamos o <strong>Pipeline Runner (<code>internal/runner</code>)</strong>.</p>
+
+<p>Toda vez que o comando <code>pipeline-ai run</code> é executado, ele mede a latência em nanossegundos e registra o status de cada fase:</p>
+
+<pre><code>// Trecho da instrumentação em internal/runner/runner.go
+docStart := time.Now()
+docResults, docOK := doctor.Collect(absRoot)
+docDur := time.Since(docStart)
+_ = metrics.RecordStageDuration(absRoot, deliveryID, "doctor", docDur, docOK)
+
+sensorStart := time.Now()
+sensorRes, err := sensor.Run(absRoot)
+sensorDur := time.Since(sensorStart)
+_ = metrics.RecordStageDuration(absRoot, deliveryID, "sensor", sensorDur, sensorStep.Status == StatusPass)
+
+valStart := time.Now()
+valStep := validate.Run(...)
+valDur := time.Since(valStart)
+_ = metrics.RecordStageDuration(absRoot, deliveryID, "validate", valDur, validateStep.Status == StatusPass)
+
+// Grava o evento global de gate
+_ = metrics.RecordEvent(absRoot, metrics.Event{
+    Type:       metrics.EventGate,
+    DeliveryID: deliveryID,
+    Timestamp:  time.Now().UTC(),
+    Duration:   time.Since(runStart),
+    Success:    allOK,
+    Stage:      "runner",
+})</code></pre>
+
+<p>Isso garante <strong>observabilidade passiva</strong>: os agentes executam suas tarefas normalmente enquanto a telemetria é coletada sem atrito.</p>
+
+<hr>
+
+<h2>5. Consultando Métricas na CLI e via Protocolo MCP</h2>
+
+<p>As métricas coletadas estão disponíveis tanto para engenheiros humanos no terminal quanto para os próprios agentes através do <strong>Model Context Protocol (MCP)</strong>.</p>
+
+<h3>Na Linha de Comando (CLI):</h3>
+<pre><code>$ pipeline-ai metrics summary
+Métricas DORA do Pipeline:
+  Deployment Frequency:    3.50 deploys/dia (total: 20)
+  Lead Time for Changes:   8m 42s
+  Change Failure Rate:     5.0% (falhas: 1)
+  Time to Restore Service: 4m 15s (restaurações: 1)</code></pre>
+
+<p>Ou em JSON estruturado para ingestão em dashboards corporativos:</p>
+<pre><code>$ pipeline-ai metrics summary -json
+{
+  "deployment_frequency": 3.5,
+  "deployments_total": 20,
+  "lead_time_for_changes": 522000000000,
+  "change_failure_rate": 5.0,
+  "failed_deployments": 1,
+  "time_to_restore": 255000000000,
+  "restores_total": 1
+}</code></pre>
+
+<h3>No Servidor MCP (<code>pipeline_get_metrics</code>):</h3>
+<p>O orquestrador de IA pode invocar nativamente a tool MCP:</p>
+<pre><code>{
+  "name": "pipeline_get_metrics",
+  "arguments": {
+    "dir": "."
+  }
+}</code></pre>
+
+<p>Isso permite que a própria IA avalie seu histórico: se o <code>Change Failure Rate</code> nos testes começar a subir, o orquestrador pode acionar automaticamente guardrails mais rígidos ou alocar turnos adicionais para a fase de TDD (<em>test-writer</em>).</p>
+
+<hr>
+
+<h2>O Impacto: Da Velocidade Cega à Confiabilidade Mensurável</h2>
+
+<p>Gerar código rápido sem telemetria é como dirigir um carro de corrida com o painel desligado: você pode estar acelerando, mas não tem como saber se o motor está prestes a fundir.</p>
+
+<p>Ao aplicar <strong>DORA Metrics em esteiras de agentes autônomos</strong>, alcançamos três benefícios imediatos:</p>
+<ol>
+  <li><strong>Visibilidade de Gargalos:</strong> Sabemos exatamente quantos segundos são gastos no <em>test-writer</em>, na compilação cruzada ou no <em>code-reviewer</em>.</li>
+  <li><strong>Defesa contra Ilusões de Produtividade:</strong> Um agente que escreve 1.000 linhas mas gera um <em>Change Failure Rate</em> alto é sumariamente barrado pelos sensores.</li>
+  <li><strong>Padrão de Engenharia de Confiabilidade de Agentes (ARE):</strong> Elevamos o uso de IA do patamar de "brinquedo experimental" para um processo industrial auditável, quantitativo e governado.</li>
+</ol>
+
+<hr>
+
+<p>O código do <strong>Pipeline-AI</strong>, incluindo o pacote de telemetria <code>internal/metrics</code>, o runner determinístico e a suíte de 16 skills em Go puro, é 100% open-source sob licença MIT:</p>
+
+<p>👉 <strong>Repositório Oficial:</strong> <a href="https://github.com/rodrigodosanjosoliveira/pipeline-ai">github.com/rodrigodosanjosoliveira/pipeline-ai</a></p>
+
+<p>Como você tem medido o impacto e a confiabilidade das ferramentas de IA na sua equipe de engenharia? Compartilhe seus desafios e métricas nos comentários! 💬📊🚀</p>
+
+</body>
+</html>

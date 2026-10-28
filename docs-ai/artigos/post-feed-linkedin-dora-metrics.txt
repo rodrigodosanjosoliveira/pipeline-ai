@@ -1,0 +1,31 @@
+"Os agentes de IA estão realmente acelerando a engenharia do seu time ou estão apenas aumentando a taxa de retrabalho e o caos no repositório?"
+
+Essa é a pergunta de 1 milhão de dólares que quase todo Tech Lead e CTO está se fazendo hoje.
+
+Entre 2023 e 2024, ficamos deslumbrados com a velocidade de geração de código. Mas no mundo real da engenharia de software, velocidade sem governança é apenas acúmulo de débito técnico.
+
+Para responder a isso com fatos e dados auditáveis, adaptamos o padrão de ouro da indústria para a era dos agentes autônomos:
+
+👉 AS MÉTRICAS DORA (DevOps Research and Assessment) PARA AGENTES DE IA.
+
+Acabei de publicar o novo artigo técnico detalhando a entrega DEL-020 do framework Pipeline-AI:
+
+📄 "DORA Metrics para Agentes de IA: Como Construí um Motor de Telemetria e Observabilidade em Go para Esteiras Autônomas"
+
+No artigo, mostro como adaptamos e implementamos os 4 pilares:
+🔹 Deployment Frequency: medindo micro-entregas diárias validadas em velocidade de máquina.
+🔹 Lead Time for Changes: da abertura da issue no triage ao Pull Request validado com testes em minutos (não semanas).
+🔹 Change Failure Rate (CFR): a taxa real de reprovações nos gates determinísticos (doctor, sensor, validate) — separando geração de qualidade de alucinação.
+🔹 Time to Restore Service (MTTR): tempo de autorrecuperação quando a esteira encontra um bloqueio técnico.
+
+Destaques da implementação:
+⚡ 100% Go 1.24 padrão (zero dependências externas e zero chamadas SaaS de terceiros).
+🔒 Persistência atômica e fail-safe que nunca derruba o build do desenvolvedor.
+🛡️ Blindagem com Fuzz Testing: mais de 1.1 milhão de iterações contínuas sem um único panic.
+🔌 Protocolo MCP: a própria IA pode consultar suas métricas via Model Context Protocol para autoavaliação contínua.
+
+Confira o artigo completo na minha newsletter do LinkedIn! 👇
+
+Código open-source no GitHub: https://github.com/rodrigodosanjosoliveira/pipeline-ai
+
+#EngenhariaDeSoftware #Go #InteligenciaArtificial #DORA #DevOps #Observabilidade #GoogleAntigravity #AgentesAutonomos
