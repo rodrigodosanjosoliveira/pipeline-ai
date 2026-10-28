@@ -15,6 +15,7 @@ import (
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/handoff"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/metrics"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/runner"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
@@ -396,6 +397,23 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 					"file": map[string]any{
 						"type":        "string",
 						"description": "Caminho do arquivo contendo o bloco de handoff",
+					},
+				},
+			},
+		},
+		{
+			Name:        "pipeline_get_metrics",
+			Description: "Obtém as métricas de engenharia e governança DORA e o resumo de entregas do projeto.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"dir": map[string]any{
+						"type":        "string",
+						"description": "Diretório raiz do projeto a ser analisado (padrão: raiz atual)",
+					},
+					"window_days": map[string]any{
+						"type":        "number",
+						"description": "Janela temporal de cálculo em dias (opcional)",
 					},
 				},
 			},
@@ -936,6 +954,69 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 				},
 			},
 			IsError: !res.Valid,
+		})
+
+	case "pipeline_get_metrics":
+		targetDir := s.RootDir
+		if rawDir, ok := params.Arguments["dir"].(string); ok && strings.TrimSpace(rawDir) != "" {
+			if filepath.IsAbs(rawDir) {
+				targetDir = rawDir
+			} else {
+				targetDir = filepath.Join(s.RootDir, rawDir)
+			}
+		}
+
+		var opts []metrics.DORAOptions
+		if rawDays, ok := params.Arguments["window_days"].(float64); ok && rawDays > 0 {
+			opts = append(opts, metrics.DORAOptions{
+				Window: time.Duration(rawDays * 24 * float64(time.Hour)),
+			})
+		}
+
+		dora, err := metrics.GetDORA(targetDir, opts...)
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("erro ao obter métricas DORA: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		data, _ := metrics.Load(targetDir)
+
+		resMap := map[string]any{
+			"dora":       dora,
+			"deliveries": len(data.Deliveries),
+			"events":     len(data.Events),
+			"stages":     len(data.Stages),
+		}
+		rawJSON, err := json.MarshalIndent(resMap, "", "  ")
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("erro ao serializar métricas: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		s.sendResult(out, req.ID, ToolResult{
+			Content: []ToolContent{
+				{
+					Type: "text",
+					Text: string(rawJSON),
+				},
+			},
+			IsError: false,
 		})
 
 	default:

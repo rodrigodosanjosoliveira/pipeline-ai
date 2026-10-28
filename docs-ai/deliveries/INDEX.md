@@ -7,6 +7,7 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
+| DEL-020 | TASK-020 | Métricas DORA e telemetria de agentes de IA no runner e servidor MCP | feat | 2026-10-28 | draft |
 | DEL-019 | TASK-019 | Suporte automático a cross-compilação desktop (CGO_ENABLED=0 GOOS=windows) no sensor e runner | feat | 2026-10-27 | draft |
 | DEL-018 | TASK-018 | Auditoria automatizada da matriz de rastreabilidade e validação de handoffs (C12) | feat | 2026-10-27 | merged |
 | DEL-017 | TASK-017 | Pipeline Runner CLI (pipeline-ai run) e MCP Tool para orquestração de gates em lote | feat | 2026-10-27 | draft |
