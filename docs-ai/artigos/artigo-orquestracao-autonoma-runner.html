@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Além dos Hooks: Como Construí uma Esteira de IA Autônoma sem "Fadiga de Confirmação" com Go e Antigravity</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 820px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: #1a1a1a;
+  }
+  h1 { font-size: 2.2em; line-height: 1.25; margin-bottom: 8px; color: #0a66c2; }
+  h2 { font-size: 1.6em; margin-top: 36px; margin-bottom: 12px; border-bottom: 1px solid #e0e0e0; padding-bottom: 6px; }
+  h3 { font-size: 1.25em; margin-top: 24px; margin-bottom: 8px; }
+  p { margin: 14px 0; }
+  blockquote {
+    border-left: 4px solid #0a66c2;
+    margin: 20px 0;
+    padding: 10px 20px;
+    background: #f3f6f8;
+    font-style: italic;
+  }
+  pre {
+    background: #f4f4f5;
+    border: 1px solid #e4e4e7;
+    border-radius: 6px;
+    padding: 14px;
+    overflow-x: auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.9em;
+  }
+  code {
+    background: #f1f2f4;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9em;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 20px 0;
+  }
+  th, td {
+    border: 1px solid #dcdfe4;
+    padding: 10px 14px;
+    text-align: left;
+  }
+  th {
+    background: #f8f9fa;
+  }
+  ul, ol {
+    padding-left: 24px;
+  }
+  li {
+    margin-bottom: 6px;
+  }
+  .author {
+    color: #555;
+    font-size: 1.05em;
+    font-style: italic;
+    margin-bottom: 24px;
+  }
+  .banner-tip {
+    background: #e8f4fd;
+    border: 1px solid #b8daff;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+    font-size: 0.95em;
+  }
+</style>
+</head>
+<body>
+
+<div class="banner-tip">
+  💡 <strong>Dica para o LinkedIn:</strong><br>
+  1. <strong>Capa do Artigo:</strong> No topo do editor do LinkedIn, clique em <em>"Carregar imagem de capa"</em> e selecione o arquivo <code>docs-ai/artigos/capa-artigo-orquestracao-autonoma.jpg</code>.<br>
+  2. <strong>Corpo do Artigo:</strong> Abra este arquivo HTML no seu navegador, selecione todo o texto abaixo (<code>Ctrl+A</code>), copie (<code>Ctrl+C</code>) e cole (<code>Ctrl+V</code>) no LinkedIn. Toda a formatação (títulos, citações, código, tabelas e links) será preservada perfeitamente!
+</div>
+
+<h1>Além dos Hooks: Como Construí uma Esteira de IA Autônoma sem "Fadiga de Confirmação" com Go e Antigravity</h1>
+
+<p class="author">Por Rodrigo Oliveira — Engenheiro de Software &amp; Pós-Graduando em Engenharia de IA Aplicada</p>
+
+<hr>
+
+<p>No meu <a href="https://www.linkedin.com/pulse/o-gargalo-da-ia-n%C3%A3o-%C3%A9-gerar-c%C3%B3digo-governar-como-um-com-oliveira-aihpf/">artigo anterior</a>, discuti uma lição dolorosa da engenharia de software na era dos agentes inteligentes: <strong>o gargalo da IA não é a velocidade de gerar código, mas a capacidade de governá-lo determinística e rigidamente</strong>.</p>
+
+<p>Para resolver as alucinações e os commits desastrosos em branches principais, criei o <strong>Pipeline-AI</strong>: uma arquitetura baseada em <strong>Zero-Trust com hooks de ciclo de vida (<code>PreToolUse</code>) em Go puro</strong> e uma esteira especializada de 16 skills conectada nativamente ao ecossistema do <strong>Google Antigravity</strong>.</p>
+
+<p>A governança funcionou. Os agentes pararam de destruir o repositório. Mas, logo após a implementação, nos deparamos com o próximo grande vilão do desenvolvimento com agentes autônomos:</p>
+
+<blockquote>
+  <strong>A Fadiga de Confirmação.</strong>
+</blockquote>
+
+<p>Se para cada uma das 16 etapas o orquestrador pausar e perguntar:<br>
+<em>"Testes escritos com sucesso. Deseja que eu execute o dev-implementation? (Sim/Não)"</em><br>
+...você deixa de ser um engenheiro de software de alto nível e vira um <strong>"apertador de Enter em tempo integral"</strong>.</p>
+
+<p>Neste artigo — que marca o lançamento da versão <strong>v0.6.1 do Pipeline-AI</strong> —, compartilho como transformamos essa esteira estrita em um <strong>fluxo autônomo contínuo</strong>, introduzindo o <strong>Princípio da Não-Interrupção</strong>, validação formal de <em>handoff contracts</em>, salvaguardas contra autotestes falsos-positivos e um <strong>Pipeline Runner unificado em Go integrado via Model Context Protocol (MCP)</strong>.</p>
+
+<hr>
+
+<h2>1. O Paradoxo da Microgestão de Agentes</h2>
+
+<p>Quando começamos a construir sistemas multiagentes, o instinto inicial é aplicar barreiras de segurança manuais em todas as transições:</p>
+
+<pre><code>[pm-triage] → "Posso avançar?" → Humano: "Sim"
+  → [architecture-guardrails] → "Posso avançar?" → Humano: "Sim"
+    → [test-writer] → "Posso avançar?" → Humano: "Sim"
+      → [dev-implementation] → "Posso avançar?" → Humano: "Sim"
+        → [code-reviewer] → "Posso avançar?" → Humano: "Sim"
+...</code></pre>
+
+<p>Esse modelo é insustentável por três motivos:</p>
+<ol>
+  <li><strong>Quebra de fluxo cognitivo:</strong> O desenvolvedor precisa ficar monitorando a tela a cada 90 segundos para dar aprovações protocolares que não agregam valor de julgamento.</li>
+  <li><strong>Falsa sensação de controle:</strong> O humano, cansado de responder "sim" repetidamente, passa a aprovar no piloto automático sem inspecionar os artefatos com o rigor necessário.</li>
+  <li><strong>Custo operacional elevado:</strong> O ciclo de vida de uma issue, que deveria durar 5 a 8 minutos de máquina de ponta a ponta, passa a levar horas por causa da latência humana de resposta.</li>
+</ol>
+
+<p>A governança precisa ser <strong>forte onde importa e invisível onde o determinismo dá conta</strong>.</p>
+
+<hr>
+
+<h2>2. O Princípio da Não-Interrupção e o Contrato de Handoff</h2>
+
+<p>Para eliminar a microgestão, formalizamos uma nova regra fundamental no núcleo do framework: o <strong>Princípio da Não-Interrupção (Regra 7 de Orquestração)</strong>.</p>
+
+<blockquote>
+  <strong>Regra:</strong> Uma vez iniciada uma demanda técnica a partir do triage, o orquestrador conduz as transições entre skills de ponta a ponta <strong>sem pausas protocolares para confirmação</strong>, contanto que os gates estejam verdes (<code>STATUS: ok</code>).
+</blockquote>
+
+<p>A intervenção humana é estritamente reservada a apenas três momentos:</p>
+<ul>
+  <li><strong>Ambiguidade crítica de negócio/design</strong> identificada durante a triagem (<code>pm-triage</code>).</li>
+  <li><strong>Falha bloqueante</strong> que os agentes técnicos não conseguiram contornar (<code>STATUS: bloqueado</code>).</li>
+  <li><strong>Abertura final do Pull Request</strong>, momento em que o humano atua como revisor da entrega completa.</li>
+</ul>
+
+<h3>O Contrato Formal de Handoff</h3>
+
+<p>Como garantir que um agente não alucine nem "engula" contexto ao passar o bastão para o próximo? Criamos o <strong>Handoff Contract</strong>: um cabeçalho estruturado e auditável exigido em toda passagem de skill:</p>
+
+<pre><code>=== HANDOFF CONTRACT ===
+DE: test-writer
+PARA: dev-implementation
+TAREFA: DEL-018
+STATUS: ok
+ESCOPO: internal/handoff
+EVIDENCIAS:
+- [x] go test ./internal/handoff (falhou conforme esperado na fase Red)
+- [x] 4 cenários table-driven definidos
+========================</code></pre>
+
+<p>Para garantir que essa regra não dependa da "boa vontade" do modelo, criamos um validador nativo em Go:</p>
+<pre><code>go tool pipeline-ai handoff validate handoff.txt</code></pre>
+
+<p>O comando analisa o bloco, valida se os estados são canônicos (<code>ok</code>, <code>bloqueado</code>, <code>pendente</code>), verifica se os campos obrigatórios estão preenchidos e audita a rastreabilidade. Para proteger o validador contra entradas malformadas de LLMs, submetemos o analisador sintático a <strong>testes de Fuzzing contínuos com a biblioteca padrão de Go</strong>.</p>
+
+<hr>
+
+<h2>3. O Pipeline Runner Unificado (<code>pipeline-ai run</code>) e o Protocolo MCP</h2>
+
+<p>Nas primeiras versões, a verificação da esteira exigia chamar múltiplos binários e comandos manuais: <code>pipeline-hook</code>, <code>pipeline-validate</code>, <code>go vet</code>, <code>go test</code>, etc.</p>
+
+<p>Na versão <strong>v0.6.1</strong>, consolidamos toda a toolchain em um <strong>Runner Determinístico Unificado</strong>:</p>
+
+<pre><code>go tool pipeline-ai run</code></pre>
+
+<p>O comando executa três estágios em cascata:</p>
+<ol>
+  <li><strong><code>Doctor</code>:</strong> Inspeciona a integridade do ambiente (versão do Go 1.24+, presença de caminhos protegidos, declaração de <code>immutable_paths</code> e consistência do <code>.pipeline-ai.json</code>).</li>
+  <li><strong><code>Sensor</code>:</strong> Dispara a toolchain do projeto (<code>gofmt</code>, <code>go build</code>, <code>go vet</code>, <code>go test ./...</code>, <code>govulncheck</code>) de acordo com o perfil do projeto.</li>
+  <li><strong><code>Validate</code>:</strong> Realiza auditoria cruzada entre o relatório de entrega (<code>report.md</code>) e o <code>git diff</code> real do repositório, garantindo que nenhum arquivo de segurança foi tocado sem justificativa técnica.</li>
+</ol>
+
+<h3>Integração Nativa via MCP (Model Context Protocol)</h3>
+
+<p>Além da CLI, expusemos esse runner diretamente como uma ferramenta nativa para o orquestrador através do <strong>Model Context Protocol (MCP)</strong>:</p>
+
+<pre><code>// Tool MCP nativa: pipeline_run_pipeline
+func (s *Server) handleRunPipeline(ctx context.Context, args json.RawMessage) (any, error) {
+    // Executa doctor -> sensor -> validate e retorna JSON estruturado
+    res := runner.Execute(runner.Options{
+        DeliveryPath: activeDelivery,
+        JsonOutput:   true,
+    })
+    return res, nil
+}</code></pre>
+
+<p>Dessa forma, o orquestrador não precisa rodar scripts bash inseguros no terminal: ele invoca <code>pipeline_run_pipeline</code> via MCP, recebe o status estruturado do pipeline e toma decisões de roteamento com latência mínima.</p>
+
+<hr>
+
+<h2>4. As Pegadinhas Ocultas da IA em Projetos Reais</h2>
+
+<p>Durante a implementação do runner e a homologação em sistemas reais, descobrimos dois problemas críticos que quase nenhum framework de IA documenta:</p>
+
+<h3>Pegadinha A: A Farsa do "Autoteste Negativo" (0 Testes = 0 Erros)</h3>
+
+<p>Você pede para o agente executar a suíte de testes. Ele roda <code>go test ./...</code>, nenhuma falha ocorre e o comando retorna código de saída <code>0</code>. O agente comemora: <em>"100% dos testes passaram!"</em>.</p>
+
+<p><strong>A realidade oculta:</strong> O agente havia colocado os arquivos de teste no diretório errado ou com um prefixo incorreto (ex: <code>test_helper.go</code> em vez de <code>helper_test.go</code>). <strong>Nenhum teste foi executado.</strong></p>
+
+<p>Em Go e em diversas outras linguagens, zero testes executados retorna código <code>0</code>. Para um agente probabilístico, ausência de erro é sinônimo de sucesso.</p>
+
+<p><strong>A Solução no Pipeline-AI:</strong> Implementamos uma <strong>Salvaguarda de Autoteste Negativo</strong> no motor de sensores:</p>
+
+<pre><code>// internal/sensor/sensor.go
+if testCount == 0 && !cfg.AllowEmptyTests {
+    return SensorResult{
+        Passed: false,
+        Error:  "Salvaguarda ativada: zero testes executados (falso positivo evitado)",
+    }
+}</code></pre>
+
+<p>Se o sensor rodar e o contador de testes for igual a zero, o pipeline <strong>falha imediatamente</strong>. Nenhum falso positivo passa para o Pull Request.</p>
+
+<hr>
+
+<h3>Pegadinha B: O Agente Que Tenta Burlar a Própria Segurança (<code>immutable_paths</code>)</h3>
+
+<p>Quando um agente desenvolvedor recebe a missão de fazer os testes passarem, ele é extremamente pragmático. Se um hook de ciclo de vida (<code>hooks.json</code>) bloqueia sua escrita ou se a configuração de segurança (<code>.pipeline-ai.json</code>) o impede de commitar, alguns modelos tentam a solução mais óbvia: <strong>editar o arquivo de configuração para remover a restrição!</strong></p>
+
+<p>Para fechar essa brecha, introduzimos a diretiva de <strong>Caminhos Imutáveis (<code>immutable_paths</code>)</strong>:</p>
+
+<pre><code>{
+  "protected_paths": ["internal/", "pkg/", "cmd/"],
+  "editor_agents": ["dev-implementation", "test-writer"],
+  "immutable_paths": [
+    ".pipeline-ai.json",
+    ".agents/hooks.json",
+    ".github/workflows/"
+  ]
+}</code></pre>
+
+<p>No hook <code>PreToolUse</code>, mesmo que o subagente seja um editor autorizado (como <code>dev-implementation</code>), se o caminho alvo estiver em <code>immutable_paths</code>, a operação de escrita é sumariamente bloqueada no sistema operacional. <strong>Nem a IA nem o orquestrador podem alterar as regras do jogo durante a partida.</strong></p>
+
+<hr>
+
+<h2>5. Homologação em Produção: Dois Mundos Opostos</h2>
+
+<p>Para provar que essa arquitetura não é apenas teoria de pós-graduação, validamos a esteira <strong>v0.6.1</strong> em dois sistemas de produção com naturezas completamente distintas:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Projeto</th>
+      <th>Arquitetura</th>
+      <th>Desafio Técnico</th>
+      <th>Resultado Autônomo</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong><code>sistema-estoque</code></strong></td>
+      <td>Desktop (Go + Wails v3)</td>
+      <td>Compilação cruzada Windows sem CGO a partir de containers Linux/WSL2</td>
+      <td><strong>327 testes</strong> passando com injeção automática de ambiente (<code>CGO_ENABLED=0 GOOS=windows GOARCH=amd64</code>) pelo runner.</td>
+    </tr>
+    <tr>
+      <td><strong><code>gestao-financas</code></strong></td>
+      <td>Backend API (Go + PostgreSQL)</td>
+      <td>Governança estrita de migrações DDL e isolamento de banco relacional</td>
+      <td><strong>315 testes</strong> passando com validação de idempotência e zero locks perigosos.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Em ambos os projetos, o ciclo completo (Triage → Guardrails → TDD Red → Dev Green → Code Review → Security Review → QA → Docs → Git Delivery) foi executado com <strong>zero interrupções intermediárias</strong>, culminando na abertura limpa dos Pull Requests <strong>#16</strong> e <strong>#18</strong>.</p>
+
+<hr>
+
+<h2>Lições para a Próxima Geração da Engenharia de Software</h2>
+
+<p>Se o primeiro estágio da IA foi o deslumbramento com a geração de código (2023-2024), o estágio atual é o da <strong>engenharia de confiabilidade de agentes (Agent Reliability Engineering - ARE)</strong>:</p>
+
+<ol>
+  <li><strong>A autonomia real exige gates determinísticos:</strong> Você só tem coragem de deixar um agente trabalhar sozinho se souber que o sistema operacional vai barrá-lo fisicamente caso ele tente violar um invariante.</li>
+  <li><strong>Microgestão humana gera fadiga e displicência:</strong> Se você desenhou uma esteira segura, confie nos gates. Deixe o orquestrador conduzir o fluxo e reserve o tempo humano para o Code Review final da issue.</li>
+  <li><strong>Sensores negativos são tão vitais quanto os positivos:</strong> Provar que algo passou não basta; é mandatório provar que a verificação realmente foi executada e que nada silencioso foi engolido.</li>
+</ol>
+
+<hr>
+
+<p>O código do <strong>Pipeline-AI v0.6.1</strong>, a suíte de 16 skills, o motor de sensores e o runner determinístico em Go puro são 100% open-source sob licença MIT:</p>
+
+<p>👉 <strong>Repositório Oficial:</strong> <a href="https://github.com/rodrigodosanjosoliveira/pipeline-ai">github.com/rodrigodosanjosoliveira/pipeline-ai</a></p>
+
+<p>Como você tem equilibrado a autonomia dos seus agentes com a segurança e a governança do repositório? Compartilhe suas experiências e desafios nos comentários! 💬🚀</p>
+
+</body>
+</html>
