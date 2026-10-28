@@ -1,7 +1,7 @@
 {
   "name": "pipeline-ai",
   "displayName": "Pipeline-AI",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Toolkit de governança determinística, orquestração autônoma, runner e telemetria DORA para múltiplos agentes de IA.",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [

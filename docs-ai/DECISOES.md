@@ -544,5 +544,26 @@ Gestão quantitativa de desempenho e confiabilidade da esteira autônoma:
 2. **Zero Dependências Externas:** Implementação em Go 1.24 puro (stdlib), com persistência atômica fail-safe em `.pipeline-state/metrics.json`.
 3. **Fuzz Testing & Protocolo MCP:** Parser blindado com mais de 1.1 milhão de iterações de Fuzzing sem falhas e ferramenta MCP `pipeline_get_metrics` para autoavaliação contínua da IA.
 
+---
+
+## 11. Consolidação Arquitetural da v0.8.0 (Generative UI e Plugin Nativo Antigravity)
+
+### D-31 — Dashboard Generative UI Autocontido e Responsivo (DEL-022)
+
+Observabilidade visual unificada sem dependências de servidores ou frameworks externos:
+1. **Conformidade Estrita com Generative UI:** O gerador HTML (`internal/dashboard`) adota estritamente o Tailwind CSS oficial da runtime Antigravity (`https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js`), tipografia com piso mínimo em 12px (`text-xs`) e tokens semânticos de CSS do host.
+2. **Autonomia e Portabilidade:** O dashboard é compilado em um documento HTML5 autocontido (com Vanilla JS embutido), eliminando necessidade de processos daemon em background e permitindo tanto embedding inline com `<agent-embed>` quanto visualização local no navegador (`pipeline-ai dashboard -output`).
+3. **Visão Holística em 4 Abas:** Integração simultânea das métricas DORA, da esteira visual das 16 skills em pipeline stepper, do histórico tabular de entregas do `INDEX.md` e dos pilares de governança.
+
+---
+
+### D-32 — Empacotamento Oficial e Distribuição como Plugin do Antigravity (DEL-023)
+
+Transformação do toolkit em uma extensão nativa de primeira classe no ecossistema Antigravity:
+1. **Bundle Unificado Declarativo:** Distribuição oficial em `plugin/` contendo `plugin.json` (schema Antigravity), servidor MCP integrado (`mcp_config.json`), hooks de ciclo de vida (`hooks.json`), regras consolidadas (`rules/AGENTS.md`) e catálogo completo das 16 skills especializadas.
+2. **Instalação Determinística em 1 Comando:** Implementação do subcomando CLI `pipeline-ai plugin install` para instalação automatizada e idempotente no diretório de plugins do usuário (`~/.gemini/config/plugins/pipeline-ai`).
+3. **Validação Estrutural e Fuzzing:** Utilitário `pipeline-ai plugin verify` e analisador sintático de manifestos blindado por Fuzz Testing contínuo.
+
+
 
 

@@ -2,7 +2,7 @@
 delivery_id: DEL-023
 task_code: TASK-023
 title: Empacotamento oficial como Plugin do Google Antigravity (plugin.json, MCP e hooks)
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false
