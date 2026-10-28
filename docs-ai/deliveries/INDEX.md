@@ -7,11 +7,12 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-020 | TASK-020 | Métricas DORA e telemetria de agentes de IA no runner e servidor MCP | feat | 2026-10-28 | draft |
-| DEL-019 | TASK-019 | Suporte automático a cross-compilação desktop (CGO_ENABLED=0 GOOS=windows) no sensor e runner | feat | 2026-10-27 | draft |
+| DEL-021 | TASK-021 | Release v0.7.0: Consolidação de telemetria, métricas DORA, pipeline runner e orquestração autônoma | chore | 2026-10-28 | draft |
+| DEL-020 | TASK-020 | Métricas DORA e telemetria de agentes de IA no runner e servidor MCP | feat | 2026-10-28 | merged |
+| DEL-019 | TASK-019 | Suporte automático a cross-compilação desktop (CGO_ENABLED=0 GOOS=windows) no sensor e runner | feat | 2026-10-27 | merged |
 | DEL-018 | TASK-018 | Auditoria automatizada da matriz de rastreabilidade e validação de handoffs (C12) | feat | 2026-10-27 | merged |
-| DEL-017 | TASK-017 | Pipeline Runner CLI (pipeline-ai run) e MCP Tool para orquestração de gates em lote | feat | 2026-10-27 | draft |
-| DEL-016 | TASK-016 | Regra formal de orquestração autônoma e princípio da não-interrupção | feat | 2026-10-27 | draft |
+| DEL-017 | TASK-017 | Pipeline Runner CLI (pipeline-ai run) e MCP Tool para orquestração de gates em lote | feat | 2026-10-27 | merged |
+| DEL-016 | TASK-016 | Regra formal de orquestração autônoma e princípio da não-interrupção | feat | 2026-10-27 | merged |
 | DEL-015 | TASK-015 | Release v0.6.0: Consolidação de versão, changelog e encerramento operacional do contraditório técnico | chore | 2026-10-27 | merged |
 | DEL-014 | TASK-014 | Checkpoints de invariantes, critérios de reversibilidade/rollback e gestão dinâmica de módulos | feat | 2026-10-26 | merged |
 | DEL-013 | TASK-013 | Sensores com saída estruturada em JSON e autoteste negativo contra falsos positivos | feat | 2026-10-26 | merged |

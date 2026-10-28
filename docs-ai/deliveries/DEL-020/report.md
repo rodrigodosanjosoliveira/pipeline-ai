@@ -2,7 +2,7 @@
 delivery_id: DEL-020
 task_code: TASK-020
 title: Métricas DORA e telemetria de agentes de IA no runner e servidor MCP
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

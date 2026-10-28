@@ -60,8 +60,8 @@ func TestMCPInitializeAndPing(t *testing.T) {
 	if !ok || serverInfo["name"] != "pipeline-ai" {
 		t.Errorf("serverInfo inválido: %v", serverInfo)
 	}
-	if serverInfo["version"] != "v0.6.0" {
-		t.Errorf("serverInfo[\"version\"] = %v, esperado %q", serverInfo["version"], "v0.6.0")
+	if serverInfo["version"] != "v0.7.0" {
+		t.Errorf("serverInfo[\"version\"] = %v, esperado %q", serverInfo["version"], "v0.7.0")
 	}
 
 	// 2. Ping

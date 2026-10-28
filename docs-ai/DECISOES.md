@@ -491,4 +491,58 @@ A prontidão operacional e a integridade de módulos são formalizadas:
 2. **Gestão Segura de Módulos Opcionais:** A CLI (`pipeline-ai module list|enable|disable`) e a MCP tool `pipeline_manage_modules` gerenciam o catálogo de módulos com validação de esquema, impedindo corrupção manual do arquivo `.pipeline-ai.json`.
 3. **Checkpoints de Integridade no Diagnóstico:** O utilitário `doctor` valida e audita o estado dos módulos ativos e conformidade com as diretivas do projeto.
 
+---
+
+## 10. Consolidação Arquitetural da v0.7.0 (Orquestração Autônoma, Runner e Observabilidade)
+
+### D-26 — Princípio da Não-Interrupção e Orquestração Autônoma Contínua (DEL-016)
+
+Eliminação da fadiga de confirmação em esteiras de agentes através da **Regra 7 de Orquestração**:
+1. **Fluxo Contínuo:** Uma vez iniciada a demanda pelo `pm-triage`, as transições entre skills ocorrem sem interrupções manuais enquanto o status dos gates for `ok`.
+2. **Intervenção Humana Estrita:** Reservada unicamente para:
+   - Ambiguidade crítica de negócio na triagem.
+   - Bloqueio técnico irrecuperável (`STATUS: bloqueado`).
+   - Revisão final do Pull Request gerado.
+3. **Isolamento de Responsabilidade:** O orquestrador na sessão principal coordena transições e não edita código de negócio diretamente, garantindo que todo código passe pelos gates de TDD e Code Review.
+
+---
+
+### D-27 — Pipeline Runner Determinístico em Cascata (DEL-017)
+
+Consolidação da verificação multi-estágio em um único comando de alta performance:
+1. **Tríade Determinística:** O comando `pipeline-ai run` executa a sequência `Doctor` → `Sensor` → `Validate` de forma atômica.
+2. **Auto-Descoberta de Delivery:** O runner identifica a delivery ativa no repositório (`state.Get` ou inspeção do `report.md`), eliminando a necessidade de passar parâmetros manuais repetitivos.
+3. **Integração MCP Nativa:** Disponibilização da ferramenta `pipeline_run_pipeline` para que agentes invoquem o pipeline com saída estruturada JSON-RPC.
+
+---
+
+### D-28 — Parser e Validação de Contratos de Handoff com Fuzz Testing (DEL-018)
+
+Formalização do protocolo de comunicação entre agentes para mitigar alucinações e perda de contexto:
+1. **Contrato Estruturado:** Cabeçalho padrão (`DE`, `PARA`, `TAREFA`, `STATUS`, `ESCOPO`, `EVIDÊNCIAS`) obrigatório em todas as transições de skills.
+2. **Validador Determinístico:** Utilitário `pipeline-ai handoff validate` que verifica completude, valores canônicos e integridade do bloco.
+3. **Robustez por Fuzzing:** O parser de handoffs é submetido a testes contínuos de Fuzzing na biblioteca padrão de Go, garantindo imunidade a panics diante de saídas malformadas de LLMs.
+
+---
+
+### D-29 — Detecção e Injeção Transparente de Cross-Compilação Desktop Wails v3 (DEL-019)
+
+Suporte nativo a ambientes heterogêneos de desenvolvimento:
+1. **Invariante Desktop sem CGO:** Projetos com `project_type: "desktop"` (Wails v3) exigem compilação cruzada Windows a partir de hosts Linux/WSL2 sem dependências CGO (`pkg-config` / GTK).
+2. **Injeção Transparente pelo Sensor:** O motor de sensores em `internal/sensor/sensor.go` detecta automaticamente projetos desktop e injeta `CGO_ENABLED=0 GOOS=windows GOARCH=amd64` nas invocações de `go build` e `go test`, garantindo que agentes executando em containers Linux operem 100% no verde.
+
+---
+
+### D-30 — Motor de Telemetria e Métricas DORA para Agentes de IA (DEL-020)
+
+Gestão quantitativa de desempenho e confiabilidade da esteira autônoma:
+1. **As Quatro Métricas DORA em Velocidade de Máquina:**
+   - *Deployment Frequency:* volume diário de micro-entregas validadas.
+   - *Lead Time for Changes:* latência da issue ao PR em minutos.
+   - *Change Failure Rate:* taxa real de falhas/bloqueios nos gates determinísticos.
+   - *Time to Restore Service (MTTR):* tempo de autorrecuperação da esteira.
+2. **Zero Dependências Externas:** Implementação em Go 1.24 puro (stdlib), com persistência atômica fail-safe em `.pipeline-state/metrics.json`.
+3. **Fuzz Testing & Protocolo MCP:** Parser blindado com mais de 1.1 milhão de iterações de Fuzzing sem falhas e ferramenta MCP `pipeline_get_metrics` para autoavaliação contínua da IA.
+
+
 
