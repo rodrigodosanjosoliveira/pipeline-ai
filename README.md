@@ -38,7 +38,7 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 - Compilado e testado com **100% de sucesso em Go 1.24+** (stdlib pura, compatível com detector de concorrência `-race`).
 - Integrado nativamente ao ecossistema **Antigravity** via `.agents/hooks.json`, regras e **16 skills modulares**.
 - Automação via **`Taskfile.yml`** e workflow completo no **GitHub Actions** (`.github/workflows/ci.yml`).
-- Versão estável atual: **`v0.6.1`**.
+- Versão estável atual: **`v0.7.0`**.
 
 ---
 
