@@ -2,7 +2,7 @@
 delivery_id: DEL-022
 task_code: TASK-022
 title: Dashboard visual interativo de handoffs, esteira e métricas DORA (Generative UI e CLI)
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

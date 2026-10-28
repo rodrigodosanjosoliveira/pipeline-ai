@@ -898,3 +898,86 @@ func TestCLIDashboard(t *testing.T) {
 		}
 	})
 }
+
+func TestCLIPluginCommand(t *testing.T) {
+	// Configura mock de bundle válido completo em tempDir
+	bundleDir := t.TempDir()
+	manifestJSON := `{
+		"name": "pipeline-ai",
+		"description": "Governança determinística de esteiras com múltiplos agentes em IA",
+		"displayName": "Pipeline AI",
+		"version": "0.8.0",
+		"suggestedPrompts": ["Triage", "Delivery"],
+		"repository": "https://github.com/rodrigodosanjosoliveira/pipeline-ai"
+	}`
+	if err := os.WriteFile(filepath.Join(bundleDir, "plugin.json"), []byte(manifestJSON), 0644); err != nil {
+		t.Fatalf("falha ao criar plugin.json: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(bundleDir, "rules"), 0755); err != nil {
+		t.Fatalf("falha ao criar pasta rules: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "rules", "AGENTS.md"), []byte("# Regras\n"), 0644); err != nil {
+		t.Fatalf("falha ao criar rules/AGENTS.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "mcp_config.json"), []byte(`{"mcpServers":{}}`), 0644); err != nil {
+		t.Fatalf("falha ao criar mcp_config.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "hooks.json"), []byte(`{"hooks":{}}`), 0644); err != nil {
+		t.Fatalf("falha ao criar hooks.json: %v", err)
+	}
+	skillDir := filepath.Join(bundleDir, "skills", "pm-triage")
+	if err := os.MkdirAll(skillDir, 0755); err != nil {
+		t.Fatalf("falha ao criar pasta skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: pm-triage\n---\n"), 0644); err != nil {
+		t.Fatalf("falha ao criar SKILL.md: %v", err)
+	}
+
+	t.Run("plugin verify em bundle válido", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"plugin", "verify", "-dir", bundleDir}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("plugin verify falhou: code=%d, stderr:\n%s", code, stderr.String())
+		}
+		if !strings.Contains(strings.ToLower(stdout.String()), "válido") && !strings.Contains(strings.ToLower(stdout.String()), "ok") {
+			t.Errorf("saída esperada confirmando bundle válido, obteve:\n%s", stdout.String())
+		}
+	})
+
+	t.Run("plugin verify em bundle com arquivo faltando", func(t *testing.T) {
+		invalidBundle := t.TempDir()
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"plugin", "verify", "-dir", invalidBundle}, &stdout, &stderr)
+		if code == 0 {
+			t.Errorf("plugin verify deveria falhar em diretório vazio sem arquivos de bundle")
+		}
+	})
+
+	t.Run("plugin install com target válido", func(t *testing.T) {
+		targetDir := filepath.Join(t.TempDir(), "installed")
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"plugin", "install", "-dir", bundleDir, "-target", targetDir}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("plugin install falhou: code=%d, stderr:\n%s", code, stderr.String())
+		}
+		if _, err := os.Stat(filepath.Join(targetDir, "plugin.json")); err != nil {
+			t.Fatalf("plugin.json não encontrado no diretório de destino: %v", err)
+		}
+	})
+
+	t.Run("plugin install sem flag -target", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"plugin", "install", "-dir", bundleDir}, &stdout, &stderr)
+		if code == 0 {
+			t.Errorf("plugin install sem -target deveria retornar erro, obteve code=0")
+		}
+	})
+
+	t.Run("plugin subcomando desconhecido", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"plugin", "inexistente"}, &stdout, &stderr)
+		if code == 0 {
+			t.Errorf("subcomando desconhecido de plugin deveria retornar erro")
+		}
+	})
+}

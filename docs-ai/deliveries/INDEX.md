@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-022 | TASK-022 | Dashboard visual interativo de handoffs, esteira e métricas DORA (Generative UI e CLI) | feat | 2026-10-28 | draft |
+| DEL-023 | TASK-023 | Empacotamento oficial como Plugin do Google Antigravity (plugin.json, MCP e hooks) | feat | 2026-10-28 | draft |
+| DEL-022 | TASK-022 | Dashboard visual interativo de handoffs, esteira e métricas DORA (Generative UI e CLI) | feat | 2026-10-28 | merged |
 | DEL-021 | TASK-021 | Release v0.7.0: Consolidação de telemetria, métricas DORA, pipeline runner e orquestração autônoma | chore | 2026-10-28 | merged |
 | DEL-020 | TASK-020 | Métricas DORA e telemetria de agentes de IA no runner e servidor MCP | feat | 2026-10-28 | merged |
 | DEL-019 | TASK-019 | Suporte automático a cross-compilação desktop (CGO_ENABLED=0 GOOS=windows) no sensor e runner | feat | 2026-10-27 | merged |

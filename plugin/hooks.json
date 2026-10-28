@@ -1,0 +1,26 @@
+{
+  "pipeline-guard": {
+    "PreToolUse": [
+      {
+        "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd .. && go tool pipeline-hook"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd .. && gofmt -w . 2>/dev/null; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

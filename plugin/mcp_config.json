@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pipeline-ai": {
+      "command": "pipeline-ai",
+      "args": ["mcp"]
+    }
+  }
+}
