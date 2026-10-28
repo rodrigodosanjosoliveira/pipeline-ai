@@ -1,0 +1,15 @@
+{
+  "name": "pipeline-ai",
+  "displayName": "Pipeline-AI",
+  "version": "0.7.0",
+  "description": "Toolkit de governança determinística, orquestração autônoma, runner e telemetria DORA para múltiplos agentes de IA.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Execute o pipeline-ai run para validar este projeto",
+    "Mostre o resumo das métricas DORA com pipeline-ai metrics summary",
+    "Gere o dashboard de engenharia com pipeline-ai dashboard"
+  ],
+  "author": "Rodrigo Oliveira",
+  "repository": "https://github.com/rodrigodosanjosoliveira/pipeline-ai",
+  "homepage": "https://github.com/rodrigodosanjosoliveira/pipeline-ai"
+}

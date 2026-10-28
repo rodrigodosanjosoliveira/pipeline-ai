@@ -33,6 +33,7 @@ import (
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/hook"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/mcp"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/metrics"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/plugin"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/runner"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
@@ -107,6 +108,9 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	case "mcp":
 		return runMCP(cmdArgs, stdin, stdout, stderr)
 
+	case "plugin":
+		return runPlugin(cmdArgs, stdout, stderr)
+
 	default:
 		fmt.Fprintf(stderr, "pipeline-ai: comando desconhecido: %q\nExecute 'pipeline-ai help' para ver a lista de comandos.\n", cmd)
 		return 1
@@ -130,6 +134,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  metrics    Exibe métricas de engenharia e governança DORA (summary, list)")
 	fmt.Fprintln(w, "  dashboard  Gera e renderiza dashboard HTML interativo de engenharia e métricas")
 	fmt.Fprintln(w, "  mcp        Executa o servidor MCP sobre stdio (JSON-RPC 2.0)")
+	fmt.Fprintln(w, "  plugin     Gerencia o bundle e instalação do plugin Antigravity (verify, install)")
 	fmt.Fprintln(w, "  version    Exibe a versão do pipeline-ai")
 	fmt.Fprintln(w, "  help       Exibe esta mensagem de ajuda")
 	fmt.Fprintln(w)
@@ -879,5 +884,86 @@ func runDashboard(args []string, stdout, stderr io.Writer) int {
 	}
 
 	fmt.Fprint(stdout, html)
+	return 0
+}
+
+func runPlugin(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		printPluginUsage(stderr)
+		return 1
+	}
+
+	sub := strings.ToLower(strings.TrimSpace(args[0]))
+	subArgs := args[1:]
+
+	switch sub {
+	case "verify":
+		return runPluginVerify(subArgs, stdout, stderr)
+	case "install":
+		return runPluginInstall(subArgs, stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "pipeline-ai plugin: subcomando desconhecido %q (use verify ou install)\n", sub)
+		return 1
+	}
+}
+
+func printPluginUsage(w io.Writer) {
+	fmt.Fprintln(w, "Uso: pipeline-ai plugin <verify|install> [opções]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Subcomandos:")
+	fmt.Fprintln(w, "  verify  [-dir <dir>]")
+	fmt.Fprintln(w, "  install [-src <dir>] [-target <dir>]")
+}
+
+func runPluginVerify(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("plugin verify", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	dir := fs.String("dir", "plugin", "diretório do bundle do plugin a verificar")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	if err := plugin.VerifyBundle(*dir); err != nil {
+		fmt.Fprintf(stderr, "plugin verify: falha na verificação: %v\n", err)
+		return 1
+	}
+
+	fmt.Fprintf(stdout, "Bundle do plugin em %q é válido [OK].\n", *dir)
+	return 0
+}
+
+func runPluginInstall(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("plugin install", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	var src string
+	fs.StringVar(&src, "dir", "plugin", "diretório de origem do bundle do plugin")
+	fs.StringVar(&src, "src", "plugin", "diretório de origem do bundle do plugin")
+	target := fs.String("target", "", "diretório de destino da instalação")
+
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	targetDir := strings.TrimSpace(*target)
+	if targetDir == "" {
+		fmt.Fprintln(stderr, "plugin install: a flag -target é obrigatória")
+		return 1
+	}
+
+	if strings.HasPrefix(targetDir, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			targetDir = filepath.Join(home, targetDir[2:])
+		}
+	}
+
+	if err := plugin.InstallToDir(src, targetDir); err != nil {
+		fmt.Fprintf(stderr, "plugin install: erro ao instalar plugin: %v\n", err)
+		return 1
+	}
+
+	fmt.Fprintf(stdout, "Plugin instalado com sucesso em %q [OK].\n", targetDir)
 	return 0
 }

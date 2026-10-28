@@ -12,6 +12,7 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 |---|---|
 | `pipeline-ai init` | Utilitário de *scaffolding* que inicializa novos projetos completos em 1 comando com templates embutidos. |
 | `pipeline-ai run` | Pipeline Runner determinístico que executa em lote `doctor` → `sensor` → `validate` com auto-detecção de delivery e telemetria (D-27). |
+| `pipeline-ai plugin` | Validador e instalador oficial do plugin do Antigravity (`verify`, `install`) (DEL-023). |
 | `pipeline-ai dashboard` | Gera dashboard HTML interativo e responsivo (Generative UI) com métricas DORA, esteira e entregas (DEL-022). |
 | `pipeline-ai metrics` | Motor de telemetria e observabilidade com cálculo determinístico das quatro métricas DORA (`summary`, `list`, `-json`) (DEL-020). |
 | `pipeline-ai handoff` | Parser e validador automatizado de contratos de transição entre skills (`validate`) com salvaguarda de Fuzzing (C12). |
@@ -225,6 +226,27 @@ O Runner executa automaticamente a cascata em 3 estágios:
 3. **`Validate`:** Localiza a delivery ativa (ou via flag `-delivery` / `-report`) e audita o `report.md` contra o `git diff` real.
 
 Suporta a flag `-json` para emissão do payload estruturado com duração e status de cada estágio.
+
+---
+
+## Plugin Oficial do Google Antigravity (`pipeline-ai plugin`)
+
+O `pipeline-ai` é distribuído oficialmente como um plugin nativo do Antigravity (`plugin/`), agrupando em um único bundle: as 16 skills especializadas, as regras de orquestração (`rules/AGENTS.md`), os hooks de ciclo de vida (`hooks.json`) e o servidor MCP:
+
+### Instalação em 1 Comando no Antigravity:
+```bash
+# Instala o plugin oficial na configuração do usuário (~/.gemini/config/plugins/pipeline-ai):
+pipeline-ai plugin install
+
+# Ou especificando origem e destino customizados:
+pipeline-ai plugin install -src plugin -target ~/.gemini/config/plugins/pipeline-ai
+```
+
+### Validação do Bundle:
+```bash
+# Valida a integridade do manifesto plugin.json e a presença de todas as skills e configs:
+pipeline-ai plugin verify -dir plugin
+```
 
 ---
 
