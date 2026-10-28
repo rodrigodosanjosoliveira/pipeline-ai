@@ -791,3 +791,59 @@ MOTIVO: teste
 		}
 	})
 }
+
+func TestCLIMetricsCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Run("metrics summary em workspace vazio", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"metrics", "summary", "-dir", tmpDir}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("metrics summary falhou: code=%d, stderr:\n%s", code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Deployment Frequency") {
+			t.Errorf("saída esperada contendo 'Deployment Frequency', obteve:\n%s", stdout.String())
+		}
+	})
+
+	t.Run("metrics summary com flag -json", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"metrics", "summary", "-dir", tmpDir, "-json"}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("metrics summary -json falhou: code=%d, stderr:\n%s", code, stderr.String())
+		}
+		var dora map[string]any
+		if err := json.Unmarshal(stdout.Bytes(), &dora); err != nil {
+			t.Fatalf("saída não é JSON válido: %v; raw:\n%s", err, stdout.String())
+		}
+		if _, ok := dora["deployment_frequency"]; !ok {
+			t.Errorf("campo deployment_frequency ausente no JSON: %v", dora)
+		}
+	})
+
+	t.Run("metrics list", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"metrics", "list", "-dir", tmpDir}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("metrics list falhou: code=%d, stderr:\n%s", code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Entregas registradas") {
+			t.Errorf("saída esperada contendo 'Entregas registradas', obteve:\n%s", stdout.String())
+		}
+	})
+
+	t.Run("metrics list com flag -json", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"metrics", "list", "-dir", tmpDir, "-json"}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("metrics list -json falhou: code=%d, stderr:\n%s", code, stderr.String())
+		}
+		var data map[string]any
+		if err := json.Unmarshal(stdout.Bytes(), &data); err != nil {
+			t.Fatalf("saída não é JSON válido: %v; raw:\n%s", err, stdout.String())
+		}
+		if _, ok := data["version"]; !ok {
+			t.Errorf("campo version ausente no JSON: %v", data)
+		}
+	})
+}

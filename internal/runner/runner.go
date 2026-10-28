@@ -8,9 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/metrics"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
@@ -75,52 +77,8 @@ func Run(opts Options) (*Result, error) {
 		cfg.DeliveriesDir = "docs-ai/deliveries"
 	}
 
-	var steps []StepResult
+	runStart := time.Now()
 
-	// 1. doctor
-	docResults, docOK := doctor.Collect(absRoot)
-	docStep := StepResult{
-		Name:    "doctor",
-		Details: docResults,
-	}
-	if !docOK {
-		docStep.Status = StatusFail
-		var failures []string
-		for _, r := range docResults {
-			if r.Status == doctor.StatusFail {
-				failures = append(failures, fmt.Sprintf("%s: %s", r.Name, r.Message))
-			}
-		}
-		docStep.Message = fmt.Sprintf("falhas no ambiente (%d): %s", len(failures), strings.Join(failures, "; "))
-	} else {
-		docStep.Status = StatusPass
-		docStep.Message = "Ambiente validado com sucesso"
-	}
-	steps = append(steps, docStep)
-
-	// 2. sensor
-	sensorRes, err := sensor.Run(absRoot)
-	sensorStep := StepResult{
-		Name:    "sensor",
-		Details: sensorRes,
-	}
-	if err != nil {
-		sensorStep.Status = StatusFail
-		sensorStep.Message = fmt.Sprintf("erro ao executar sensores: %v", err)
-	} else if sensorRes == nil || !sensorRes.OK || sensorRes.Overall != sensor.StatusPass {
-		sensorStep.Status = StatusFail
-		if sensorRes != nil && sensorRes.Message != "" {
-			sensorStep.Message = fmt.Sprintf("sensores reprovados: %s", sensorRes.Message)
-		} else {
-			sensorStep.Message = "sensores reprovados"
-		}
-	} else {
-		sensorStep.Status = StatusPass
-		sensorStep.Message = fmt.Sprintf("sensores aprovados (%d testes executados)", sensorRes.TestsRun)
-	}
-	steps = append(steps, sensorStep)
-
-	// 3. validate
 	deliveryID := strings.TrimSpace(opts.DeliveryID)
 	reportPath := strings.TrimSpace(opts.ReportPath)
 
@@ -145,6 +103,59 @@ func Run(opts Options) (*Result, error) {
 		}
 	}
 
+	var steps []StepResult
+
+	// 1. doctor
+	docStart := time.Now()
+	docResults, docOK := doctor.Collect(absRoot)
+	docDur := time.Since(docStart)
+	docStep := StepResult{
+		Name:    "doctor",
+		Details: docResults,
+	}
+	if !docOK {
+		docStep.Status = StatusFail
+		var failures []string
+		for _, r := range docResults {
+			if r.Status == doctor.StatusFail {
+				failures = append(failures, fmt.Sprintf("%s: %s", r.Name, r.Message))
+			}
+		}
+		docStep.Message = fmt.Sprintf("falhas no ambiente (%d): %s", len(failures), strings.Join(failures, "; "))
+	} else {
+		docStep.Status = StatusPass
+		docStep.Message = "Ambiente validado com sucesso"
+	}
+	steps = append(steps, docStep)
+	_ = metrics.RecordStageDuration(absRoot, deliveryID, "doctor", docDur, docOK)
+
+	// 2. sensor
+	sensorStart := time.Now()
+	sensorRes, err := sensor.Run(absRoot)
+	sensorDur := time.Since(sensorStart)
+	sensorStep := StepResult{
+		Name:    "sensor",
+		Details: sensorRes,
+	}
+	if err != nil {
+		sensorStep.Status = StatusFail
+		sensorStep.Message = fmt.Sprintf("erro ao executar sensores: %v", err)
+	} else if sensorRes == nil || !sensorRes.OK || sensorRes.Overall != sensor.StatusPass {
+		sensorStep.Status = StatusFail
+		if sensorRes != nil && sensorRes.Message != "" {
+			sensorStep.Message = fmt.Sprintf("sensores reprovados: %s", sensorRes.Message)
+		} else {
+			sensorStep.Message = "sensores reprovados"
+		}
+	} else {
+		sensorStep.Status = StatusPass
+		sensorStep.Message = fmt.Sprintf("sensores aprovados (%d testes executados)", sensorRes.TestsRun)
+	}
+	steps = append(steps, sensorStep)
+	_ = metrics.RecordStageDuration(absRoot, deliveryID, "sensor", sensorDur, sensorStep.Status == StatusPass)
+
+	// 3. validate
+	valStart := time.Now()
 	validateStep := StepResult{
 		Name: "validate",
 	}
@@ -192,7 +203,9 @@ func Run(opts Options) (*Result, error) {
 			}
 		}
 	}
+	valDur := time.Since(valStart)
 	steps = append(steps, validateStep)
+	_ = metrics.RecordStageDuration(absRoot, deliveryID, "validate", valDur, validateStep.Status == StatusPass)
 
 	allOK := true
 	for _, s := range steps {
@@ -208,6 +221,17 @@ func Run(opts Options) (*Result, error) {
 		overall = StatusFail
 		msg = "Pipeline reprovado em um ou mais gates"
 	}
+
+	totalDur := time.Since(runStart)
+	_ = metrics.RecordEvent(absRoot, metrics.Event{
+		Type:       metrics.EventGate,
+		DeliveryID: deliveryID,
+		Timestamp:  time.Now().UTC(),
+		Duration:   totalDur,
+		Success:    allOK,
+		Stage:      "runner",
+		Message:    msg,
+	})
 
 	res := &Result{
 		Overall:    overall,

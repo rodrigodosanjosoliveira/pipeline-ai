@@ -955,3 +955,44 @@ func TestMCPToolsValidateHandoff(t *testing.T) {
 		}
 	})
 }
+
+func TestMCPToolsGetMetrics(t *testing.T) {
+	dir := t.TempDir()
+	s := NewServer(dir)
+
+	// 1. tools/list contém pipeline_get_metrics
+	listPayload := `{"jsonrpc":"2.0","id":120,"method":"tools/list"}`
+	res := runRPC(t, s, listPayload)
+	result := res["result"].(map[string]any)
+	tools := result["tools"].([]any)
+	var found bool
+	for _, raw := range tools {
+		tool := raw.(map[string]any)
+		if tool["name"] == "pipeline_get_metrics" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("pipeline_get_metrics não encontrado em tools/list")
+	}
+
+	// 2. tools/call pipeline_get_metrics em diretório vazio
+	callPayload := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      121,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "pipeline_get_metrics",
+			"arguments": map[string]any{
+				"dir": dir,
+			},
+		},
+	}
+	reqBytes, _ := json.Marshal(callPayload)
+	callRes := runRPC(t, s, string(reqBytes))
+	callResult := callRes["result"].(map[string]any)
+	if callResult["isError"] == true {
+		t.Fatalf("esperava isError=false para pipeline_get_metrics: %v", callResult)
+	}
+}

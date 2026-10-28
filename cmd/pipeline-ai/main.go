@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/handoff"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/hook"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/mcp"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/metrics"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/runner"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
@@ -95,6 +97,9 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	case "sensor":
 		return runSensor(cmdArgs, stdout, stderr)
 
+	case "metrics":
+		return runMetrics(cmdArgs, stdout, stderr)
+
 	case "mcp":
 		return runMCP(cmdArgs, stdin, stdout, stderr)
 
@@ -118,6 +123,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  doctor     Diagnostica o ambiente local (Go 1.24+, git, gh, hooks e .pipeline-ai.json)")
 	fmt.Fprintln(w, "  module     Gerencia módulos opcionais do pipeline (list, enable, disable)")
 	fmt.Fprintln(w, "  sensor     Executa os sensores de qualidade (fmt, vet, test) com saída estruturada")
+	fmt.Fprintln(w, "  metrics    Exibe métricas de engenharia e governança DORA (summary, list)")
 	fmt.Fprintln(w, "  mcp        Executa o servidor MCP sobre stdio (JSON-RPC 2.0)")
 	fmt.Fprintln(w, "  version    Exibe a versão do pipeline-ai")
 	fmt.Fprintln(w, "  help       Exibe esta mensagem de ajuda")
@@ -695,4 +701,126 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintln(stdout, "\nSucesso! Projeto configurado com o padrão pipeline-ai.")
 	fmt.Fprintf(stdout, "Diretório: %s\n\n", opts.TargetDir)
 	return 0
+}
+
+func runMetrics(args []string, stdout, stderr io.Writer) int {
+	var subcmd string
+	var flagArgs []string
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			flagArgs = append(flagArgs, arg)
+			if (arg == "-dir" || arg == "-window") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				flagArgs = append(flagArgs, args[i+1])
+				i++
+			}
+		} else if subcmd == "" {
+			subcmd = strings.ToLower(arg)
+		} else {
+			flagArgs = append(flagArgs, arg)
+		}
+	}
+
+	if subcmd == "" {
+		subcmd = "summary"
+	}
+
+	fs := flag.NewFlagSet("metrics "+subcmd, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	dir := fs.String("dir", ".", "diretório raiz do projeto")
+	asJSON := fs.Bool("json", false, "emite os resultados estruturados em JSON")
+	windowDays := fs.Float64("window", 0, "janela de cálculo em dias (opcional)")
+
+	if err := fs.Parse(flagArgs); err != nil {
+		return 1
+	}
+
+	absDir, err := filepath.Abs(*dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "metrics: diretório inválido: %v\n", err)
+		return 1
+	}
+
+	switch subcmd {
+	case "summary":
+		var opts []metrics.DORAOptions
+		if *windowDays > 0 {
+			opts = append(opts, metrics.DORAOptions{
+				Window: time.Duration(*windowDays * 24 * float64(time.Hour)),
+			})
+		}
+
+		dora, err := metrics.GetDORA(absDir, opts...)
+		if err != nil {
+			fmt.Fprintf(stderr, "metrics summary: erro ao calcular métricas DORA: %v\n", err)
+			return 1
+		}
+
+		if *asJSON {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			if err := enc.Encode(dora); err != nil {
+				fmt.Fprintf(stderr, "metrics summary: erro ao serializar JSON: %v\n", err)
+				return 1
+			}
+			return 0
+		}
+
+		fmt.Fprintln(stdout, "Métricas DORA do Pipeline:")
+		fmt.Fprintf(stdout, "  Deployment Frequency:    %.2f deploys/dia (total: %d)\n", dora.DeploymentFrequency, dora.DeploymentsTotal)
+		fmt.Fprintf(stdout, "  Lead Time for Changes:   %s\n", dora.LeadTimeForChanges)
+		fmt.Fprintf(stdout, "  Change Failure Rate:     %.1f%% (falhas: %d)\n", dora.ChangeFailureRate, dora.FailedDeployments)
+		fmt.Fprintf(stdout, "  Time to Restore Service: %s (restaurações: %d)\n", dora.TimeToRestore, dora.RestoresTotal)
+		return 0
+
+	case "list":
+		data, err := metrics.Load(absDir)
+		if err != nil {
+			fmt.Fprintf(stderr, "metrics list: erro ao carregar métricas: %v\n", err)
+			return 1
+		}
+
+		if *asJSON {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			if err := enc.Encode(data); err != nil {
+				fmt.Fprintf(stderr, "metrics list: erro ao serializar JSON: %v\n", err)
+				return 1
+			}
+			return 0
+		}
+
+		fmt.Fprintln(stdout, "Entregas registradas:")
+		if len(data.Deliveries) == 0 {
+			fmt.Fprintln(stdout, "  (nenhuma entrega registrada)")
+		} else {
+			for _, d := range data.Deliveries {
+				status := "SUCESSO"
+				if !d.Success {
+					status = "FALHA"
+				}
+				fmt.Fprintf(stdout, "  - [%s] %s (%s) - Lead time: %s\n", status, d.DeliveryID, d.TaskCode, d.LeadTime)
+			}
+		}
+
+		fmt.Fprintln(stdout, "\nEventos recentes:")
+		if len(data.Events) == 0 {
+			fmt.Fprintln(stdout, "  (nenhum evento registrado)")
+		} else {
+			for _, e := range data.Events {
+				status := "SUCESSO"
+				if !e.Success {
+					status = "FALHA"
+				}
+				fmt.Fprintf(stdout, "  - [%s] %s %s (%s)\n", status, e.Type, e.DeliveryID, e.Timestamp.Format(time.RFC3339))
+			}
+		}
+		return 0
+
+	default:
+		fmt.Fprintf(stderr, "metrics: subcomando desconhecido: %q (use 'summary' ou 'list')\n", subcmd)
+		return 1
+	}
 }
