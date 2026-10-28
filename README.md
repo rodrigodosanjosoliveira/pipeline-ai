@@ -11,6 +11,9 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 | Comando | Função |
 |---|---|
 | `pipeline-ai init` | Utilitário de *scaffolding* que inicializa novos projetos completos em 1 comando com templates embutidos. |
+| `pipeline-ai run` | Pipeline Runner determinístico que executa em lote `doctor` → `sensor` → `validate` com auto-detecção de delivery e telemetria (D-27). |
+| `pipeline-ai metrics` | Motor de telemetria e observabilidade com cálculo determinístico das quatro métricas DORA (`summary`, `list`, `-json`) (DEL-020). |
+| `pipeline-ai handoff` | Parser e validador automatizado de contratos de transição entre skills (`validate`) com salvaguarda de Fuzzing (C12). |
 | `pipeline-ai hook` | Hook `PreToolUse` que impede edição direta em caminhos protegidos fora dos agents/skills autorizados (D-11). |
 | `pipeline-ai validate` | Valida o relatório de delivery antes do commit e abertura de PR, garantindo salvaguarda estrita de Git (D-14). Suporta flag `-json`. |
 | `pipeline-ai sync` | Sincroniza e atualiza skills (`.agents/skills`), regras e hooks em projetos existentes sem tocar em código de negócio. |
@@ -35,7 +38,7 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 - Compilado e testado com **100% de sucesso em Go 1.24+** (stdlib pura, compatível com detector de concorrência `-race`).
 - Integrado nativamente ao ecossistema **Antigravity** via `.agents/hooks.json`, regras e **16 skills modulares**.
 - Automação via **`Taskfile.yml`** e workflow completo no **GitHub Actions** (`.github/workflows/ci.yml`).
-- Versão estável atual: **`v0.6.0`**.
+- Versão estável atual: **`v0.6.1`**.
 
 ---
 
@@ -207,6 +210,67 @@ pipeline-ai module disable release-ops # Desativa módulo opcional
 
 ---
 
+## Pipeline Runner Determinístico (`pipeline-ai run`)
+
+Consolida a execução em lote da esteira de validação em um único comando de alta performance:
+
+```bash
+pipeline-ai run
+```
+
+O Runner executa automaticamente a cascata em 3 estágios:
+1. **`Doctor`:** Valida runtime (Go 1.24+), integridade de hooks, imutabilidade (`immutable_paths`) e configuração.
+2. **`Sensor`:** Executa a toolchain (`gofmt`, `go vet`, `go test ./...`, injeção automática de ambiente sem CGO para projetos desktop).
+3. **`Validate`:** Localiza a delivery ativa (ou via flag `-delivery` / `-report`) e audita o `report.md` contra o `git diff` real.
+
+Suporta a flag `-json` para emissão do payload estruturado com duração e status de cada estágio.
+
+---
+
+## Métricas DORA & Telemetria de Agentes (`pipeline-ai metrics`)
+
+Para medir com precisão a performance e estabilidade de múltiplos agentes de IA sem depender de SaaS externo ou bibliotecas de terceiros, o `pipeline-ai` integra um motor de telemetria determinístico em Go puro (DEL-020).
+
+As quatro métricas DORA são calculadas e adaptadas para velocidade de máquina:
+
+| Métrica DORA | Significado para Agentes de IA |
+|---|---|
+| **Deployment Frequency (DF)** | Taxa de micro-entregas diárias concluídas com sucesso. |
+| **Lead Time for Changes (LT)** | Tempo médio e mediana decorrido da abertura da issue no `pm-triage` ao PR validado no `git-delivery` (medido em minutos). |
+| **Change Failure Rate (CFR)** | Percentual de falhas e bloqueios nos gates determinísticos da IA (*doctor*, *sensor*, *validate*). |
+| **Time to Restore Service (MTTR)** | Tempo médio para a esteira se autorrecuperar de um bloqueio técnico (`STATUS: bloqueado`). |
+
+### Uso na CLI:
+
+```bash
+# Resumo legível das 4 métricas DORA:
+pipeline-ai metrics summary
+
+# Emissão em JSON estruturado para integrações ou dashboards:
+pipeline-ai metrics summary -json
+
+# Lista detalhada de entregas e durações por estágio:
+pipeline-ai metrics list
+```
+
+Persistência atômica e fail-safe em `.pipeline-state/metrics.json`, com parser blindado por **Fuzz Testing contínuo** (mais de 1.1M de iterações sem panics).
+
+---
+
+## Validação de Contratos de Handoff (`pipeline-ai handoff`)
+
+Garante a integridade das passagens de bastão entre skills no modelo autônomo (Princípio da Não-Interrupção), evitando alucinações e perda de contexto:
+
+```bash
+# Valida um arquivo de handoff contract:
+pipeline-ai handoff validate handoff.txt
+
+# Validação com saída estruturada JSON:
+pipeline-ai handoff validate -json handoff.txt
+```
+
+---
+
 ## Servidor MCP Nativo (`pipeline-ai mcp`)
 
 O `pipeline-ai` inclui um servidor compatível com a especificação **Model Context Protocol (MCP)** sobre transporte `stdio` (JSON-RPC 2.0). Ele permite que IDEs e assistentes (como o **Antigravity**) invoquem ferramentas de governança diretamente:
@@ -231,6 +295,9 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 ### Ferramentas MCP (Tools)
 - **`pipeline_doctor`**: Executa diagnóstico completo de ambiente e configuração (`dir`).
 - **`pipeline_validate`**: Valida relatórios de entrega (`report_path`, `no_git`, `base_ref`) e salvaguardas de Git.
+- **`pipeline_run_pipeline`**: Executa a esteira determinística completa em lote (`doctor` → `sensor` → `validate`) com telemetria automática (`delivery_id`, `report_path`, `dir`).
+- **`pipeline_get_metrics`**: Retorna as métricas DORA e o histórico de telemetria dos agentes em formato JSON (`dir`, `window_days`).
+- **`pipeline_validate_handoff`**: Valida sintaxe e completude de blocos de Handoff Contract (`contract`, `file`).
 - **`pipeline_scaffold_delivery`**: Cria o esqueleto da próxima entrega (`title`, `type`, `task_code`), gera `report.md` com seções obrigatórias e registra no `INDEX.md`.
 - **`pipeline_sync_skills`**: Sincroniza e atualiza `.agents/skills` e regras a partir dos templates embutidos (`dir`).
 - **`pipeline_close_delivery`**: Encerra a delivery ativa no repositório.
