@@ -15,6 +15,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -37,6 +38,7 @@ import (
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/runner"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor/semantic"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
 )
@@ -111,6 +113,9 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	case "plugin":
 		return runPlugin(cmdArgs, stdout, stderr)
 
+	case "eval":
+		return runEval(cmdArgs, stdin, stdout, stderr)
+
 	default:
 		fmt.Fprintf(stderr, "pipeline-ai: comando desconhecido: %q\nExecute 'pipeline-ai help' para ver a lista de comandos.\n", cmd)
 		return 1
@@ -134,6 +139,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  metrics    Exibe métricas de engenharia e governança DORA (summary, list)")
 	fmt.Fprintln(w, "  dashboard  Gera e renderiza dashboard HTML interativo de engenharia e métricas")
 	fmt.Fprintln(w, "  mcp        Executa o servidor MCP sobre stdio (JSON-RPC 2.0)")
+	fmt.Fprintln(w, "  eval       Submete uma avaliação semântica calibrada (System One / Jev)")
 	fmt.Fprintln(w, "  plugin     Gerencia o bundle e instalação do plugin Antigravity (verify, install)")
 	fmt.Fprintln(w, "  version    Exibe a versão do pipeline-ai")
 	fmt.Fprintln(w, "  help       Exibe esta mensagem de ajuda")
@@ -966,4 +972,173 @@ func runPluginInstall(args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "Plugin instalado com sucesso em %q [OK].\n", targetDir)
 	return 0
+}
+
+func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("eval", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	stateFlag := fs.String("state", "", "caminho de arquivo ou string de estado para avaliação")
+	questionFlag := fs.String("question", "", "pergunta ou critério semântico a ser avaliado")
+	thresholdFlag := fs.Float64("threshold", 0.8, "score mínimo de confiança requerido (0.0 a 1.0)")
+	jsonFlag := fs.Bool("json", false, "saída em formato JSON estruturado")
+	endpointFlag := fs.String("endpoint", "", "endpoint HTTP do sensor semântico (Jev)")
+	apiKeyFlag := fs.String("api-key", "", "chave de API do sensor semântico")
+	timeoutFlag := fs.Duration("timeout", 10*time.Second, "tempo limite para a requisição de avaliação")
+
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	const maxStateBytes = 512 * 1024
+
+	var stateContent string
+	rawState := *stateFlag
+
+	if rawState != "" {
+		if fi, err := os.Stat(rawState); err == nil && !fi.IsDir() {
+			if fi.Size() > maxStateBytes {
+				fmt.Fprintf(stderr, "eval: tamanho do state excede o limite máximo permitido (512KB)\n")
+				return 1
+			}
+			data, err := os.ReadFile(rawState)
+			if err != nil {
+				fmt.Fprintf(stderr, "eval: erro ao ler arquivo de state: %v\n", err)
+				return 1
+			}
+			stateContent = string(data)
+		} else {
+			if len(rawState) > maxStateBytes {
+				fmt.Fprintf(stderr, "eval: tamanho do state excede o limite máximo permitido (512KB)\n")
+				return 1
+			}
+			stateContent = rawState
+		}
+	} else if stdin != nil {
+		if f, ok := stdin.(*os.File); ok {
+			stat, err := f.Stat()
+			if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
+				data, err := io.ReadAll(io.LimitReader(f, maxStateBytes+1))
+				if err == nil && len(data) > 0 {
+					if len(data) > maxStateBytes {
+						fmt.Fprintf(stderr, "eval: tamanho do state lido do stdin excede o limite máximo permitido (512KB)\n")
+						return 1
+					}
+					stateContent = string(data)
+				}
+			}
+		} else {
+			data, err := io.ReadAll(io.LimitReader(stdin, maxStateBytes+1))
+			if err == nil && len(data) > 0 {
+				if len(data) > maxStateBytes {
+					fmt.Fprintf(stderr, "eval: tamanho do state excede o limite máximo permitido (512KB)\n")
+					return 1
+				}
+				stateContent = string(data)
+			}
+		}
+	}
+
+	question := strings.TrimSpace(*questionFlag)
+	if strings.TrimSpace(stateContent) == "" || question == "" {
+		fmt.Fprintln(stderr, "eval: os parâmetros -state e -question são obrigatórios. Uso: pipeline-ai eval -state <string|arquivo> -question <pergunta> [opções]")
+		return 1
+	}
+
+	if *thresholdFlag < 0.0 || *thresholdFlag > 1.0 {
+		fmt.Fprintf(stderr, "eval: threshold inválido (deve estar entre 0.0 e 1.0): %f\n", *thresholdFlag)
+		return 1
+	}
+
+	endpoint := strings.TrimSpace(*endpointFlag)
+	if endpoint == "" {
+		endpoint = strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_ENDPOINT"))
+	}
+	if endpoint == "" {
+		endpoint = strings.TrimSpace(os.Getenv("JEV_ENDPOINT"))
+	}
+
+	apiKey := strings.TrimSpace(*apiKeyFlag)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_API_KEY"))
+	}
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("JEV_API_KEY"))
+	}
+
+	if endpoint == "" || apiKey == "" {
+		if *jsonFlag {
+			res := map[string]any{
+				"configured": false,
+				"message":    "sensor semântico não configurado (JEV_ENDPOINT / JEV_API_KEY ausentes)",
+			}
+			data, _ := json.MarshalIndent(res, "", "  ")
+			fmt.Fprintln(stdout, string(data))
+		} else {
+			fmt.Fprintln(stderr, "eval: sensor semântico não configurado (JEV_ENDPOINT e JEV_API_KEY ausentes)")
+		}
+		return 1
+	}
+
+	timeout := *timeoutFlag
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	client := semantic.NewClient(semantic.ClientConfig{
+		Endpoint:     endpoint,
+		APIKey:       apiKey,
+		Timeout:      timeout,
+		MaxBodyBytes: 10 * 1024 * 1024,
+	})
+
+	decision, err := client.EvalNoul(ctx, semantic.EvalRequest{
+		State:     stateContent,
+		Question:  question,
+		Threshold: *thresholdFlag,
+	})
+
+	secrets := []string{apiKey, os.Getenv("JEV_API_KEY"), os.Getenv("PIPELINE_SEMANTIC_API_KEY")}
+
+	if err != nil {
+		sanitizedMsg := redactSecrets(err.Error(), secrets...)
+		if *jsonFlag {
+			res := map[string]any{
+				"error": sanitizedMsg,
+			}
+			data, _ := json.MarshalIndent(res, "", "  ")
+			fmt.Fprintln(stdout, string(data))
+		} else {
+			fmt.Fprintf(stderr, "eval: erro na avaliação semântica: %s\n", sanitizedMsg)
+		}
+		return 1
+	}
+
+	if *jsonFlag {
+		data, err := json.MarshalIndent(decision, "", "  ")
+		if err != nil {
+			fmt.Fprintf(stderr, "eval: erro ao serializar saída JSON: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(data))
+		return 0
+	}
+
+	fmt.Fprintf(stdout, "Decisão: %v\nConfiança: %.2f\nRazão: %s\nLatência: %dms\n",
+		decision.Decision, decision.Confidence, decision.Reason, decision.LatencyMs)
+	return 0
+}
+
+func redactSecrets(msg string, secrets ...string) string {
+	out := msg
+	for _, s := range secrets {
+		s = strings.TrimSpace(s)
+		if s != "" && strings.Contains(out, s) {
+			out = strings.ReplaceAll(out, s, "[REDACTED]")
+		}
+	}
+	return out
 }

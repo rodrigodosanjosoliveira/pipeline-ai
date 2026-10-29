@@ -3,6 +3,7 @@ package mcp
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/runner"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/scaffold"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor/semantic"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
 )
@@ -430,6 +432,36 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 						"description": "Diretório raiz do projeto a ser analisado (padrão: raiz atual)",
 					},
 				},
+			},
+		},
+		{
+			Name:        "pipeline_eval_semantic",
+			Description: "Submete uma avaliação semântica calibrada para o modelo System One (Jev), retornando decisão booleana Noul com score de confiança e justificativa.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"state": map[string]any{
+						"type":        "string",
+						"description": "Conteúdo de código ou estado semântico a ser avaliado",
+					},
+					"question": map[string]any{
+						"type":        "string",
+						"description": "Pergunta ou critério de verificação semântica",
+					},
+					"threshold": map[string]any{
+						"type":        "number",
+						"description": "Score mínimo de confiança requerido (0.0 a 1.0, padrão 0.8)",
+					},
+					"endpoint": map[string]any{
+						"type":        "string",
+						"description": "Endpoint HTTP do sensor semântico (opcional)",
+					},
+					"api_key": map[string]any{
+						"type":        "string",
+						"description": "Chave de autenticação da API semântica (opcional)",
+					},
+				},
+				"required": []string{"state", "question"},
 			},
 		},
 	}
@@ -1081,6 +1113,146 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			IsError: false,
 		})
 
+	case "pipeline_eval_semantic":
+		rawState, _ := params.Arguments["state"].(string)
+		rawQuestion, _ := params.Arguments["question"].(string)
+
+		stateStr := strings.TrimSpace(rawState)
+		questionStr := strings.TrimSpace(rawQuestion)
+
+		if stateStr == "" || questionStr == "" {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: "ERRO: argumentos 'state' e 'question' são obrigatórios e não podem ser vazios",
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		const maxStateBytes = 512 * 1024
+		if len(rawState) > maxStateBytes {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: "ERRO: tamanho do state excede o limite máximo permitido de 512KB",
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		threshold := 0.8
+		if rawThreshold, ok := params.Arguments["threshold"].(float64); ok {
+			if rawThreshold < 0.0 || rawThreshold > 1.0 {
+				s.sendResult(out, req.ID, ToolResult{
+					Content: []ToolContent{
+						{
+							Type: "text",
+							Text: fmt.Sprintf("ERRO: threshold inválido (deve estar entre 0.0 e 1.0): %f", rawThreshold),
+						},
+					},
+					IsError: true,
+				})
+				return
+			}
+			threshold = rawThreshold
+		}
+
+		var endpoint string
+		if rawEndpoint, ok := params.Arguments["endpoint"].(string); ok && strings.TrimSpace(rawEndpoint) != "" {
+			endpoint = strings.TrimSpace(rawEndpoint)
+		} else {
+			endpoint = strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_ENDPOINT"))
+			if endpoint == "" {
+				endpoint = strings.TrimSpace(os.Getenv("JEV_ENDPOINT"))
+			}
+		}
+
+		var apiKey string
+		if rawKey, ok := params.Arguments["api_key"].(string); ok && strings.TrimSpace(rawKey) != "" {
+			apiKey = strings.TrimSpace(rawKey)
+		} else {
+			apiKey = strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_API_KEY"))
+			if apiKey == "" {
+				apiKey = strings.TrimSpace(os.Getenv("JEV_API_KEY"))
+			}
+		}
+
+		if endpoint == "" || apiKey == "" {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: "Sensor semântico não configurado: JEV_ENDPOINT e JEV_API_KEY ausentes.",
+					},
+				},
+				IsError: false,
+			})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		client := semantic.NewClient(semantic.ClientConfig{
+			Endpoint:     endpoint,
+			APIKey:       apiKey,
+			Timeout:      15 * time.Second,
+			MaxBodyBytes: 10 * 1024 * 1024,
+		})
+
+		decision, err := client.EvalNoul(ctx, semantic.EvalRequest{
+			State:     rawState,
+			Question:  questionStr,
+			Threshold: threshold,
+		})
+
+		secrets := []string{apiKey, os.Getenv("JEV_API_KEY"), os.Getenv("PIPELINE_SEMANTIC_API_KEY")}
+
+		if err != nil {
+			sanitized := redactSecrets(err.Error(), secrets...)
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO na avaliação semântica: %s", sanitized),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		rawJSON, err := json.MarshalIndent(decision, "", "  ")
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO ao serializar decisão: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		s.sendResult(out, req.ID, ToolResult{
+			Content: []ToolContent{
+				{
+					Type: "text",
+					Text: string(rawJSON),
+				},
+			},
+			IsError: false,
+		})
+
 	default:
 		s.sendError(out, req.ID, CodeInvalidParams, fmt.Sprintf("ferramenta desconhecida: %s", params.Name))
 	}
@@ -1107,4 +1279,15 @@ func (s *Server) sendError(out io.Writer, id any, code int, msg string) {
 	}
 	data, _ := json.Marshal(resp)
 	fmt.Fprintf(out, "%s\n", string(data))
+}
+
+func redactSecrets(msg string, secrets ...string) string {
+	out := msg
+	for _, s := range secrets {
+		s = strings.TrimSpace(s)
+		if s != "" && strings.Contains(out, s) {
+			out = strings.ReplaceAll(out, s, "[REDACTED]")
+		}
+	}
+	return out
 }
