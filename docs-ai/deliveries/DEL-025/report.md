@@ -2,7 +2,7 @@
 delivery_id: DEL-025
 task_code: TASK-025
 title: "Sensoriamento Semântico e Decisões Calibradas com Jev (pacote internal/sensor/semantic em Go puro)"
-status: draft
+status: merged
 require_security: true
 require_migration: false
 require_performance: false
