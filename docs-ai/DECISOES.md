@@ -581,6 +581,25 @@ Integração de sensoriamento semântico determinístico no pipeline através do
    - Mitigação de DoS e exaustão de memória (SEC-02): limitação estrita de leitura de payload HTTP via `io.LimitReader` com `MaxBodyBytes` (padrão 10MB) retornando `ErrResponseTooLarge`.
    - Fuzz testing contínuo (`FuzzParseNoulResponse`): garantia de imunidade contra panics, payloads malformados ou entradas randômicas no unmarshaling do JSON.
 
+---
+
+### D-34 — Integração Operacional do Jev via CLI e Protocolo MCP (DEL-026)
+
+Disponibilização do sensoriamento semântico calibrado tanto para desenvolvedores humanos via CLI quanto para agentes autônomos via protocolo MCP:
+1. **Subcomando CLI `pipeline-ai eval`:**
+   - Executa consultas semânticas via flags declarativas (`-state`, `-question`, `-threshold`, `-endpoint`, `-api-key`, `-timeout`, `-json`).
+   - Suporte polimórfico a fontes de estado: aceita caminho de arquivo existente no disco, string inline ou leitura transparente via pipe/redirecionamento de `stdin`.
+   - Saída legível e compacta por padrão (`Decisão: APROVADO/REPROVADO`, `Confiança: X%`, `Razão`) ou estruturada em JSON (`-json`).
+2. **Ferramenta MCP `pipeline_eval_semantic`:**
+   - Registrada no servidor MCP nativo (`internal/mcp/server.go`) com esquema tipado (`state`, `question`, `threshold`, `endpoint`, `api_key`, `timeout_seconds`).
+   - Permite que agentes (como Antigravity, Claude Desktop, Cursor) deleguem decisões binárias calibradas diretamente ao sensor semântico via JSON-RPC 2.0.
+   - Resiliência fail-closed graciosa: se o sensor não estiver configurado, retorna mensagem instrutiva sem quebrar o ciclo de orquestração do agente.
+3. **Salvaguardas de Segurança e Resiliência Operacional:**
+   - **SEC-01 (Token Redaction):** Redação obrigatória de tokens e chaves de API (`api_key` ou `PIPELINE_AI_SEMANTIC_API_KEY`) em saídas de erro, logs, stdout e stderr do CLI e respostas de erro do MCP (`[REDACTED]`).
+   - **SEC-02 (Mitigação de DoS / Limite de 512KB):** O tamanho máximo do `state` (em arquivo, string direta ou `stdin`) é limitado a 512KB (524.288 bytes). Entradas que ultrapassem esse limite são rejeitadas deterministicamente com erro explícito antes de qualquer transmissão de rede.
+   - **SEC-03 (Timeout Mandatório):** Execuções utilizam deadline estrito com `context.WithTimeout` (padrão de 10 segundos configurável), cancelando sockets e impedindo travamento de processos ou agentes.
+
+
 
 
 

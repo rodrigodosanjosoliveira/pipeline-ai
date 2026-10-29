@@ -3,10 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCLIRouting(t *testing.T) {
@@ -978,6 +982,260 @@ func TestCLIPluginCommand(t *testing.T) {
 		code := run([]string{"plugin", "inexistente"}, &stdout, &stderr)
 		if code == 0 {
 			t.Errorf("subcomando desconhecido de plugin deveria retornar erro")
+		}
+	})
+}
+
+func TestCLIEval(t *testing.T) {
+	t.Run("eval sem argumentos", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"eval"}, &stdout, &stderr)
+		if code == 0 {
+			t.Errorf("eval sem argumentos deveria falhar com código != 0")
+		}
+		out := stdout.String() + stderr.String()
+		if !strings.Contains(strings.ToLower(out), "state") && !strings.Contains(strings.ToLower(out), "uso") && !strings.Contains(strings.ToLower(out), "obrigatório") {
+			t.Errorf("esperada mensagem de erro de parâmetros, obteve: %s", out)
+		}
+	})
+
+	t.Run("eval com state ou question vazios", func(t *testing.T) {
+		tests := []struct {
+			name string
+			args []string
+		}{
+			{name: "state vazio", args: []string{"eval", "-state", "", "-question", "ok?"}},
+			{name: "question vazia", args: []string{"eval", "-state", "algo", "-question", ""}},
+			{name: "ambos vazios", args: []string{"eval", "-state", "", "-question", ""}},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				var stdout, stderr bytes.Buffer
+				code := run(tt.args, &stdout, &stderr)
+				if code == 0 {
+					t.Errorf("esperava código != 0 para parâmetros inválidos em %s", tt.name)
+				}
+			})
+		}
+	})
+
+	t.Run("eval quando sensor nao configurado", func(t *testing.T) {
+		t.Setenv("PIPELINE_SEMANTIC_ENDPOINT", "")
+		t.Setenv("PIPELINE_SEMANTIC_API_KEY", "")
+		t.Setenv("JEV_ENDPOINT", "")
+		t.Setenv("JEV_API_KEY", "")
+
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"eval", "-state", "var a = 1", "-question", "tem segredos?"}, &stdout, &stderr)
+		if code == 0 {
+			t.Errorf("esperava código != 0 quando sensor não configurado")
+		}
+		out := stdout.String() + stderr.String()
+		if !strings.Contains(strings.ToLower(out), "configur") && !strings.Contains(strings.ToLower(out), "endpoint") {
+			t.Errorf("esperava mensagem indicando que o sensor não está configurado, obteve: %s", out)
+		}
+	})
+
+	t.Run("eval com mock server HTTP sucesso e saida formatada", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"decision": true,
+				"confidence": 0.96,
+				"reason": "Código sem credenciais hardcoded e bem estruturado.",
+				"latency_ms": 35
+			}`))
+		}))
+		defer mockServer.Close()
+
+		var stdout, stderr bytes.Buffer
+		args := []string{
+			"eval",
+			"-endpoint", mockServer.URL,
+			"-api-key", "test-token",
+			"-state", "const a = 123;",
+			"-question", "Há credenciais expostas?",
+			"-threshold", "0.8",
+		}
+		code := run(args, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("eval falhou com código %d, stderr: %s", code, stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "true") && !strings.Contains(strings.ToLower(out), "sim") && !strings.Contains(strings.ToLower(out), "decisão") {
+			t.Errorf("saída formatada não contém indicação da decisão: %s", out)
+		}
+		if !strings.Contains(out, "0.96") && !strings.Contains(out, "96%") {
+			t.Errorf("saída formatada não contém confiança: %s", out)
+		}
+		if !strings.Contains(out, "Código sem credenciais hardcoded") {
+			t.Errorf("saída formatada não contém justificativa: %s", out)
+		}
+	})
+
+	t.Run("eval com flag -json", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"decision": false,
+				"confidence": 0.88,
+				"reason": "Encontrada vulnerabilidade potencial.",
+				"latency_ms": 50
+			}`))
+		}))
+		defer mockServer.Close()
+
+		var stdout, stderr bytes.Buffer
+		args := []string{
+			"eval",
+			"-endpoint", mockServer.URL,
+			"-api-key", "test-token",
+			"-state", "auth_token = '1234'",
+			"-question", "Código seguro?",
+			"-json",
+		}
+		code := run(args, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("eval -json falhou com código %d, stderr: %s", code, stderr.String())
+		}
+		var res struct {
+			Decision   bool    `json:"decision"`
+			Confidence float64 `json:"confidence"`
+			Reason     string  `json:"reason"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			t.Fatalf("saída com -json não é JSON válido: %v; saída: %s", err, stdout.String())
+		}
+		if res.Decision != false {
+			t.Errorf("res.Decision esperada false, obteve %v", res.Decision)
+		}
+		if res.Confidence != 0.88 {
+			t.Errorf("res.Confidence esperada 0.88, obteve %v", res.Confidence)
+		}
+		if res.Reason != "Encontrada vulnerabilidade potencial." {
+			t.Errorf("res.Reason esperada 'Encontrada vulnerabilidade potencial.', obteve %q", res.Reason)
+		}
+	})
+
+	t.Run("eval com -state apontando para arquivo no disco", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		stateFile := filepath.Join(tmpDir, "state.txt")
+		stateContent := "conteúdo lido a partir do arquivo para teste de sensoriamento"
+		if err := os.WriteFile(stateFile, []byte(stateContent), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		var receivedBody bytes.Buffer
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.Copy(&receivedBody, r.Body)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"decision": true, "confidence": 0.9, "reason": "ok"}`))
+		}))
+		defer mockServer.Close()
+
+		var stdout, stderr bytes.Buffer
+		args := []string{
+			"eval",
+			"-endpoint", mockServer.URL,
+			"-api-key", "dummy",
+			"-state", stateFile,
+			"-question", "conteúdo válido?",
+		}
+		code := run(args, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("eval com arquivo falhou: código %d, stderr: %s", code, stderr.String())
+		}
+		if !strings.Contains(receivedBody.String(), stateContent) {
+			t.Errorf("o servidor mock não recebeu o conteúdo lido do arquivo; payload: %s", receivedBody.String())
+		}
+	})
+
+	t.Run("eval seguranca SEC-01 token redaction em caso de erro", func(t *testing.T) {
+		secretToken := "sk-super-secret-token-eval-998877"
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("internal server failure with " + secretToken))
+		}))
+		defer mockServer.Close()
+
+		var stdout, stderr bytes.Buffer
+		args := []string{
+			"eval",
+			"-endpoint", mockServer.URL,
+			"-api-key", secretToken,
+			"-state", "test",
+			"-question", "test?",
+		}
+		code := run(args, &stdout, &stderr)
+		if code == 0 {
+			t.Errorf("esperava código de erro para servidor com 500")
+		}
+		combined := stdout.String() + stderr.String()
+		if strings.Contains(combined, secretToken) {
+			t.Fatalf("SEC-01 violação: token secreto refletido na saída:\n%s", combined)
+		}
+	})
+
+	t.Run("eval seguranca SEC-02 limitacao de tamanho do state max 512KB", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		largeFile := filepath.Join(tmpDir, "large_state.txt")
+		largeData := make([]byte, 513*1024)
+		for i := range largeData {
+			largeData[i] = 'A'
+		}
+		if err := os.WriteFile(largeFile, largeData, 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		var stdout, stderr bytes.Buffer
+		args := []string{
+			"eval",
+			"-endpoint", "http://127.0.0.1:9999",
+			"-api-key", "token",
+			"-state", largeFile,
+			"-question", "muito grande?",
+		}
+		code := run(args, &stdout, &stderr)
+		if code == 0 {
+			t.Errorf("SEC-02: esperava erro ao ler state que excede 512KB")
+		}
+		combined := stdout.String() + stderr.String()
+		if !strings.Contains(strings.ToLower(combined), "tamanho") && !strings.Contains(strings.ToLower(combined), "limite") && !strings.Contains(strings.ToLower(combined), "large") && !strings.Contains(strings.ToLower(combined), "512") {
+			t.Errorf("SEC-02: esperava mensagem indicando limite de tamanho do state excedido, obteve: %s", combined)
+		}
+	})
+
+	t.Run("eval seguranca SEC-03 timeout mandatorio via context", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(300 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"decision": true, "confidence": 0.9, "reason": "ok"}`))
+		}))
+		defer mockServer.Close()
+
+		var stdout, stderr bytes.Buffer
+		args := []string{
+			"eval",
+			"-endpoint", mockServer.URL,
+			"-api-key", "token",
+			"-state", "teste",
+			"-question", "timeout?",
+			"-timeout", "50ms",
+		}
+		code := run(args, &stdout, &stderr)
+		if code == 0 {
+			t.Errorf("SEC-03: esperava código de erro por timeout")
+		}
+		combined := stdout.String() + stderr.String()
+		if !strings.Contains(strings.ToLower(combined), "timeout") && !strings.Contains(strings.ToLower(combined), "context") && !strings.Contains(strings.ToLower(combined), "deadline") {
+			t.Errorf("SEC-03: esperava menção a timeout ou cancelamento, obteve: %s", combined)
 		}
 	})
 }

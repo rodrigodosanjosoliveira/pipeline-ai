@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1054,4 +1056,237 @@ func TestMCPToolsGetDashboardHTML(t *testing.T) {
 	if !strings.Contains(htmlText, "<html") {
 		t.Errorf("conteúdo retornado não contém tag <html: %q", htmlText)
 	}
+}
+
+func TestMCPEvalSemanticTool(t *testing.T) {
+	s := NewServer(".")
+
+	t.Run("tools/list lista pipeline_eval_semantic com schemas validos", func(t *testing.T) {
+		req := `{"jsonrpc":"2.0","id":140,"method":"tools/list"}`
+		res := runRPC(t, s, req)
+		result, ok := res["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente em tools/list: %v", res)
+		}
+		tools, ok := result["tools"].([]any)
+		if !ok {
+			t.Fatalf("tools ausente em tools/list: %v", result)
+		}
+
+		var found map[string]any
+		for _, raw := range tools {
+			tool, ok := raw.(map[string]any)
+			if ok && tool["name"] == "pipeline_eval_semantic" {
+				found = tool
+				break
+			}
+		}
+
+		if found == nil {
+			t.Fatalf("ferramenta pipeline_eval_semantic não encontrada em tools/list")
+		}
+
+		schema, ok := found["inputSchema"].(map[string]any)
+		if !ok {
+			t.Fatalf("inputSchema ausente em pipeline_eval_semantic")
+		}
+		props, ok := schema["properties"].(map[string]any)
+		if !ok {
+			t.Fatalf("properties ausente em inputSchema")
+		}
+		if _, ok := props["state"]; !ok {
+			t.Errorf("campo state ausente nas properties")
+		}
+		if _, ok := props["question"]; !ok {
+			t.Errorf("campo question ausente nas properties")
+		}
+	})
+
+	t.Run("tools/call com parametros invalidos", func(t *testing.T) {
+		tests := []struct {
+			name string
+			args map[string]any
+		}{
+			{name: "sem state", args: map[string]any{"question": "ok?"}},
+			{name: "state vazio", args: map[string]any{"state": "", "question": "ok?"}},
+			{name: "sem question", args: map[string]any{"state": "var a = 1"}},
+			{name: "question vazia", args: map[string]any{"state": "var a = 1", "question": ""}},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				callPayload := map[string]any{
+					"jsonrpc": "2.0",
+					"id":      141,
+					"method":  "tools/call",
+					"params": map[string]any{
+						"name":      "pipeline_eval_semantic",
+						"arguments": tt.args,
+					},
+				}
+				reqBytes, _ := json.Marshal(callPayload)
+				callRes := runRPC(t, s, string(reqBytes))
+				callResult, ok := callRes["result"].(map[string]any)
+				if !ok {
+					t.Fatalf("esperava result em tools/call, obteve: %v", callRes)
+				}
+				if callResult["isError"] != true {
+					t.Errorf("esperava isError=true para argumentos inválidos: %v", tt.args)
+				}
+			})
+		}
+	})
+
+	t.Run("tools/call quando API nao configurada", func(t *testing.T) {
+		t.Setenv("PIPELINE_SEMANTIC_ENDPOINT", "")
+		t.Setenv("PIPELINE_SEMANTIC_API_KEY", "")
+		t.Setenv("JEV_ENDPOINT", "")
+		t.Setenv("JEV_API_KEY", "")
+
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      142,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_eval_semantic",
+				"arguments": map[string]any{
+					"state":    "const x = 10;",
+					"question": "o código é válido?",
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		callRes := runRPC(t, s, string(reqBytes))
+		callResult, ok := callRes["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("esperava result em tools/call, obteve: %v", callRes)
+		}
+		content, ok := callResult["content"].([]any)
+		if !ok || len(content) == 0 {
+			t.Fatalf("esperava content no retorno informativo, obteve: %v", callResult)
+		}
+		first, _ := content[0].(map[string]any)
+		text, _ := first["text"].(string)
+		if !strings.Contains(strings.ToLower(text), "configur") && !strings.Contains(strings.ToLower(text), "endpoint") {
+			t.Errorf("esperava mensagem informativa sobre sensor não configurado, obteve: %q", text)
+		}
+	})
+
+	t.Run("tools/call com mock server httptest e resposta 200", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "bad method", http.StatusMethodNotAllowed)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"decision": true,
+				"confidence": 0.94,
+				"reason": "critérios atendidos",
+				"latency_ms": 15
+			}`))
+		}))
+		defer mockServer.Close()
+
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      143,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_eval_semantic",
+				"arguments": map[string]any{
+					"endpoint":  mockServer.URL,
+					"api_key":   "dummy-token",
+					"state":     "package main",
+					"question":  "possui declaração de pacote?",
+					"threshold": 0.8,
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		callRes := runRPC(t, s, string(reqBytes))
+		callResult, ok := callRes["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("esperava result em tools/call, obteve: %v", callRes)
+		}
+		if callResult["isError"] == true {
+			t.Fatalf("esperava isError=false para mock server válido: %v", callResult)
+		}
+		content, ok := callResult["content"].([]any)
+		if !ok || len(content) == 0 {
+			t.Fatalf("esperava content no retorno, obteve: %v", callResult)
+		}
+		first, _ := content[0].(map[string]any)
+		text, _ := first["text"].(string)
+		if !strings.Contains(text, "critérios atendidos") || !strings.Contains(text, "0.94") {
+			t.Errorf("conteúdo retornado não reflete a decisão: %q", text)
+		}
+	})
+
+	t.Run("tools/call seguranca SEC-01 token redaction", func(t *testing.T) {
+		secretKey := "mcp-secret-token-xyz-123"
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "error with key "+secretKey, http.StatusInternalServerError)
+		}))
+		defer mockServer.Close()
+
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      144,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_eval_semantic",
+				"arguments": map[string]any{
+					"endpoint": mockServer.URL,
+					"api_key":  secretKey,
+					"state":    "dummy",
+					"question": "dummy?",
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		callRes := runRPC(t, s, string(reqBytes))
+		callResult, _ := callRes["result"].(map[string]any)
+		content, _ := callResult["content"].([]any)
+		if len(content) > 0 {
+			first, _ := content[0].(map[string]any)
+			text, _ := first["text"].(string)
+			if strings.Contains(text, secretKey) {
+				t.Fatalf("SEC-01 violação no MCP: token secreto exposto em text: %s", text)
+			}
+		}
+	})
+
+	t.Run("tools/call seguranca SEC-02 limite maximo de state 512KB", func(t *testing.T) {
+		largeState := strings.Repeat("X", 513*1024)
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      145,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_eval_semantic",
+				"arguments": map[string]any{
+					"endpoint": "http://127.0.0.1:9999",
+					"api_key":  "token",
+					"state":    largeState,
+					"question": "grande?",
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		callRes := runRPC(t, s, string(reqBytes))
+		callResult, _ := callRes["result"].(map[string]any)
+		if callResult["isError"] != true {
+			t.Errorf("SEC-02: esperava isError=true para state excedendo 512KB")
+		}
+		content, _ := callResult["content"].([]any)
+		if len(content) > 0 {
+			first, _ := content[0].(map[string]any)
+			text, _ := first["text"].(string)
+			if !strings.Contains(strings.ToLower(text), "tamanho") && !strings.Contains(strings.ToLower(text), "limite") && !strings.Contains(strings.ToLower(text), "512") && !strings.Contains(strings.ToLower(text), "large") {
+				t.Errorf("SEC-02: esperava menção ao limite de tamanho do state, obteve: %s", text)
+			}
+		}
+	})
 }
