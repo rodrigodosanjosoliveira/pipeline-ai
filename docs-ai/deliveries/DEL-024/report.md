@@ -2,7 +2,7 @@
 delivery_id: DEL-024
 task_code: TASK-024
 title: "Release v0.8.0: Dashboard visual interativo Generative UI e Plugin oficial do Google Antigravity"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false
