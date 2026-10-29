@@ -564,6 +564,24 @@ Transformação do toolkit em uma extensão nativa de primeira classe no ecossis
 2. **Instalação Determinística em 1 Comando:** Implementação do subcomando CLI `pipeline-ai plugin install` para instalação automatizada e idempotente no diretório de plugins do usuário (`~/.gemini/config/plugins/pipeline-ai`).
 3. **Validação Estrutural e Fuzzing:** Utilitário `pipeline-ai plugin verify` e analisador sintático de manifestos blindado por Fuzz Testing contínuo.
 
+---
+
+## 12. Sensoriamento Semântico e Decisões Calibradas com Jev
+
+### D-33 — Sensoriamento Semântico e Decisões Calibradas com Jev (DEL-025)
+
+Integração de sensoriamento semântico determinístico no pipeline através do pacote `internal/sensor/semantic`:
+1. **Modelos "System One" e Decisões Calibradas Tipadas:** Uso de modelos "System One" (Jev) para classificação calibrada e tipada (`NoulDecision`, `ChoiceDecision`, `ScoreDecision`), substituindo a geração estocástica e não-determinística de texto livre por inferências rápidas com scores de confiança calibrados e thresholds configuráveis.
+2. **Preservação Estrita das Invariantes Arquiteturais:**
+   - Implementação em Go 1.24+ puro utilizando exclusivamente a standard library (`net/http`, `encoding/json`, `context`, etc.).
+   - Zero dependências externas adicionadas em `go.mod`.
+   - Política fail-closed graciosa: clientes não configurados, indisponíveis ou requisições com confiança abaixo do threshold falham de forma segura (`ErrInsufficientConfidence`, `ErrUnauthorized`, `ErrServerFailure`).
+3. **Hardening de Segurança e Resiliência:**
+   - Proteção de credenciais (SEC-01): sanitização e redação automática de APIKey em mensagens de erro (`[REDACTED]`).
+   - Mitigação de DoS e exaustão de memória (SEC-02): limitação estrita de leitura de payload HTTP via `io.LimitReader` com `MaxBodyBytes` (padrão 10MB) retornando `ErrResponseTooLarge`.
+   - Fuzz testing contínuo (`FuzzParseNoulResponse`): garantia de imunidade contra panics, payloads malformados ou entradas randômicas no unmarshaling do JSON.
+
+
 
 
 
