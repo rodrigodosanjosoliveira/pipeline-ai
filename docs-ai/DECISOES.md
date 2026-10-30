@@ -566,7 +566,7 @@ Transformação do toolkit em uma extensão nativa de primeira classe no ecossis
 
 ---
 
-## 12. Sensoriamento Semântico e Decisões Calibradas com Jev
+## 12. Consolidação Arquitetural da v0.9.0 (Sensoriamento Semântico e Decisões Calibradas com Jev)
 
 ### D-33 — Sensoriamento Semântico e Decisões Calibradas com Jev (DEL-025)
 
@@ -598,9 +598,4 @@ Disponibilização do sensoriamento semântico calibrado tanto para desenvolvedo
    - **SEC-01 (Token Redaction):** Redação obrigatória de tokens e chaves de API (`api_key` ou `PIPELINE_AI_SEMANTIC_API_KEY`) em saídas de erro, logs, stdout e stderr do CLI e respostas de erro do MCP (`[REDACTED]`).
    - **SEC-02 (Mitigação de DoS / Limite de 512KB):** O tamanho máximo do `state` (em arquivo, string direta ou `stdin`) é limitado a 512KB (524.288 bytes). Entradas que ultrapassem esse limite são rejeitadas deterministicamente com erro explícito antes de qualquer transmissão de rede.
    - **SEC-03 (Timeout Mandatório):** Execuções utilizam deadline estrito com `context.WithTimeout` (padrão de 10 segundos configurável), cancelando sockets e impedindo travamento de processos ou agentes.
-
-
-
-
-
 

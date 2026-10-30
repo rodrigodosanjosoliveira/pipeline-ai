@@ -37,7 +37,7 @@ func TestCLIRouting(t *testing.T) {
 			name:       "comando version",
 			args:       []string{"version"},
 			wantExit:   0,
-			wantStdout: "pipeline-ai v0.8.0",
+			wantStdout: "pipeline-ai v0.9.0",
 		},
 		{
 			name:       "comando desconhecido",
@@ -910,7 +910,7 @@ func TestCLIPluginCommand(t *testing.T) {
 		"name": "pipeline-ai",
 		"description": "Governança determinística de esteiras com múltiplos agentes em IA",
 		"displayName": "Pipeline AI",
-		"version": "0.8.0",
+		"version": "0.9.0",
 		"suggestedPrompts": ["Triage", "Delivery"],
 		"repository": "https://github.com/rodrigodosanjosoliveira/pipeline-ai"
 	}`

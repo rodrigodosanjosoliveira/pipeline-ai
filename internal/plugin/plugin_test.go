@@ -15,7 +15,7 @@ func TestValidateManifest(t *testing.T) {
 		Name:        "pipeline-ai",
 		Description: "Governança determinística de esteiras com múltiplos agentes em IA",
 		DisplayName: "Pipeline AI",
-		Version:     "0.8.0",
+		Version:     "0.9.0",
 		SuggestedPrompts: []string{
 			"Iniciar nova entrega com pm-triage",
 			"Validar delivery antes do PR",
@@ -156,7 +156,7 @@ func FuzzValidateManifest(f *testing.F) {
 		Name:             "pipeline-ai",
 		Description:      "Governança determinística de esteiras com múltiplos agentes em IA",
 		DisplayName:      "Pipeline AI",
-		Version:          "0.8.0",
+		Version:          "0.9.0",
 		SuggestedPrompts: []string{"prompt 1", "prompt 2"},
 		Repository:       "https://github.com/rodrigodosanjosoliveira/pipeline-ai",
 	}
@@ -186,7 +186,7 @@ func setupValidBundle(t *testing.T) string {
 		Name:             "pipeline-ai",
 		Description:      "Kit de governança",
 		DisplayName:      "Pipeline AI",
-		Version:          "0.8.0",
+		Version:          "0.9.0",
 		SuggestedPrompts: []string{"Iniciar entrega"},
 		Repository:       "https://github.com/rodrigodosanjosoliveira/pipeline-ai",
 	}
@@ -426,5 +426,20 @@ func TestInstallToDir(t *testing.T) {
 				tt.verify(t, srcDir, targetDir)
 			}
 		})
+	}
+}
+
+func TestOfficialPluginBundleVersion(t *testing.T) {
+	manifestPath := filepath.Join("..", "..", "plugin", "plugin.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("falha ao ler %s: %v", manifestPath, err)
+	}
+	m, err := plugin.ValidateManifest(data)
+	if err != nil {
+		t.Fatalf("ValidateManifest(%s) retornou erro: %v", manifestPath, err)
+	}
+	if m.Version != "0.9.0" {
+		t.Errorf("plugin/plugin.json Version = %q, esperado %q", m.Version, "0.9.0")
 	}
 }
