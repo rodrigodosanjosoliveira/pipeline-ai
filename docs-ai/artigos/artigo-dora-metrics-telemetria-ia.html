@@ -98,7 +98,7 @@
 
 <p>Para responder a essa pergunta com fatos e não com intuição, não precisamos reinventar a roda da gestão de engenharia. Precisamos recorrer ao padrão mais respeitado e comprovado da nossa indústria: as <strong>Métricas DORA (DevOps Research and Assessment)</strong>.</p>
 
-<p>Neste artigo — celebrando a entrega <strong>DEL-020 do framework Pipeline-AI</strong> —, compartilho como redesenhamos e implementamos as quatro métricas DORA adaptadas para agentes autônomos de IA, construindo um <strong>motor de telemetria determinístico em Go 1.24 puro (stdlib)</strong>, com persistência atômica, salvaguardas validadas por Fuzzing e integração nativa via <strong>Model Context Protocol (MCP)</strong>.</p>
+<p>Neste artigo — consolidando a evolução das entregas <strong>DEL-020 a DEL-027 (v0.9.0) do framework Pipeline-AI</strong> —, compartilho como redesenhamos e implementamos as quatro métricas DORA adaptadas para agentes autônomos de IA, construindo um <strong>motor de telemetria determinístico em Go 1.24 puro (stdlib)</strong>, com persistência atômica, salvaguardas validadas por Fuzzing, <strong>Dashboard Visual Interativo (Generative UI)</strong> e integração nativa via <strong>Model Context Protocol (MCP)</strong>.</p>
 
 <hr>
 
@@ -130,7 +130,7 @@
     <tr>
       <td><strong>Change Failure Rate (CFR)</strong></td>
       <td>Percentual de deploys que causaram incidente em produção.</td>
-      <td>Percentual de execuções da esteira que foram bloqueadas ou falharam nos gates determinísticos da IA (<em>doctor</em>, <em>sensor</em>, <em>validate</em>).</td>
+      <td>Percentual de execuções da esteira que foram bloqueadas ou falharam nos gates determinísticos (<em>doctor</em>, <em>sensor</em>, <em>validate</em>) e no sensoriamento semântico calibrado (<em>Jev / eval</em>).</td>
     </tr>
     <tr>
       <td><strong>Time to Restore Service (MTTR)</strong></td>
@@ -250,9 +250,9 @@ _ = metrics.RecordEvent(absRoot, metrics.Event{
 
 <hr>
 
-<h2>5. Consultando Métricas na CLI e via Protocolo MCP</h2>
+<h2>5. Consultando Métricas na CLI, via Protocolo MCP e no Dashboard Visual (Generative UI)</h2>
 
-<p>As métricas coletadas estão disponíveis tanto para engenheiros humanos no terminal quanto para os próprios agentes através do <strong>Model Context Protocol (MCP)</strong>.</p>
+<p>As métricas coletadas estão disponíveis tanto para engenheiros humanos no terminal e no navegador quanto para os próprios agentes através do <strong>Model Context Protocol (MCP)</strong>.</p>
 
 <h3>Na Linha de Comando (CLI):</h3>
 <pre><code>$ pipeline-ai metrics summary
@@ -283,7 +283,12 @@ Métricas DORA do Pipeline:
   }
 }</code></pre>
 
-<p>Isso permite que a própria IA avalie seu histórico: se o <code>Change Failure Rate</code> nos testes começar a subir, o orquestrador pode acionar automaticamente guardrails mais rígidos ou alocar turnos adicionais para a fase de TDD (<em>test-writer</em>).</p>
+<p>Isso permite que a própria IA avalie seu histórico: se o <code>Change Failure Rate</code> nos testes começar a subir, o orquestrador pode acionar automaticamente guardrails mais rígidos, rodar avaliações semânticas calibradas (<code>pipeline-ai eval</code> / <code>pipeline_eval_semantic</code>) ou alocar turnos adicionais para a fase de TDD (<em>test-writer</em>).</p>
+
+<h3>No Dashboard Visual Interativo (Generative UI &amp; CLI):</h3>
+<p>Para transformar números brutos em observabilidade executiva instantânea, construímos também o pacote <code>internal/dashboard</code> (entrega <strong>DEL-022</strong>), que renderiza um cockpit visual autocontido em HTML5/CSS3/SVG moderno (<em>dark mode</em>, zero dependências JS externas e protegido contra XSS):</p>
+<pre><code>$ pipeline-ai dashboard -output dashboard.html</code></pre>
+<p>Ou diretamente dentro do chat da IDE via tool MCP <code>pipeline_render_dashboard</code>, exibindo cards executivos das 4 métricas DORA, barras proporcionais de latência por estágio (<em>doctor</em>, <em>sensor</em>, <em>validate</em>), timeline das entregas e inspeção detalhada dos handoffs de cada agente.</p>
 
 <hr>
 
@@ -300,7 +305,7 @@ Métricas DORA do Pipeline:
 
 <hr>
 
-<p>O código do <strong>Pipeline-AI</strong>, incluindo o pacote de telemetria <code>internal/metrics</code>, o runner determinístico e a suíte de 16 skills em Go puro, é 100% open-source sob licença MIT:</p>
+<p>O código do <strong>Pipeline-AI (v0.9.0)</strong> — incluindo o pacote de telemetria <code>internal/metrics</code>, o dashboard visual <code>internal/dashboard</code>, o sensoriamento semântico calibrado <code>internal/sensor/semantic</code>, o empacotamento oficial como Plugin do Google Antigravity e a suíte de 16 skills em Go puro — é 100% open-source sob licença MIT:</p>
 
 <p>👉 <strong>Repositório Oficial:</strong> <a href="https://github.com/rodrigodosanjosoliveira/pipeline-ai">github.com/rodrigodosanjosoliveira/pipeline-ai</a></p>
 

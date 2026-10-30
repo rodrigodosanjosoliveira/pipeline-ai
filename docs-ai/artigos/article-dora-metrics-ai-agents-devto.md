@@ -13,7 +13,7 @@ However, once autonomous coding agents enter production-grade engineering workfl
 
 To answer this question quantitatively rather than intuitively, we don't need to invent new software metrics. We need to leverage the gold standard of modern engineering: **DORA Metrics (DevOps Research and Assessment)**.
 
-In this article — celebrating release **DEL-020 of the Pipeline-AI framework** —, I share how we redesigned and implemented the four DORA metrics specifically for autonomous AI agents, building a **zero-dependency telemetry engine in pure Go 1.24 stdlib**, hardened with **fuzz testing**, and exposed directly to agents via the **Model Context Protocol (MCP)**.
+In this article — consolidating releases **DEL-020 through DEL-027 (v0.9.0) of the Pipeline-AI framework** —, I share how we redesigned and implemented the four DORA metrics specifically for autonomous AI agents, building a **zero-dependency telemetry engine in pure Go 1.24 stdlib**, hardened with **fuzz testing**, rendered via an **Interactive Generative UI Dashboard**, and exposed directly to agents via the **Model Context Protocol (MCP)**.
 
 ---
 
@@ -27,7 +27,7 @@ When human keystrokes are replaced by a team of specialized AI agents (Triage, A
 |---|---|---|
 | **Deployment Frequency (DF)** | How often code reaches production (weekly or monthly). | Number of fully validated micro-deliveries shipped per day at machine speed. |
 | **Lead Time for Changes (LT)** | Time from first commit to production deployment (days/weeks). | Time elapsed from initial issue triage (`pm-triage`) to validated PR creation in `git-delivery` (measured in **minutes**). |
-| **Change Failure Rate (CFR)** | Percentage of deployments causing a production failure. | Percentage of pipeline runs blocked by deterministic AI quality gates (*doctor*, *sensor*, *validate*). |
+| **Change Failure Rate (CFR)** | Percentage of deployments causing a production failure. | Percentage of pipeline runs blocked by deterministic AI quality gates (*doctor*, *sensor*, *validate*) and calibrated semantic sensing (*Jev / eval*). |
 | **Time to Restore Service (MTTR)** | Mean time to recover from a downtime or production defect. | Time required for the agent pipeline to resolve a blocked gate (`STATUS: bloqueado`) and restore a passing state (`ok`). |
 
 If an autonomous agent churns out 5,000 lines of code per hour but exhibits a **60% Change Failure Rate** on test and security gates, it is not delivering velocity: it is creating cognitive pollution for human reviewers.
@@ -142,9 +142,9 @@ This delivers **zero-overhead passive observability**: agents execute their assi
 
 ---
 
-## 5. CLI & Model Context Protocol (MCP) Integration
+## 5. CLI, Model Context Protocol (MCP) & Interactive Dashboard (Generative UI)
 
-Telemetry data is immediately queryable via both terminal CLI and AI agents over **MCP**:
+Telemetry data is immediately queryable via terminal CLI, an interactive visual HTML5 dashboard, and AI agents over **MCP**:
 
 ### Terminal CLI:
 ```bash
@@ -180,7 +180,14 @@ AI agents invoke the MCP tool directly:
   }
 }
 ```
-If an agent detects its `Change Failure Rate` climbing, it can autonomously adapt: allocating more reasoning tokens to test generation (`test-writer`) or requesting additional guardrail checks.
+If an agent detects its `Change Failure Rate` climbing, it can autonomously adapt: allocating more reasoning tokens to test generation (`test-writer`), running calibrated semantic evaluations (`pipeline-ai eval` / `pipeline_eval_semantic`), or requesting additional guardrail checks.
+
+### Interactive Visual Dashboard (`pipeline-ai dashboard` & `pipeline_render_dashboard`):
+Built in `internal/dashboard` (**DEL-022**), the framework also renders a self-contained HTML5/CSS3/SVG executive cockpit (dark mode, zero external JS dependencies, and XSS-safe):
+```bash
+$ pipeline-ai dashboard -output dashboard.html
+```
+Or inline in the IDE via the `pipeline_render_dashboard` MCP tool, visualizing the 4 DORA KPI cards, proportional stage latency bars, delivery timelines, and agent handoff inspection.
 
 ---
 
@@ -195,7 +202,7 @@ By implementing **DORA Metrics for AI Agent Pipelines**, engineering teams achie
 
 ---
 
-The **Pipeline-AI** framework, telemetry engine, and complete 16-skill catalog are open-source under the MIT license:
+The **Pipeline-AI (v0.9.0)** framework — including the telemetry engine, interactive visual dashboard, calibrated semantic sensor (`Jev`), official Google Antigravity Plugin, and complete 16-skill catalog — is open-source under the MIT license:
 
 👉 **GitHub:** [github.com/rodrigodosanjosoliveira/pipeline-ai](https://github.com/rodrigodosanjosoliveira/pipeline-ai)
 
