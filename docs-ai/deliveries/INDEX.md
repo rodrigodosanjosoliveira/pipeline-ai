@@ -7,8 +7,9 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-026 | TASK-026 | Integração operacional do Jev: subcomando CLI eval e ferramenta MCP pipeline_eval_semantic | feat | 2026-10-29 | draft |
-| DEL-025 | TASK-025 | Sensoriamento semântico e decisões calibradas com Jev (pacote internal/sensor/semantic em Go puro) | feat | 2026-10-29 | draft |
+| DEL-027 | TASK-027 | Release v0.9.0: Consolidação do sensoriamento semântico Jev (CLI eval e MCP pipeline_eval_semantic) | chore | 2026-10-30 | draft |
+| DEL-026 | TASK-026 | Integração operacional do Jev: subcomando CLI eval e ferramenta MCP pipeline_eval_semantic | feat | 2026-10-29 | merged |
+| DEL-025 | TASK-025 | Sensoriamento semântico e decisões calibradas com Jev (pacote internal/sensor/semantic em Go puro) | feat | 2026-10-29 | merged |
 | DEL-024 | TASK-024 | Release v0.8.0: Dashboard visual interativo Generative UI e Plugin oficial do Google Antigravity | chore | 2026-10-28 | merged |
 | DEL-023 | TASK-023 | Empacotamento oficial como Plugin do Google Antigravity (plugin.json, MCP e hooks) | feat | 2026-10-28 | merged |
 | DEL-022 | TASK-022 | Dashboard visual interativo de handoffs, esteira e métricas DORA (Generative UI e CLI) | feat | 2026-10-28 | merged |

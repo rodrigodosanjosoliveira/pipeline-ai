@@ -2,7 +2,7 @@
 delivery_id: DEL-026
 task_code: TASK-026
 title: "Integração Operacional do Jev: Subcomando CLI eval e Ferramenta MCP pipeline_eval_semantic"
-status: draft
+status: merged
 require_security: true
 require_migration: false
 require_performance: false
