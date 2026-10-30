@@ -2,7 +2,7 @@
 delivery_id: DEL-027
 task_code: TASK-027
 title: "Release v0.9.0: Consolidação do sensoriamento semântico Jev (CLI eval e MCP pipeline_eval_semantic)"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

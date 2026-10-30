@@ -358,20 +358,13 @@ func (c *Config) IsSecuritySurface(relPath string) bool {
 // relToRoot converte um caminho absoluto em relativo à raiz do projeto.
 // Devolve ok=false se o caminho estiver fora da raiz.
 func (c *Config) relToRoot(absPath string) (string, bool) {
-	canonicalRoot := c.root
-	if r, err := filepath.EvalSymlinks(c.root); err == nil {
-		canonicalRoot = r
-	}
+	canonicalRoot := resolveSymlinkAncestors(c.root)
 
 	clean, err := filepath.Abs(absPath)
 	if err != nil {
 		return "", false
 	}
-	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
-		clean = resolved
-	} else if dirResolved, err := filepath.EvalSymlinks(filepath.Dir(clean)); err == nil {
-		clean = filepath.Join(dirResolved, filepath.Base(clean))
-	}
+	clean = resolveSymlinkAncestors(clean)
 
 	rel, err := filepath.Rel(canonicalRoot, clean)
 	if err != nil {
@@ -382,6 +375,27 @@ func (c *Config) relToRoot(absPath string) (string, bool) {
 		return "", false
 	}
 	return rel, true
+}
+
+// resolveSymlinkAncestors resolve symlinks no caminho absPath ou no ancestral
+// existente mais próximo quando subdiretórios/arquivos finais ainda não existem.
+func resolveSymlinkAncestors(absPath string) string {
+	current := filepath.Clean(absPath)
+	var tail []string
+	for {
+		if resolved, err := filepath.EvalSymlinks(current); err == nil {
+			for i := len(tail) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, tail[i])
+			}
+			return resolved
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return filepath.Clean(absPath)
+		}
+		tail = append(tail, filepath.Base(current))
+		current = parent
+	}
 }
 
 // matchesAny aplica as regras de casamento de padrão a rel.

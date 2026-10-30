@@ -12,7 +12,7 @@ Porém, quando colocamos agentes autônomos para operar em projetos reais de eng
 
 Para responder a essa pergunta com fatos e não com intuição, não precisamos reinventar a roda da gestão de engenharia. Precisamos recorrer ao padrão mais respeitado e comprovado da nossa indústria: as **Métricas DORA (DevOps Research and Assessment)**.
 
-Neste artigo — celebrando a entrega **DEL-020 do framework Pipeline-AI** —, compartilho como redesenhamos e implementamos as quatro métricas DORA adaptadas para agentes autônomos de IA, construindo um **motor de telemetria determinístico em Go 1.24 puro (stdlib)**, com persistência atômica, salvaguardas validadas por Fuzzing e integração nativa via **Model Context Protocol (MCP)**.
+Neste artigo — consolidando a evolução das entregas **DEL-020 a DEL-027 (v0.9.0) do framework Pipeline-AI** —, compartilho como redesenhamos e implementamos as quatro métricas DORA adaptadas para agentes autônomos de IA, construindo um **motor de telemetria determinístico em Go 1.24 puro (stdlib)**, com persistência atômica, salvaguardas validadas por Fuzzing, **Dashboard Visual Interativo (Generative UI)** e integração nativa via **Model Context Protocol (MCP)**.
 
 ---
 
@@ -45,7 +45,7 @@ flowchart LR
 |---|---|---|
 | **Deployment Frequency (DF)** | Frequência de deploys em produção (por semana ou mês). | Número de micro-deliveries completas e validadas por dia (velocidade de máquina). |
 | **Lead Time for Changes (LT)** | Tempo do commit até o código rodar em produção (dias ou semanas). | Tempo decorrido desde a abertura da issue no `pm-triage` até o PR validado no `git-delivery` (medido em **minutos**). |
-| **Change Failure Rate (CFR)** | Percentual de deploys que causaram incidente em produção. | Percentual de execuções da esteira que foram bloqueadas ou falharam nos gates determinísticos da IA (*doctor*, *sensor*, *validate*). |
+| **Change Failure Rate (CFR)** | Percentual de deploys que causaram incidente em produção. | Percentual de execuções da esteira que foram bloqueadas ou falharam nos gates determinísticos (*doctor*, *sensor*, *validate*) e no sensoriamento semântico calibrado (*Jev / eval*). |
 | **Time to Restore Service (MTTR)** | Tempo médio para restaurar o sistema após uma falha ou incidente. | Tempo que a esteira de agentes leva para corrigir um bloqueio técnico (`STATUS: bloqueado`) e retornar ao estado verde (`ok`). |
 
 Se o seu agente gera 5.000 linhas de código por hora, mas o seu **Change Failure Rate (CFR)** nos gates de segurança e testes é de 60%, a IA não está te dando produtividade: ela está gerando resíduos e sobrecarregando o revisor humano.
@@ -166,9 +166,9 @@ Isso garante **observabilidade passiva**: os agentes executam suas tarefas norma
 
 ---
 
-## 5. Consultando Métricas na CLI e via Protocolo MCP
+## 5. Consultando Métricas na CLI, via Protocolo MCP e no Dashboard Visual (Generative UI)
 
-As métricas coletadas estão disponíveis tanto para engenheiros humanos no terminal quanto para os próprios agentes através do **Model Context Protocol (MCP)**.
+As métricas coletadas estão disponíveis tanto para engenheiros humanos no terminal e no navegador quanto para os próprios agentes através do **Model Context Protocol (MCP)**.
 
 ### Na Linha de Comando (CLI):
 ```bash
@@ -204,7 +204,14 @@ O orquestrador de IA pode invocar nativamente a tool MCP:
   }
 }
 ```
-Isso permite que a própria IA avalie seu histórico: se o `Change Failure Rate` nos testes começar a subir, o orquestrador pode acionar automaticamente guardrails mais rígidos ou alocar turnos adicionais para a fase de TDD (*test-writer*).
+Isso permite que a própria IA avalie seu histórico: se o `Change Failure Rate` nos testes começar a subir, o orquestrador pode acionar automaticamente guardrails mais rígidos, rodar avaliações semânticas calibradas (`pipeline-ai eval` / `pipeline_eval_semantic`) ou alocar turnos adicionais para a fase de TDD (*test-writer*).
+
+### No Dashboard Visual Interativo (Generative UI & CLI):
+Para transformar números brutos em observabilidade executiva instantânea, construímos também o pacote `internal/dashboard` (entrega **DEL-022**), que renderiza um cockpit visual autocontido em HTML5/CSS3/SVG moderno (*dark mode*, zero dependências JS externas e protegido contra XSS):
+```bash
+$ pipeline-ai dashboard -output dashboard.html
+```
+Ou diretamente dentro do chat da IDE via tool MCP `pipeline_render_dashboard`, exibindo cards executivos das 4 métricas DORA, barras proporcionais de latência por estágio (*doctor*, *sensor*, *validate*), timeline das entregas e inspeção detalhada dos handoffs de cada agente.
 
 ---
 
@@ -220,7 +227,7 @@ Ao aplicar **DORA Metrics em esteiras de agentes autônomos**, alcançamos três
 
 ---
 
-O código do **Pipeline-AI**, incluindo o pacote de telemetria `internal/metrics`, o runner determinístico e a suíte de 16 skills em Go puro, é 100% open-source sob licença MIT:
+O código do **Pipeline-AI (v0.9.0)** — incluindo o pacote de telemetria `internal/metrics`, o dashboard visual `internal/dashboard`, o sensoriamento semântico calibrado `internal/sensor/semantic`, o empacotamento oficial como Plugin do Google Antigravity e a suíte de 16 skills em Go puro — é 100% open-source sob licença MIT:
 
 👉 **Repositório Oficial:** [github.com/rodrigodosanjosoliveira/pipeline-ai](https://github.com/rodrigodosanjosoliveira/pipeline-ai)
 

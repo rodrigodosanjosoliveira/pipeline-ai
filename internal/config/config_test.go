@@ -297,6 +297,17 @@ func TestIsProtectedSymlinks(t *testing.T) {
 		t.Fatalf("symlink: %v", err)
 	}
 
+	symlinkRoot := filepath.Join(t.TempDir(), "symroot")
+	if err := os.Symlink(root, symlinkRoot); err != nil {
+		t.Fatalf("symlink root: %v", err)
+	}
+
+	outsideDir := t.TempDir()
+	escapeLink := filepath.Join(internalDir, "escape_link")
+	if err := os.Symlink(outsideDir, escapeLink); err != nil {
+		t.Fatalf("symlink escape: %v", err)
+	}
+
 	writeConfig(t, root, `{
   "version": 1,
   "project_type": "desktop",
@@ -324,6 +335,16 @@ func TestIsProtectedSymlinks(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "arquivo em subdiretório aninhado inexistente via symlink de diretório protegido",
+			path: filepath.Join(root, "link_to_internal", "sub", "deep", "new_file.go"),
+			want: true,
+		},
+		{
+			name: "arquivo em subdiretório aninhado inexistente quando root é carregado via symlink",
+			path: filepath.Join(symlinkRoot, "internal", "auth", "token.go"),
+			want: true,
+		},
+		{
 			name: "arquivo direto existente em internal",
 			path: secretFile,
 			want: true,
@@ -332,6 +353,16 @@ func TestIsProtectedSymlinks(t *testing.T) {
 			name: "arquivo direto inexistente em internal",
 			path: filepath.Join(internalDir, "new_file_direct.go"),
 			want: true,
+		},
+		{
+			name: "symlink dentro de diretório protegido apontando para fora da raiz",
+			path: filepath.Join(internalDir, "escape_link", "outside.go"),
+			want: false,
+		},
+		{
+			name: "symlink dentro de diretório protegido com subdiretório inexistente apontando para fora da raiz",
+			path: filepath.Join(internalDir, "escape_link", "sub", "deep", "outside.go"),
+			want: false,
 		},
 		{
 			name: "arquivo fora do escopo protegido",

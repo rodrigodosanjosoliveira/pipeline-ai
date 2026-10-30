@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-027 | TASK-027 | Release v0.9.0: Consolidação do sensoriamento semântico Jev (CLI eval e MCP pipeline_eval_semantic) | chore | 2026-10-30 | draft |
+| DEL-028 | TASK-028 | Resolução recursiva de symlinks ancestrais no hook/config (macOS) e atualização do artigo DORA Metrics | bugfix | 2026-10-30 | draft |
+| DEL-027 | TASK-027 | Release v0.9.0: Consolidação do sensoriamento semântico Jev (CLI eval e MCP pipeline_eval_semantic) | chore | 2026-10-30 | merged |
 | DEL-026 | TASK-026 | Integração operacional do Jev: subcomando CLI eval e ferramenta MCP pipeline_eval_semantic | feat | 2026-10-29 | merged |
 | DEL-025 | TASK-025 | Sensoriamento semântico e decisões calibradas com Jev (pacote internal/sensor/semantic em Go puro) | feat | 2026-10-29 | merged |
 | DEL-024 | TASK-024 | Release v0.8.0: Dashboard visual interativo Generative UI e Plugin oficial do Google Antigravity | chore | 2026-10-28 | merged |
