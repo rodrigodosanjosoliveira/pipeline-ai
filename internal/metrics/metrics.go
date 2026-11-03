@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -31,11 +32,12 @@ var mu sync.Mutex
 type EventType string
 
 const (
-	EventDeployment EventType = "deployment"
-	EventRestore    EventType = "restore"
-	EventGate       EventType = "gate"
-	EventStage      EventType = "stage"
-	EventDelivery   EventType = "delivery"
+	EventDeployment   EventType = "deployment"
+	EventRestore      EventType = "restore"
+	EventGate         EventType = "gate"
+	EventStage        EventType = "stage"
+	EventDelivery     EventType = "delivery"
+	EventSemanticEval EventType = "semantic_eval"
 )
 
 // Event registra uma ocorrência pontual no ciclo de vida do pipeline.
@@ -137,6 +139,11 @@ func (s *Store) RecordEvent(event Event) error {
 // RecordStageDuration registra a duração de um estágio na Store.
 func (s *Store) RecordStageDuration(deliveryID, stage string, duration time.Duration, success ...bool) error {
 	return RecordStageDuration(s.rootDir, deliveryID, stage, duration, success...)
+}
+
+// RecordSemanticEval registra uma avaliação semântica na Store.
+func (s *Store) RecordSemanticEval(deliveryID, mode string, duration time.Duration, success bool, confidence float64) error {
+	return RecordSemanticEval(s.rootDir, deliveryID, mode, duration, success, confidence)
 }
 
 // CalculateDORA calcula as métricas DORA sobre os dados da Store.
@@ -292,6 +299,22 @@ func RecordStageDuration(rootDir string, deliveryID, stage string, duration time
 	data.UpdatedAt = time.Now().UTC()
 
 	return Save(rootDir, data)
+}
+
+// RecordSemanticEval registra um evento de telemetria de avaliação semântica (System One / Jev).
+func RecordSemanticEval(rootDir, deliveryID, mode string, duration time.Duration, success bool, confidence float64) error {
+	return RecordEvent(rootDir, Event{
+		Type:       EventSemanticEval,
+		DeliveryID: strings.TrimSpace(deliveryID),
+		Timestamp:  time.Now().UTC(),
+		Duration:   duration,
+		Success:    success,
+		Stage:      strings.TrimSpace(mode),
+		Metadata: map[string]string{
+			"mode":       strings.TrimSpace(mode),
+			"confidence": fmt.Sprintf("%.2f", confidence),
+		},
+	})
 }
 
 // CalculateDORA calcula as 4 métricas DORA sobre o conjunto de dados fornecido.

@@ -599,3 +599,22 @@ Disponibilização do sensoriamento semântico calibrado tanto para desenvolvedo
    - **SEC-02 (Mitigação de DoS / Limite de 512KB):** O tamanho máximo do `state` (em arquivo, string direta ou `stdin`) é limitado a 512KB (524.288 bytes). Entradas que ultrapassem esse limite são rejeitadas deterministicamente com erro explícito antes de qualquer transmissão de rede.
    - **SEC-03 (Timeout Mandatório):** Execuções utilizam deadline estrito com `context.WithTimeout` (padrão de 10 segundos configurável), cancelando sockets e impedindo travamento de processos ou agentes.
 
+---
+
+### D-35 — Decisões de Múltipla Escolha (EvalChoice), Pontuação Contínua (EvalScore) e Telemetria Semântica (DEL-029)
+
+Expansão do sensor semântico (`internal/sensor/semantic`), CLI (`pipeline-ai eval`), servidor MCP (`pipeline_eval_semantic`) e motor de telemetria (`internal/metrics`):
+1. **Roteamento de Múltipla Escolha (`EvalChoice` — `/v1/choice`):**
+   - Valida que a entrada contenha ao menos 2 opções não vazias (`choices`) e `threshold` em `[0.0, 1.0]`.
+   - **SEC-01 (Anti-Hallucination):** Verifica estritamente se a opção retornada (`ChoiceDecision.Choice`) pertence ao conjunto exato de `choices` fornecido. Caso contrário, falha de forma fail-closed retornando `ErrInvalidChoice`.
+   - Valida `Confidence >= threshold`, retornando `ErrInsufficientConfidence` se abaixo do limiar.
+2. **Pontuação Contínua Calibrada (`EvalScore` — `/v1/score`):**
+   - Suporta `max_score` configurável (default `1.0`) e `threshold` normalizado em `[0.0, 1.0]`.
+   - **SEC-02 (Bounds e Calibração Normalizada):** Rejeita `NaN`, `+Inf`, `-Inf` e valores fora de `[0.0, max_score]` com `ErrInvalidScore`. Valida TANTO `Confidence >= threshold` QUANTO a nota normalizada `(Score / MaxScore) >= threshold`, retornando `ErrInsufficientConfidence` caso qualquer um não atinja o limiar.
+3. **Unificação na CLI e Servidor MCP:**
+   - `pipeline-ai eval` expandido com `-mode noul|choice|score` (default `"noul"`), `-choices "a,b,c"` e `-max-score 10.0`.
+   - `pipeline_eval_semantic` expandido com `mode`, `choices` (`[]string`) e `max_score` (`float64`), preservando retrocompatibilidade total.
+4. **Telemetria Semântica (`internal/metrics`):**
+   - Adição de `SemanticEvalEvent` em `TelemetryStore` e agregação `SemanticSummary` em `DORAMetrics` (total de avaliações, taxa de aprovação, confiança média e contagem por modo), mantendo cálculo das 4 métricas DORA intacto.
+
+

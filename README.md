@@ -23,7 +23,7 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 | `pipeline-ai sensor` | Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada e salvaguarda contra falsos positivos (suporta `-json`) (D-24). |
 | `pipeline-ai module` | Gerencia módulos opcionais (`list`, `enable`, `disable`) dinamicamente no `.pipeline-ai.json` (D-25). |
 | `pipeline-ai doctor` | Diagnostica a integridade do ambiente local (Go 1.24+, git, gh, pre-push hook e `.pipeline-ai.json`). Suporta `--json` para automações e CI. |
-| `pipeline-ai eval` | Submete avaliação semântica calibrada (System One / Jev) via arquivo, string ou stdin (D-34). |
+| `pipeline-ai eval` | Submete avaliação semântica calibrada (System One / Jev) nos modos `noul`, `choice` e `score` via arquivo, string ou stdin (D-34, D-35). |
 | `pipeline-ai mcp` | Servidor MCP nativo (JSON-RPC 2.0 sobre stdio) expondo ferramentas de governança para Antigravity e IDEs. |
 
 *(Os binários individuais `pipeline-hook`, `pipeline-validate` e `pipeline-init` permanecem disponíveis para retrocompatibilidade com diretivas `tool` existentes).*
@@ -212,18 +212,21 @@ pipeline-ai module disable release-ops # Desativa módulo opcional
 ```
 
 ### Avaliação Semântica Calibrada (`pipeline-ai eval`)
-Submete uma avaliação semântica calibrada (System One / Jev) para validação de critérios e hipóteses com score de confiança tipado (D-34):
+Submete uma avaliação semântica calibrada (System One / Jev) nos modos binário (`noul`), múltipla escolha (`choice`) ou pontuação contínua (`score`) (D-34, D-35):
 ```bash
-# Avaliação a partir de string direta:
+# Avaliação binária (default -mode noul) a partir de string direta:
 pipeline-ai eval -state "func foo() {}" -question "o código está completo?" -threshold 0.8
 
-# Avaliação lendo arquivo do disco:
-pipeline-ai eval -state main.go -question "possui tratamento de erro adequado?"
+# Avaliação de múltipla escolha (-mode choice) para roteamento ou classificação:
+pipeline-ai eval -mode choice -state "erro SQL syntax" -question "qual skill acionar?" -choices "data-model,migration-reviewer,dev-implementation"
+
+# Avaliação de pontuação contínua (-mode score) com escala customizada:
+pipeline-ai eval -mode score -state main.go -question "qualidade do tratamento de erros" -max-score 10 -threshold 0.7
 
 # Avaliação lendo do stdin com saída estruturada em JSON:
 cat main.go | pipeline-ai eval -question "o pacote é main?" -json
 ```
-Protegido por salvaguardas mandatórias: redação de tokens (SEC-01), limite de 512KB no estado (SEC-02) e timeout estrito (SEC-03).
+Protegido por salvaguardas mandatórias: anti-hallucination em escolhas (SEC-01), bounds e calibração normalizada em scores (SEC-02), redação de tokens (`[REDACTED]`), limite de 512KB no estado e timeout estrito (SEC-03).
 
 ---
 
@@ -341,7 +344,7 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 - **`pipeline_sync_skills`**: Sincroniza e atualiza `.agents/skills` e regras a partir dos templates embutidos (`dir`).
 - **`pipeline_close_delivery`**: Encerra a delivery ativa no repositório.
 - **`pipeline_run_sensors`**: Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada e salvaguarda contra falsos positivos (`dir`).
-- **`pipeline_eval_semantic`**: Submete uma avaliação semântica calibrada (Jev / System One) para decisões e critérios de qualidade (`state`, `question`, `threshold`, `endpoint`, `api_key`, `timeout_seconds`).
+- **`pipeline_eval_semantic`**: Submete uma avaliação semântica calibrada (Jev / System One) nos modos `noul`, `choice` ou `score` (`state`, `question`, `mode`, `choices`, `max_score`, `threshold`, `endpoint`, `api_key`, `timeout_seconds`).
 - **`pipeline_manage_modules`**: Gerencia módulos opcionais (`action`: list, enable, disable; `module`, `dir`).
 
 ---

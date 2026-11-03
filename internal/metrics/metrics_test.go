@@ -462,3 +462,73 @@ func TestGetDORA(t *testing.T) {
 		t.Errorf("DeploymentsTotal: esperado 1, obtido %d", dora.DeploymentsTotal)
 	}
 }
+
+func TestRecordSemanticEval(t *testing.T) {
+	tests := []struct {
+		name       string
+		deliveryID string
+		mode       string
+		duration   time.Duration
+		success    bool
+		confidence float64
+	}{
+		{
+			name:       "registro de avaliação noul com sucesso",
+			deliveryID: "DEL-029",
+			mode:       "noul",
+			duration:   45 * time.Millisecond,
+			success:    true,
+			confidence: 0.95,
+		},
+		{
+			name:       "registro de avaliação choice com falha",
+			deliveryID: "DEL-029",
+			mode:       "choice",
+			duration:   120 * time.Millisecond,
+			success:    false,
+			confidence: 0.62,
+		},
+		{
+			name:       "registro de avaliação score sem delivery ativa",
+			deliveryID: "",
+			mode:       "score",
+			duration:   80 * time.Millisecond,
+			success:    true,
+			confidence: 0.85,
+		},
+	}
+
+	dir := t.TempDir()
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := RecordSemanticEval(dir, tt.deliveryID, tt.mode, tt.duration, tt.success, tt.confidence); err != nil {
+				t.Fatalf("RecordSemanticEval falhou: %v", err)
+			}
+
+			loaded, err := Load(dir)
+			if err != nil {
+				t.Fatalf("Load falhou: %v", err)
+			}
+			if len(loaded.Events) != i+1 {
+				t.Fatalf("esperado %d eventos, obtido %d", i+1, len(loaded.Events))
+			}
+
+			evt := loaded.Events[i]
+			if evt.Type != EventSemanticEval {
+				t.Errorf("evt.Type = %q, esperado %q", evt.Type, EventSemanticEval)
+			}
+			if evt.DeliveryID != tt.deliveryID {
+				t.Errorf("evt.DeliveryID = %q, esperado %q", evt.DeliveryID, tt.deliveryID)
+			}
+			if evt.Duration != tt.duration {
+				t.Errorf("evt.Duration = %v, esperado %v", evt.Duration, tt.duration)
+			}
+			if evt.Success != tt.success {
+				t.Errorf("evt.Success = %v, esperado %v", evt.Success, tt.success)
+			}
+			if evt.Metadata["mode"] != tt.mode && evt.Stage != tt.mode {
+				t.Errorf("esperava mode %q em Metadata[\"mode\"] ou Stage, obteve Metadata=%v Stage=%q", tt.mode, evt.Metadata, evt.Stage)
+			}
+		})
+	}
+}

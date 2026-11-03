@@ -24,3 +24,31 @@ func FuzzParseNoulResponse(f *testing.F) {
 		_, _ = semantic.ParseNoulResponse(data)
 	})
 }
+
+// FuzzParseChoiceResponse testa a robustez do parser de múltipla escolha contra entradas malformadas.
+func FuzzParseChoiceResponse(f *testing.F) {
+	f.Add([]byte(`{"selected": "feature", "confidence": 0.92, "options": {"feature": 0.92, "bugfix": 0.08}, "reason": "OK"}`))
+	f.Add([]byte(`{"selected": "", "confidence": 0.0, "options": {}}`))
+	f.Add([]byte(`{}`))
+	f.Add([]byte(`{"selected": null, "options": "invalid"}`))
+	f.Add([]byte(`invalid json`))
+	f.Add([]byte(``))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _ = semantic.ParseChoiceResponse(data)
+	})
+}
+
+// FuzzParseScoreResponse testa a robustez do parser de score contínuo contra entradas malformadas.
+func FuzzParseScoreResponse(f *testing.F) {
+	f.Add([]byte(`{"score": 8.5, "max_score": 10.0, "reason": "Good quality"}`))
+	f.Add([]byte(`{"score": -5.0, "max_score": 0.0}`))
+	f.Add([]byte(`{}`))
+	f.Add([]byte(`{"score": "high", "max_score": null}`))
+	f.Add([]byte(`invalid json`))
+	f.Add([]byte(``))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _ = semantic.ParseScoreResponse(data)
+	})
+}

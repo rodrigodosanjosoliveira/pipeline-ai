@@ -1111,6 +1111,7 @@ func TestMCPEvalSemanticTool(t *testing.T) {
 			{name: "state vazio", args: map[string]any{"state": "", "question": "ok?"}},
 			{name: "sem question", args: map[string]any{"state": "var a = 1"}},
 			{name: "question vazia", args: map[string]any{"state": "var a = 1", "question": ""}},
+			{name: "mode choice com menos de 2 choices", args: map[string]any{"state": "var a = 1", "question": "tipo?", "mode": "choice", "choices": []any{"unica"}}},
 		}
 
 		for _, tt := range tests {
@@ -1287,6 +1288,95 @@ func TestMCPEvalSemanticTool(t *testing.T) {
 			if !strings.Contains(strings.ToLower(text), "tamanho") && !strings.Contains(strings.ToLower(text), "limite") && !strings.Contains(strings.ToLower(text), "512") && !strings.Contains(strings.ToLower(text), "large") {
 				t.Errorf("SEC-02: esperava menção ao limite de tamanho do state, obteve: %s", text)
 			}
+		}
+	})
+
+	t.Run("tools/call com mode choice e choices validos", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"selected": "feature",
+				"confidence": 0.93,
+				"options": {"feature": 0.93, "bugfix": 0.07},
+				"reason": "Nova capacidade adicionada",
+				"latency_ms": 12
+			}`))
+		}))
+		defer mockServer.Close()
+
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      146,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_eval_semantic",
+				"arguments": map[string]any{
+					"endpoint":  mockServer.URL,
+					"api_key":   "dummy-token",
+					"mode":      "choice",
+					"choices":   []any{"feature", "bugfix"},
+					"state":     "func NewFeature() {}",
+					"question":  "Classifique a mudança",
+					"threshold": 0.8,
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		callRes := runRPC(t, s, string(reqBytes))
+		callResult, ok := callRes["result"].(map[string]any)
+		if !ok || callResult["isError"] == true {
+			t.Fatalf("esperava sucesso em pipeline_eval_semantic mode=choice, obteve: %v", callRes)
+		}
+		content, _ := callResult["content"].([]any)
+		first, _ := content[0].(map[string]any)
+		text, _ := first["text"].(string)
+		if !strings.Contains(text, `"selected": "feature"`) {
+			t.Errorf("resposta não contém selected=\"feature\": %s", text)
+		}
+	})
+
+	t.Run("tools/call com mode score e max_score", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"score": 8.8,
+				"max_score": 10.0,
+				"reason": "Boa legibilidade",
+				"latency_ms": 14
+			}`))
+		}))
+		defer mockServer.Close()
+
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      147,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_eval_semantic",
+				"arguments": map[string]any{
+					"endpoint":  mockServer.URL,
+					"api_key":   "dummy-token",
+					"mode":      "score",
+					"max_score": 10,
+					"state":     "func CleanCode() {}",
+					"question":  "Avalie a legibilidade",
+					"threshold": 0.8,
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		callRes := runRPC(t, s, string(reqBytes))
+		callResult, ok := callRes["result"].(map[string]any)
+		if !ok || callResult["isError"] == true {
+			t.Fatalf("esperava sucesso em pipeline_eval_semantic mode=score, obteve: %v", callRes)
+		}
+		content, _ := callResult["content"].([]any)
+		first, _ := content[0].(map[string]any)
+		text, _ := first["text"].(string)
+		if !strings.Contains(text, `"score": 8.8`) {
+			t.Errorf("resposta não contém score=8.8: %s", text)
 		}
 	})
 }
