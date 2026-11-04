@@ -1238,4 +1238,107 @@ func TestCLIEval(t *testing.T) {
 			t.Errorf("SEC-03: esperava menção a timeout ou cancelamento, obteve: %s", combined)
 		}
 	})
+
+	t.Run("eval -mode choice com -choices valido e invalido", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"selected": "bugfix",
+				"confidence": 0.91,
+				"options": {"feature": 0.05, "bugfix": 0.91, "refactor": 0.04},
+				"reason": "Corrige falha de ponteiro nulo",
+				"latency_ms": 22
+			}`))
+		}))
+		defer mockServer.Close()
+
+		tmpDir := t.TempDir()
+		var stdout, stderr bytes.Buffer
+		args := []string{
+			"eval",
+			"-endpoint", mockServer.URL,
+			"-api-key", "test-token",
+			"-mode", "choice",
+			"-choices", "feature,bugfix,refactor",
+			"-state", "if ptr == nil { return }",
+			"-question", "Qual o tipo da mudança?",
+			"-dir", tmpDir,
+			"-json",
+		}
+		code := run(args, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("eval -mode choice falhou com código %d, stderr: %s", code, stderr.String())
+		}
+		var res struct {
+			Selected   string  `json:"selected"`
+			Confidence float64 `json:"confidence"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			t.Fatalf("saída JSON inválida para choice: %v; raw: %s", err, stdout.String())
+		}
+		if res.Selected != "bugfix" {
+			t.Errorf("Selected = %q, esperado \"bugfix\"", res.Selected)
+		}
+
+		// Erro quando -choices tem menos de 2 opções
+		stdout.Reset()
+		stderr.Reset()
+		badArgs := []string{
+			"eval",
+			"-endpoint", mockServer.URL,
+			"-api-key", "test-token",
+			"-mode", "choice",
+			"-choices", "apenas_uma",
+			"-state", "if ptr == nil { return }",
+			"-question", "Qual o tipo da mudança?",
+		}
+		if code := run(badArgs, &stdout, &stderr); code == 0 {
+			t.Errorf("esperava erro quando -choices possui menos de 2 opções")
+		}
+	})
+
+	t.Run("eval -mode score com -max-score", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"score": 9.0,
+				"max_score": 10.0,
+				"reason": "Excelente cobertura de testes",
+				"latency_ms": 18
+			}`))
+		}))
+		defer mockServer.Close()
+
+		tmpDir := t.TempDir()
+		var stdout, stderr bytes.Buffer
+		args := []string{
+			"eval",
+			"-endpoint", mockServer.URL,
+			"-api-key", "test-token",
+			"-mode", "score",
+			"-max-score", "10",
+			"-threshold", "0.8",
+			"-state", "func TestX(t *testing.T) {}",
+			"-question", "Qual a nota da suíte?",
+			"-dir", tmpDir,
+			"-json",
+		}
+		code := run(args, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("eval -mode score falhou com código %d, stderr: %s", code, stderr.String())
+		}
+		var res struct {
+			Score    float64 `json:"score"`
+			MaxScore float64 `json:"max_score"`
+			Reason   string  `json:"reason"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			t.Fatalf("saída JSON inválida para score: %v; raw: %s", err, stdout.String())
+		}
+		if res.Score != 9.0 || res.MaxScore != 10.0 {
+			t.Errorf("Score/MaxScore = %v/%v, esperado 9.0/10.0", res.Score, res.MaxScore)
+		}
+	})
 }

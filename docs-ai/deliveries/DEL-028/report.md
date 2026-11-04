@@ -2,7 +2,7 @@
 delivery_id: DEL-028
 task_code: TASK-028
 title: "Resolução recursiva de symlinks ancestrais em Config.relToRoot (macOS TMPDIR /var -> /private/var) e atualização do artigo DORA Metrics"
-status: draft
+status: merged
 require_security: true
 require_migration: false
 require_performance: false

@@ -436,7 +436,7 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 		},
 		{
 			Name:        "pipeline_eval_semantic",
-			Description: "Submete uma avaliação semântica calibrada para o modelo System One (Jev), retornando decisão booleana Noul com score de confiança e justificativa.",
+			Description: "Submete uma avaliação semântica calibrada para o modelo System One (Jev), suportando modos noul (booleano), choice (múltipla escolha) e score (pontuação contínua).",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -451,6 +451,22 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 					"threshold": map[string]any{
 						"type":        "number",
 						"description": "Score mínimo de confiança requerido (0.0 a 1.0, padrão 0.8)",
+					},
+					"mode": map[string]any{
+						"type":        "string",
+						"description": "Modo de avaliação: 'noul', 'choice' ou 'score' (padrão 'noul')",
+						"enum":        []string{"noul", "choice", "score"},
+					},
+					"choices": map[string]any{
+						"type":        "array",
+						"description": "Lista de opções permitidas quando mode='choice' (mínimo 2 opções)",
+						"items": map[string]any{
+							"type": "string",
+						},
+					},
+					"max_score": map[string]any{
+						"type":        "number",
+						"description": "Pontuação máxima quando mode='score' (padrão 10.0)",
 					},
 					"endpoint": map[string]any{
 						"type":        "string",
@@ -1164,6 +1180,76 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			threshold = rawThreshold
 		}
 
+		mode := "noul"
+		if rawMode, ok := params.Arguments["mode"].(string); ok && strings.TrimSpace(rawMode) != "" {
+			mode = strings.ToLower(strings.TrimSpace(rawMode))
+		}
+		if mode != "noul" && mode != "choice" && mode != "score" {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO: mode inválido %q (use 'noul', 'choice' ou 'score')", mode),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		var choices []string
+		if rawChoices, exists := params.Arguments["choices"]; exists && rawChoices != nil {
+			switch v := rawChoices.(type) {
+			case []any:
+				for _, item := range v {
+					if str, ok := item.(string); ok && strings.TrimSpace(str) != "" {
+						choices = append(choices, strings.TrimSpace(str))
+					}
+				}
+			case []string:
+				for _, str := range v {
+					if strings.TrimSpace(str) != "" {
+						choices = append(choices, strings.TrimSpace(str))
+					}
+				}
+			case string:
+				for _, part := range strings.Split(v, ",") {
+					if strings.TrimSpace(part) != "" {
+						choices = append(choices, strings.TrimSpace(part))
+					}
+				}
+			}
+		}
+		if mode == "choice" && len(choices) < 2 {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: "ERRO: mode 'choice' exige pelo menos 2 opções no parâmetro 'choices'",
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		maxScore := 10.0
+		if rawMax, ok := params.Arguments["max_score"].(float64); ok {
+			maxScore = rawMax
+		}
+		if mode == "score" && maxScore <= 0 {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: "ERRO: 'max_score' deve ser maior que zero",
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
 		var endpoint string
 		if rawEndpoint, ok := params.Arguments["endpoint"].(string); ok && strings.TrimSpace(rawEndpoint) != "" {
 			endpoint = strings.TrimSpace(rawEndpoint)
@@ -1207,11 +1293,52 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			MaxBodyBytes: 10 * 1024 * 1024,
 		})
 
-		decision, err := client.EvalNoul(ctx, semantic.EvalRequest{
+		evalReq := semantic.EvalRequest{
+			Mode:      mode,
 			State:     rawState,
 			Question:  questionStr,
 			Threshold: threshold,
-		})
+			Choices:   choices,
+			MaxScore:  maxScore,
+		}
+
+		var activeDelID string
+		if del, err := state.Get(s.RootDir); err == nil && del != nil {
+			activeDelID = del.DeliveryID
+		}
+
+		start := time.Now()
+		var decisionObj any
+		var conf float64
+		var err error
+
+		switch mode {
+		case "choice":
+			dec, e := client.EvalChoice(ctx, evalReq)
+			err = e
+			if dec != nil {
+				decisionObj = dec
+				conf = dec.Confidence
+			}
+		case "score":
+			dec, e := client.EvalScore(ctx, evalReq)
+			err = e
+			if dec != nil {
+				decisionObj = dec
+				if dec.MaxScore > 0 {
+					conf = dec.Score / dec.MaxScore
+				}
+			}
+		default:
+			dec, e := client.EvalNoul(ctx, evalReq)
+			err = e
+			if dec != nil {
+				decisionObj = dec
+				conf = dec.Confidence
+			}
+		}
+
+		_ = metrics.RecordSemanticEval(s.RootDir, activeDelID, mode, time.Since(start), err == nil, conf)
 
 		secrets := []string{apiKey, os.Getenv("JEV_API_KEY"), os.Getenv("PIPELINE_SEMANTIC_API_KEY")}
 
@@ -1229,7 +1356,7 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			return
 		}
 
-		rawJSON, err := json.MarshalIndent(decision, "", "  ")
+		rawJSON, err := json.MarshalIndent(decisionObj, "", "  ")
 		if err != nil {
 			s.sendResult(out, req.ID, ToolResult{
 				Content: []ToolContent{

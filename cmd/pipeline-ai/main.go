@@ -981,6 +981,10 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	stateFlag := fs.String("state", "", "caminho de arquivo ou string de estado para avaliação")
 	questionFlag := fs.String("question", "", "pergunta ou critério semântico a ser avaliado")
 	thresholdFlag := fs.Float64("threshold", 0.8, "score mínimo de confiança requerido (0.0 a 1.0)")
+	modeFlag := fs.String("mode", "noul", "modo de avaliação: noul, choice ou score")
+	choicesFlag := fs.String("choices", "", "opções separadas por vírgula para -mode choice")
+	maxScoreFlag := fs.Float64("max-score", 10.0, "pontuação máxima para -mode score")
+	dirFlag := fs.String("dir", ".", "diretório raiz para registro de telemetria")
 	jsonFlag := fs.Bool("json", false, "saída em formato JSON estruturado")
 	endpointFlag := fs.String("endpoint", "", "endpoint HTTP do sensor semântico (Jev)")
 	apiKeyFlag := fs.String("api-key", "", "chave de API do sensor semântico")
@@ -1050,6 +1054,34 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	mode := strings.ToLower(strings.TrimSpace(*modeFlag))
+	if mode == "" {
+		mode = "noul"
+	}
+	if mode != "noul" && mode != "choice" && mode != "score" {
+		fmt.Fprintf(stderr, "eval: modo inválido %q (use noul, choice ou score)\n", mode)
+		return 1
+	}
+
+	var choices []string
+	if mode == "choice" {
+		for _, part := range strings.Split(*choicesFlag, ",") {
+			p := strings.TrimSpace(part)
+			if p != "" {
+				choices = append(choices, p)
+			}
+		}
+		if len(choices) < 2 {
+			fmt.Fprintln(stderr, "eval: o modo 'choice' exige pelo menos 2 opções via -choices (ex: -choices a,b)")
+			return 1
+		}
+	}
+
+	if mode == "score" && *maxScoreFlag <= 0 {
+		fmt.Fprintln(stderr, "eval: -max-score deve ser maior que zero")
+		return 1
+	}
+
 	endpoint := strings.TrimSpace(*endpointFlag)
 	if endpoint == "" {
 		endpoint = strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_ENDPOINT"))
@@ -1095,16 +1127,58 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		MaxBodyBytes: 10 * 1024 * 1024,
 	})
 
-	decision, err := client.EvalNoul(ctx, semantic.EvalRequest{
+	req := semantic.EvalRequest{
+		Mode:      mode,
 		State:     stateContent,
 		Question:  question,
 		Threshold: *thresholdFlag,
-	})
+		Choices:   choices,
+		MaxScore:  *maxScoreFlag,
+	}
+
+	var activeDelID string
+	if del, err := state.Get(*dirFlag); err == nil && del != nil {
+		activeDelID = del.DeliveryID
+	}
+
+	start := time.Now()
+	var resultObj any
+	var conf float64
+	var evalErr error
+
+	var noulDec *semantic.NoulDecision
+	var choiceDec *semantic.ChoiceDecision
+	var scoreDec *semantic.ScoreDecision
+
+	switch mode {
+	case "noul":
+		noulDec, evalErr = client.EvalNoul(ctx, req)
+		if noulDec != nil {
+			resultObj = noulDec
+			conf = noulDec.Confidence
+		}
+	case "choice":
+		choiceDec, evalErr = client.EvalChoice(ctx, req)
+		if choiceDec != nil {
+			resultObj = choiceDec
+			conf = choiceDec.Confidence
+		}
+	case "score":
+		scoreDec, evalErr = client.EvalScore(ctx, req)
+		if scoreDec != nil {
+			resultObj = scoreDec
+			if scoreDec.MaxScore > 0 {
+				conf = scoreDec.Score / scoreDec.MaxScore
+			}
+		}
+	}
+
+	_ = metrics.RecordSemanticEval(*dirFlag, activeDelID, mode, time.Since(start), evalErr == nil, conf)
 
 	secrets := []string{apiKey, os.Getenv("JEV_API_KEY"), os.Getenv("PIPELINE_SEMANTIC_API_KEY")}
 
-	if err != nil {
-		sanitizedMsg := redactSecrets(err.Error(), secrets...)
+	if evalErr != nil {
+		sanitizedMsg := redactSecrets(evalErr.Error(), secrets...)
 		if *jsonFlag {
 			res := map[string]any{
 				"error": sanitizedMsg,
@@ -1118,7 +1192,7 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if *jsonFlag {
-		data, err := json.MarshalIndent(decision, "", "  ")
+		data, err := json.MarshalIndent(resultObj, "", "  ")
 		if err != nil {
 			fmt.Fprintf(stderr, "eval: erro ao serializar saída JSON: %v\n", err)
 			return 1
@@ -1127,8 +1201,17 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	fmt.Fprintf(stdout, "Decisão: %v\nConfiança: %.2f\nRazão: %s\nLatência: %dms\n",
-		decision.Decision, decision.Confidence, decision.Reason, decision.LatencyMs)
+	switch mode {
+	case "choice":
+		fmt.Fprintf(stdout, "Escolha: %s\nConfiança: %.2f\nRazão: %s\nLatência: %dms\n",
+			choiceDec.Selected, choiceDec.Confidence, choiceDec.Reason, choiceDec.LatencyMs)
+	case "score":
+		fmt.Fprintf(stdout, "Pontuação: %.2f / %.2f\nRazão: %s\nLatência: %dms\n",
+			scoreDec.Score, scoreDec.MaxScore, scoreDec.Reason, scoreDec.LatencyMs)
+	default:
+		fmt.Fprintf(stdout, "Decisão: %v\nConfiança: %.2f\nRazão: %s\nLatência: %dms\n",
+			noulDec.Decision, noulDec.Confidence, noulDec.Reason, noulDec.LatencyMs)
+	}
 	return 0
 }
 

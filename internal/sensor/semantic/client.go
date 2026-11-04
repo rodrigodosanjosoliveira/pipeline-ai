@@ -79,20 +79,17 @@ func (c *Client) CheckAvailable(ctx context.Context) bool {
 	return resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusBadRequest
 }
 
-// EvalNoul submete uma requisição de avaliação booleana ao sensor semântico.
-func (c *Client) EvalNoul(ctx context.Context, req EvalRequest) (*NoulDecision, error) {
-	if req.State == "" || req.Question == "" || req.Threshold < 0.0 || req.Threshold > 1.0 {
-		return nil, ErrInvalidRequest
-	}
-
+// doPost realiza a chamada HTTP POST autenticada para o endpoint do sensor semântico,
+// aplicando limites de tamanho (MaxBodyBytes) e sanitização de erros.
+func (c *Client) doPost(ctx context.Context, req EvalRequest) ([]byte, int64, error) {
 	payloadBytes, err := json.Marshal(req)
 	if err != nil {
-		return nil, sanitizeErr(err, c.cfg.APIKey)
+		return nil, 0, sanitizeErr(err, c.cfg.APIKey)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.Endpoint, bytes.NewReader(payloadBytes))
 	if err != nil {
-		return nil, sanitizeErr(err, c.cfg.APIKey)
+		return nil, 0, sanitizeErr(err, c.cfg.APIKey)
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -103,18 +100,18 @@ func (c *Client) EvalNoul(ctx context.Context, req EvalRequest) (*NoulDecision, 
 	start := time.Now()
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, sanitizeErr(err, c.cfg.APIKey)
+		return nil, 0, sanitizeErr(err, c.cfg.APIKey)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, ErrUnauthorized
+		return nil, 0, ErrUnauthorized
 	}
 	if resp.StatusCode >= http.StatusInternalServerError {
-		return nil, ErrServerFailure
+		return nil, 0, ErrServerFailure
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, sanitizeErr(fmt.Errorf("unexpected status code: %d", resp.StatusCode), c.cfg.APIKey)
+		return nil, 0, sanitizeErr(fmt.Errorf("unexpected status code: %d", resp.StatusCode), c.cfg.APIKey)
 	}
 
 	maxLimit := c.cfg.MaxBodyBytes
@@ -125,10 +122,28 @@ func (c *Client) EvalNoul(ctx context.Context, req EvalRequest) (*NoulDecision, 
 	limitReader := io.LimitReader(resp.Body, maxLimit+1)
 	body, err := io.ReadAll(limitReader)
 	if err != nil {
-		return nil, sanitizeErr(err, c.cfg.APIKey)
+		return nil, 0, sanitizeErr(err, c.cfg.APIKey)
 	}
 	if int64(len(body)) > maxLimit {
-		return nil, ErrResponseTooLarge
+		return nil, 0, ErrResponseTooLarge
+	}
+
+	latencyMs := time.Since(start).Milliseconds()
+	return body, latencyMs, nil
+}
+
+// EvalNoul submete uma requisição de avaliação booleana ao sensor semântico.
+func (c *Client) EvalNoul(ctx context.Context, req EvalRequest) (*NoulDecision, error) {
+	if req.State == "" || req.Question == "" || req.Threshold < 0.0 || req.Threshold > 1.0 {
+		return nil, ErrInvalidRequest
+	}
+	if req.Mode == "" {
+		req.Mode = "noul"
+	}
+
+	body, latencyMs, err := c.doPost(ctx, req)
+	if err != nil {
+		return nil, err
 	}
 
 	decision, err := ParseNoulResponse(body)
@@ -137,10 +152,95 @@ func (c *Client) EvalNoul(ctx context.Context, req EvalRequest) (*NoulDecision, 
 	}
 
 	if decision.LatencyMs == 0 {
-		decision.LatencyMs = time.Since(start).Milliseconds()
+		decision.LatencyMs = latencyMs
 	}
 
 	if decision.Confidence < req.Threshold {
+		return nil, ErrInsufficientConfidence
+	}
+
+	return decision, nil
+}
+
+// EvalChoice submete uma requisição de avaliação de múltipla escolha ao sensor semântico.
+func (c *Client) EvalChoice(ctx context.Context, req EvalRequest) (*ChoiceDecision, error) {
+	if req.State == "" || req.Question == "" || req.Threshold < 0.0 || req.Threshold > 1.0 || len(req.Choices) < 2 {
+		return nil, ErrInvalidRequest
+	}
+	if req.Mode == "" {
+		req.Mode = "choice"
+	}
+
+	body, latencyMs, err := c.doPost(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	decision, err := ParseChoiceResponse(body)
+	if err != nil {
+		return nil, sanitizeErr(err, c.cfg.APIKey)
+	}
+
+	if decision.LatencyMs == 0 {
+		decision.LatencyMs = latencyMs
+	}
+
+	selected := strings.TrimSpace(decision.Selected)
+	if selected == "" {
+		return nil, ErrInvalidChoice
+	}
+
+	allowed := false
+	for _, ch := range req.Choices {
+		trimmedChoice := strings.TrimSpace(ch)
+		if trimmedChoice != "" && (selected == trimmedChoice || strings.EqualFold(selected, trimmedChoice)) {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return nil, ErrInvalidChoice
+	}
+
+	if decision.Confidence < req.Threshold {
+		return nil, ErrInsufficientConfidence
+	}
+
+	return decision, nil
+}
+
+// EvalScore submete uma requisição de avaliação numérica contínua ao sensor semântico.
+func (c *Client) EvalScore(ctx context.Context, req EvalRequest) (*ScoreDecision, error) {
+	if req.State == "" || req.Question == "" || req.Threshold < 0.0 || req.Threshold > 1.0 {
+		return nil, ErrInvalidRequest
+	}
+	if req.Mode == "" {
+		req.Mode = "score"
+	}
+
+	body, latencyMs, err := c.doPost(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	decision, err := ParseScoreResponse(body)
+	if err != nil {
+		return nil, sanitizeErr(err, c.cfg.APIKey)
+	}
+
+	if decision.LatencyMs == 0 {
+		decision.LatencyMs = latencyMs
+	}
+
+	if decision.MaxScore == 0 && req.MaxScore > 0 {
+		decision.MaxScore = req.MaxScore
+	}
+
+	if decision.MaxScore <= 0 || decision.Score < 0 || decision.Score > decision.MaxScore {
+		return nil, ErrInvalidScore
+	}
+
+	if (decision.Score / decision.MaxScore) < req.Threshold {
 		return nil, ErrInsufficientConfidence
 	}
 
@@ -155,6 +255,36 @@ func ParseNoulResponse(data []byte) (*NoulDecision, error) {
 	}
 
 	var decision NoulDecision
+	if err := json.Unmarshal(trimmed, &decision); err != nil {
+		return nil, err
+	}
+
+	return &decision, nil
+}
+
+// ParseChoiceResponse desserializa e valida a resposta JSON de múltipla escolha do sensor semântico.
+func ParseChoiceResponse(data []byte) (*ChoiceDecision, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return nil, errors.New("empty response body")
+	}
+
+	var decision ChoiceDecision
+	if err := json.Unmarshal(trimmed, &decision); err != nil {
+		return nil, err
+	}
+
+	return &decision, nil
+}
+
+// ParseScoreResponse desserializa e valida a resposta JSON de score contínuo do sensor semântico.
+func ParseScoreResponse(data []byte) (*ScoreDecision, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return nil, errors.New("empty response body")
+	}
+
+	var decision ScoreDecision
 	if err := json.Unmarshal(trimmed, &decision); err != nil {
 		return nil, err
 	}

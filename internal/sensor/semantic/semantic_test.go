@@ -547,3 +547,428 @@ func TestParseNoulResponse(t *testing.T) {
 		})
 	}
 }
+
+func TestParseChoiceResponse(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          []byte
+		wantSelected   string
+		wantConfidence float64
+		wantReason     string
+		wantErr        bool
+	}{
+		{
+			name:           "valid choice payload with options and reason",
+			input:          []byte(`{"selected": "bugfix", "confidence": 0.91, "options": {"feature": 0.05, "bugfix": 0.91, "refactor": 0.04}, "reason": "Fixes panic on nil pointer"}`),
+			wantSelected:   "bugfix",
+			wantConfidence: 0.91,
+			wantReason:     "Fixes panic on nil pointer",
+			wantErr:        false,
+		},
+		{
+			name:    "empty input returns error",
+			input:   []byte(``),
+			wantErr: true,
+		},
+		{
+			name:    "malformed json returns error",
+			input:   []byte(`{"selected": "bugfix", "confidence": `),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dec, err := semantic.ParseChoiceResponse(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseChoiceResponse() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr {
+				if dec == nil {
+					t.Fatal("expected non-nil ChoiceDecision, got nil")
+				}
+				if dec.Selected != tt.wantSelected {
+					t.Errorf("expected Selected=%q, got %q", tt.wantSelected, dec.Selected)
+				}
+				if dec.Confidence != tt.wantConfidence {
+					t.Errorf("expected Confidence=%v, got %v", tt.wantConfidence, dec.Confidence)
+				}
+				if dec.Reason != tt.wantReason {
+					t.Errorf("expected Reason=%q, got %q", tt.wantReason, dec.Reason)
+				}
+			}
+		})
+	}
+}
+
+func TestParseScoreResponse(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        []byte
+		wantScore    float64
+		wantMaxScore float64
+		wantReason   string
+		wantErr      bool
+	}{
+		{
+			name:         "valid score payload",
+			input:        []byte(`{"score": 8.5, "max_score": 10.0, "reason": "Clean architecture and full test coverage"}`),
+			wantScore:    8.5,
+			wantMaxScore: 10.0,
+			wantReason:   "Clean architecture and full test coverage",
+			wantErr:      false,
+		},
+		{
+			name:    "empty input returns error",
+			input:   []byte(`   `),
+			wantErr: true,
+		},
+		{
+			name:    "malformed json returns error",
+			input:   []byte(`{"score": "not-a-number"}`),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dec, err := semantic.ParseScoreResponse(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseScoreResponse() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr {
+				if dec == nil {
+					t.Fatal("expected non-nil ScoreDecision, got nil")
+				}
+				if dec.Score != tt.wantScore {
+					t.Errorf("expected Score=%v, got %v", tt.wantScore, dec.Score)
+				}
+				if dec.MaxScore != tt.wantMaxScore {
+					t.Errorf("expected MaxScore=%v, got %v", tt.wantMaxScore, dec.MaxScore)
+				}
+				if dec.Reason != tt.wantReason {
+					t.Errorf("expected Reason=%q, got %q", tt.wantReason, dec.Reason)
+				}
+			}
+		})
+	}
+}
+
+func TestEvalChoice(t *testing.T) {
+	tests := []struct {
+		name           string
+		serverStatus   int
+		serverResponse string
+		req            semantic.EvalRequest
+		maxBodyBytes   int64
+		wantSelected   string
+		wantConfidence float64
+		wantErr        error
+	}{
+		{
+			name:           "happy path selects valid option above threshold",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"selected": "refactor", "confidence": 0.88, "options": {"feature": 0.05, "bugfix": 0.07, "refactor": 0.88}, "reason": "Code restructuring only"}`,
+			req: semantic.EvalRequest{
+				State:     "diff content",
+				Question:  "Classify change type",
+				Threshold: 0.80,
+				Mode:      "choice",
+				Choices:   []string{"feature", "bugfix", "refactor"},
+			},
+			wantSelected:   "refactor",
+			wantConfidence: 0.88,
+			wantErr:        nil,
+		},
+		{
+			name:           "SEC-01 fewer than 2 choices returns ErrInvalidRequest",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"selected": "feature", "confidence": 0.99}`,
+			req: semantic.EvalRequest{
+				State:     "diff content",
+				Question:  "Classify change type",
+				Threshold: 0.80,
+				Choices:   []string{"feature"},
+			},
+			wantErr: semantic.ErrInvalidRequest,
+		},
+		{
+			name:           "SEC-01 empty choices returns ErrInvalidRequest",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"selected": "feature", "confidence": 0.99}`,
+			req: semantic.EvalRequest{
+				State:     "diff content",
+				Question:  "Classify change type",
+				Threshold: 0.80,
+				Choices:   nil,
+			},
+			wantErr: semantic.ErrInvalidRequest,
+		},
+		{
+			name:           "SEC-01 hallucinated option not in Choices returns ErrInvalidChoice",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"selected": "hotfix", "confidence": 0.95, "reason": "Invented category"}`,
+			req: semantic.EvalRequest{
+				State:     "diff content",
+				Question:  "Classify change type",
+				Threshold: 0.80,
+				Choices:   []string{"feature", "bugfix", "refactor"},
+			},
+			wantErr: semantic.ErrInvalidChoice,
+		},
+		{
+			name:           "SEC-01 empty selected option returns ErrInvalidChoice",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"selected": "", "confidence": 0.95, "reason": "No option selected"}`,
+			req: semantic.EvalRequest{
+				State:     "diff content",
+				Question:  "Classify change type",
+				Threshold: 0.80,
+				Choices:   []string{"feature", "bugfix"},
+			},
+			wantErr: semantic.ErrInvalidChoice,
+		},
+		{
+			name:           "SEC-01 confidence below threshold returns ErrInsufficientConfidence",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"selected": "feature", "confidence": 0.70, "reason": "Uncertain"}`,
+			req: semantic.EvalRequest{
+				State:     "diff content",
+				Question:  "Classify change type",
+				Threshold: 0.85,
+				Choices:   []string{"feature", "bugfix"},
+			},
+			wantErr: semantic.ErrInsufficientConfidence,
+		},
+		{
+			name:           "SEC-03 response exceeding MaxBodyBytes returns ErrResponseTooLarge",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"selected": "feature", "confidence": 0.95, "reason": "` + strings.Repeat("X", 1024) + `"}`,
+			req: semantic.EvalRequest{
+				State:     "diff content",
+				Question:  "Classify change type",
+				Threshold: 0.80,
+				Choices:   []string{"feature", "bugfix"},
+			},
+			maxBodyBytes: 128,
+			wantErr:      semantic.ErrResponseTooLarge,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.serverStatus)
+				_, _ = w.Write([]byte(tt.serverResponse))
+			}))
+			defer server.Close()
+
+			maxBytes := tt.maxBodyBytes
+			if maxBytes == 0 {
+				maxBytes = 1048576
+			}
+			secretKey := "secret-choice-api-key-999"
+			client := semantic.NewClient(semantic.ClientConfig{
+				Endpoint:     server.URL,
+				APIKey:       secretKey,
+				Timeout:      2 * time.Second,
+				MaxBodyBytes: maxBytes,
+			})
+
+			dec, err := client.EvalChoice(context.Background(), tt.req)
+			if tt.wantErr != nil {
+				if err == nil {
+					t.Fatalf("expected error %v, got nil", tt.wantErr)
+				}
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("expected error %v, got: %v", tt.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("EvalChoice unexpected error: %v", err)
+			}
+			if dec.Selected != tt.wantSelected {
+				t.Errorf("Selected = %q, want %q", dec.Selected, tt.wantSelected)
+			}
+			if dec.Confidence != tt.wantConfidence {
+				t.Errorf("Confidence = %v, want %v", dec.Confidence, tt.wantConfidence)
+			}
+		})
+	}
+
+	t.Run("SEC-03 token redaction on error in EvalChoice", func(t *testing.T) {
+		secretKey := "choice-secret-token-777"
+		client := semantic.NewClient(semantic.ClientConfig{
+			Endpoint: "http://127.0.0.1:0/" + secretKey,
+			APIKey:   secretKey,
+			Timeout:  100 * time.Millisecond,
+		})
+		_, err := client.EvalChoice(context.Background(), semantic.EvalRequest{
+			State:     "state",
+			Question:  "question?",
+			Threshold: 0.8,
+			Choices:   []string{"a", "b"},
+		})
+		if err == nil {
+			t.Fatal("expected network error, got nil")
+		}
+		if strings.Contains(err.Error(), secretKey) {
+			t.Fatalf("SEC-03 violation: EvalChoice error leaked secret APIKey: %v", err)
+		}
+	})
+}
+
+func TestEvalScore(t *testing.T) {
+	tests := []struct {
+		name           string
+		serverStatus   int
+		serverResponse string
+		req            semantic.EvalRequest
+		maxBodyBytes   int64
+		wantScore      float64
+		wantMaxScore   float64
+		wantErr        error
+	}{
+		{
+			name:           "happy path normalized ratio meets threshold",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"score": 8.5, "max_score": 10.0, "reason": "Well tested"}`,
+			req: semantic.EvalRequest{
+				State:     "code",
+				Question:  "Rate quality",
+				Threshold: 0.80,
+				Mode:      "score",
+				MaxScore:  10.0,
+			},
+			wantScore:    8.5,
+			wantMaxScore: 10.0,
+			wantErr:      nil,
+		},
+		{
+			name:           "SEC-02 negative score returns ErrInvalidScore",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"score": -1.0, "max_score": 10.0, "reason": "Negative"}`,
+			req: semantic.EvalRequest{
+				State:     "code",
+				Question:  "Rate quality",
+				Threshold: 0.50,
+				MaxScore:  10.0,
+			},
+			wantErr: semantic.ErrInvalidScore,
+		},
+		{
+			name:           "SEC-02 non-positive max_score returns ErrInvalidScore",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"score": 5.0, "max_score": 0.0, "reason": "Zero max"}`,
+			req: semantic.EvalRequest{
+				State:     "code",
+				Question:  "Rate quality",
+				Threshold: 0.50,
+				MaxScore:  0.0,
+			},
+			wantErr: semantic.ErrInvalidScore,
+		},
+		{
+			name:           "SEC-02 score greater than max_score returns ErrInvalidScore",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"score": 12.0, "max_score": 10.0, "reason": "Overflow"}`,
+			req: semantic.EvalRequest{
+				State:     "code",
+				Question:  "Rate quality",
+				Threshold: 0.50,
+				MaxScore:  10.0,
+			},
+			wantErr: semantic.ErrInvalidScore,
+		},
+		{
+			name:           "SEC-02 normalized score below threshold returns ErrInsufficientConfidence",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"score": 7.0, "max_score": 10.0, "reason": "Below 0.8 threshold"}`,
+			req: semantic.EvalRequest{
+				State:     "code",
+				Question:  "Rate quality",
+				Threshold: 0.80,
+				MaxScore:  10.0,
+			},
+			wantErr: semantic.ErrInsufficientConfidence,
+		},
+		{
+			name:           "SEC-03 response exceeding MaxBodyBytes returns ErrResponseTooLarge",
+			serverStatus:   http.StatusOK,
+			serverResponse: `{"score": 9.0, "max_score": 10.0, "reason": "` + strings.Repeat("Y", 1024) + `"}`,
+			req: semantic.EvalRequest{
+				State:     "code",
+				Question:  "Rate quality",
+				Threshold: 0.80,
+				MaxScore:  10.0,
+			},
+			maxBodyBytes: 128,
+			wantErr:      semantic.ErrResponseTooLarge,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.serverStatus)
+				_, _ = w.Write([]byte(tt.serverResponse))
+			}))
+			defer server.Close()
+
+			maxBytes := tt.maxBodyBytes
+			if maxBytes == 0 {
+				maxBytes = 1048576
+			}
+			client := semantic.NewClient(semantic.ClientConfig{
+				Endpoint:     server.URL,
+				APIKey:       "score-key-123",
+				Timeout:      2 * time.Second,
+				MaxBodyBytes: maxBytes,
+			})
+
+			dec, err := client.EvalScore(context.Background(), tt.req)
+			if tt.wantErr != nil {
+				if err == nil {
+					t.Fatalf("expected error %v, got nil", tt.wantErr)
+				}
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("expected error %v, got: %v", tt.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("EvalScore unexpected error: %v", err)
+			}
+			if dec.Score != tt.wantScore {
+				t.Errorf("Score = %v, want %v", dec.Score, tt.wantScore)
+			}
+			if dec.MaxScore != tt.wantMaxScore {
+				t.Errorf("MaxScore = %v, want %v", dec.MaxScore, tt.wantMaxScore)
+			}
+		})
+	}
+
+	t.Run("SEC-03 token redaction on error in EvalScore", func(t *testing.T) {
+		secretKey := "score-secret-token-888"
+		client := semantic.NewClient(semantic.ClientConfig{
+			Endpoint: "http://127.0.0.1:0/" + secretKey,
+			APIKey:   secretKey,
+			Timeout:  100 * time.Millisecond,
+		})
+		_, err := client.EvalScore(context.Background(), semantic.EvalRequest{
+			State:     "state",
+			Question:  "question?",
+			Threshold: 0.8,
+			MaxScore:  10.0,
+		})
+		if err == nil {
+			t.Fatal("expected network error, got nil")
+		}
+		if strings.Contains(err.Error(), secretKey) {
+			t.Fatalf("SEC-03 violation: EvalScore error leaked secret APIKey: %v", err)
+		}
+	})
+}
