@@ -31,6 +31,7 @@ Esta entrega formaliza o encerramento operacional do ciclo **v0.10.0** do framew
   - `docs-ai/artigos/artigo-sensoriamento-semantico-jev.html`
   - `docs-ai/artigos/article-semantic-sensing-jev-go-devto.md`
   - `docs-ai/artigos/post-feed-linkedin-jev.txt`
+  - `docs-ai/artigos/capa-artigo-sensoriamento-semantico-jev.jpg`
 - Governança Arquitetural e de Deliveries:
   - `docs-ai/DECISOES.md`: atualização da seção 12 (`Consolidação Arquitetural da v0.9.0 e v0.10.0`).
   - `docs-ai/deliveries/DEL-029/report.md`: status sincronizado para `merged`.
@@ -68,6 +69,7 @@ Esta entrega formaliza o encerramento operacional do ciclo **v0.10.0** do framew
 - `docs-ai/artigos/artigo-sensoriamento-semantico-jev.html` — Versão HTML estilizada para LinkedIn Articles / Substack
 - `docs-ai/artigos/article-semantic-sensing-jev-go-devto.md` — Artigo técnico em Inglês para Dev.to
 - `docs-ai/artigos/post-feed-linkedin-jev.txt` — Post de divulgação para o feed do LinkedIn
+- `docs-ai/artigos/capa-artigo-sensoriamento-semantico-jev.jpg` — Imagem de capa 16:9 do artigo sobre o Jev
 - `docs-ai/deliveries/DEL-029/report.md` — Status atualizado para `merged`
 - `docs-ai/deliveries/INDEX.md` — `DEL-029` marcada como `merged` e `DEL-030` registrada
 - `docs-ai/deliveries/DEL-030/report.md` — Relatório desta delivery
