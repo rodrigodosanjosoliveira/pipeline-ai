@@ -1,0 +1,30 @@
+Por que o padrão "LLM-as-a-Judge" tradicional costuma falhar quando colocado como gate em esteiras autônomas de engenharia de software?
+
+Porque pedir para um modelo generativo gigante (System 2) responder "Sim ou Não" ou escolher uma rota em texto livre traz 4 patologias graves para dentro do CI/CD:
+1️⃣ Alta latência e verbosidade estocástica.
+2️⃣ Falta de calibração probabilística real (o modelo escreve "tenho 99% de certeza" no texto mesmo quando está chutando).
+3️⃣ Alucinação de opções (você pede para escolher entre 3 skills e ele inventa uma 4ª).
+4️⃣ Comportamento fail-open silencioso.
+
+Em "Rápido e Devagar", Daniel Kahneman mostra a diferença entre o System 2 (raciocínio lento, deliberativo e generativo) e o System 1 (sensoriamento rápido, classificatório e calibrado).
+
+Acabei de publicar o 4º artigo técnico da série sobre a arquitetura do Pipeline-AI (chegando agora à versão v0.10.0):
+
+📄 "System 1 vs. System 2 em Engenharia de IA: Como Substituímos Julgamentos Ambíguos de LLMs por Sensores Semânticos Calibrados (Jev) em Go Puro"
+
+No artigo, mostro como construímos o pacote `internal/sensor/semantic` em Go 1.24 puro (zero dependências externas) operando três primitivas calibradas:
+
+🔹 `EvalNoul` (`/v1/noul`): Decisões binárias calibradas onde incerteza estatística (`Confidence < Threshold`) bloqueia a transição de forma fail-closed.
+🔹 `EvalChoice` (`/v1/choice`): Roteamento de múltipla escolha com trava Anti-Hallucination (`SEC-01`) — se o modelo retornar qualquer opção fora do conjunto permitido, o sensor aborta imediatamente com `ErrInvalidChoice`.
+🔹 `EvalScore` (`/v1/score`): Pontuação contínua calibrada com dupla trava (`SEC-02`) — rejeita `NaN`/`Inf`/out-of-bounds (`ErrInvalidScore`) e exige que TANTO a confiança QUANTO a nota normalizada (`Score / MaxScore`) atinjam o threshold.
+
+Destaques de engenharia da release v0.10.0:
+🛡️ Hardening Fail-Closed (`SEC-03`): Redação automática de `APIKey` (`[REDACTED]`), limite de 512KB na entrada (CLI/MCP), `io.LimitReader` de 10MB na resposta HTTP e timeout estrito via `context.WithTimeout`.
+🧪 Blindagem com Fuzz Testing nativo: Mais de 830.000 execuções aleatórias em `FuzzParseChoiceResponse` e `FuzzParseScoreResponse` com zero panics.
+🔌 Ergonomia Dual + Observabilidade DORA: Disponível no terminal (`pipeline-ai eval -mode noul|choice|score`), via servidor MCP (`pipeline_eval_semantic`) e integrado à telemetria DORA (`pipeline-ai metrics summary`).
+
+Confira o artigo completo abaixo! 👇
+
+Repositório 100% open-source (MIT): https://github.com/rodrigodosanjosoliveira/pipeline-ai
+
+#EngenhariaDeSoftware #Go #InteligenciaArtificial #System1 #AgentesAutonomos #LLM #DevOps #GoogleAntigravity #MCP

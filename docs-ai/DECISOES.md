@@ -566,7 +566,7 @@ Transformação do toolkit em uma extensão nativa de primeira classe no ecossis
 
 ---
 
-## 12. Consolidação Arquitetural da v0.9.0 (Sensoriamento Semântico e Decisões Calibradas com Jev)
+## 12. Consolidação Arquitetural da v0.9.0 e v0.10.0 (Sensoriamento Semântico e Decisões Calibradas com Jev)
 
 ### D-33 — Sensoriamento Semântico e Decisões Calibradas com Jev (DEL-025)
 
