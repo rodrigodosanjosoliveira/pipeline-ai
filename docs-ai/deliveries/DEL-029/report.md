@@ -2,7 +2,7 @@
 delivery_id: DEL-029
 task_code: TASK-029
 title: "Expansão do sensor semântico Jev (EvalChoice e EvalScore), CLI eval -mode, MCP pipeline_eval_semantic e telemetria semântica"
-status: draft
+status: merged
 require_security: true
 require_migration: false
 require_performance: false

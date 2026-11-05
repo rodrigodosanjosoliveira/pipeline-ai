@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-029 | TASK-029 | Expansão do sensor semântico Jev (EvalChoice e EvalScore), CLI eval -mode, MCP e telemetria | feat | 2026-11-02 | draft |
+| DEL-030 | TASK-030 | Release v0.10.0: Consolidação dos modos semânticos Jev (choice e score), telemetria e artigo técnico | chore | 2026-11-05 | draft |
+| DEL-029 | TASK-029 | Expansão do sensor semântico Jev (EvalChoice e EvalScore), CLI eval -mode, MCP e telemetria | feat | 2026-11-02 | merged |
 | DEL-028 | TASK-028 | Resolução recursiva de symlinks ancestrais no hook/config (macOS) e atualização do artigo DORA Metrics | bugfix | 2026-10-30 | merged |
 | DEL-027 | TASK-027 | Release v0.9.0: Consolidação do sensoriamento semântico Jev (CLI eval e MCP pipeline_eval_semantic) | chore | 2026-10-30 | merged |
 | DEL-026 | TASK-026 | Integração operacional do Jev: subcomando CLI eval e ferramenta MCP pipeline_eval_semantic | feat | 2026-10-29 | merged |

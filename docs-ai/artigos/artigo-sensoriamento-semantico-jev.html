@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>System 1 vs. System 2 em Engenharia de IA: Como Substituímos Julgamentos Ambíguos de LLMs por Sensores Semânticos Calibrados (Jev) em Go Puro</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 820px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: #1a1a1a;
+  }
+  h1 { font-size: 2.1em; line-height: 1.25; margin-bottom: 8px; color: #0a66c2; }
+  h2 { font-size: 1.5em; margin-top: 36px; margin-bottom: 12px; border-bottom: 1px solid #e0e0e0; padding-bottom: 6px; }
+  h3 { font-size: 1.2em; margin-top: 24px; margin-bottom: 8px; }
+  p { margin: 14px 0; }
+  blockquote {
+    border-left: 4px solid #0a66c2;
+    margin: 20px 0;
+    padding: 10px 20px;
+    background: #f3f6f8;
+    font-style: italic;
+  }
+  pre {
+    background: #f4f4f5;
+    border: 1px solid #e4e4e7;
+    border-radius: 6px;
+    padding: 14px;
+    overflow-x: auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.9em;
+  }
+  code {
+    background: #f1f2f4;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9em;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 20px 0;
+  }
+  th, td {
+    border: 1px solid #dcdfe4;
+    padding: 10px 14px;
+    text-align: left;
+  }
+  th {
+    background: #f8f9fa;
+  }
+  ul, ol {
+    padding-left: 24px;
+  }
+  li {
+    margin-bottom: 6px;
+  }
+  .author {
+    color: #555;
+    font-size: 1.05em;
+    font-style: italic;
+    margin-bottom: 24px;
+  }
+  .banner-tip {
+    background: #e8f4fd;
+    border: 1px solid #b8daff;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+    font-size: 0.95em;
+  }
+</style>
+</head>
+<body>
+
+<div class="banner-tip">
+  💡 <strong>Dica para o LinkedIn / Substack:</strong><br>
+  1. <strong>Capa do Artigo:</strong> No topo do editor do LinkedIn, clique em <em>"Carregar imagem de capa"</em>.<br>
+  2. <strong>Corpo do Artigo:</strong> Abra este arquivo HTML no seu navegador, selecione todo o texto abaixo (<code>Ctrl+A</code>), copie (<code>Ctrl+C</code>) e cole (<code>Ctrl+V</code>) no LinkedIn Articles. Toda a formatação (títulos, citações, código, tabelas e links) será preservada perfeitamente!
+</div>
+
+<h1>System 1 vs. System 2 em Engenharia de IA: Como Substituímos Julgamentos Ambíguos de LLMs por Sensores Semânticos Calibrados (Jev) em Go Puro</h1>
+
+<p class="author">Por Rodrigo Oliveira — Engenheiro de Software &amp; Pós-Graduando em Engenharia de IA Aplicada</p>
+
+<hr>
+
+<p>Na arquitetura de esteiras de engenharia assistidas por Inteligência Artificial, existe uma linha divisória clara entre o que os compiladores resolvem e o que exige compreensão semântica.</p>
+
+<p>Para tudo o que é sintático e estrutural — formatação (<code>gofmt</code>), análise estática (<code>go vet</code>), execução de testes com detector de corrida (<code>go test -race</code>) e auditoria de vulnerabilidades (<code>govulncheck</code>) — nós já temos gates determinísticos perfeitos. Ou o código compila e passa nos testes, ou o gate barra a entrega com <code>exit code 1</code>.</p>
+
+<p>Mas o que acontece quando uma decisão na esteira depende de <strong>semântica</strong>?</p>
+
+<ul>
+  <li><em>"Este diff altera alguma regra de autenticação ou superfície criptográfica?"</em></li>
+  <li><em>"Qual skill especializada deve tratar este erro de migração SQL: <code>data-model</code>, <code>migration-reviewer</code> ou <code>dev-implementation</code>?"</em></li>
+  <li><em>"Quão aderente aos invariantes arquiteturais do projeto está a justificativa deste handoff em uma escala de 0 a 10?"</em></li>
+</ul>
+
+<p>A resposta padrão da indústria nos últimos dois anos foi usar o padrão <strong>"LLM-as-a-Judge"</strong>: enviar um prompt gigante para um modelo generativo de raciocínio profundo (System 2) e pedir que ele responda "Sim ou Não" ou escolha uma opção em texto livre.</p>
+
+<p>Em produção, porém, o "LLM-as-a-Judge" tradicional sofre de quatro patologias graves: <strong>alta latência, verbosidade estocástica, ausência de calibração probabilística e alucinação de categorias</strong>.</p>
+
+<p>Neste artigo — consolidando as entregas <strong>DEL-025, DEL-026, DEL-029 e DEL-030 (v0.10.0) do framework Pipeline-AI</strong> —, apresento como aplicamos a teoria cognitiva de Daniel Kahneman (<em>System 1 vs. System 2</em>) à engenharia de agentes autônomos, construindo um <strong>subsistema de sensoriamento semântico calibrado (Jev) em Go 1.24 puro (<code>internal/sensor/semantic</code>)</strong>, com zero dependências externas, três primitivas de decisão tipadas (<code>EvalNoul</code>, <code>EvalChoice</code>, <code>EvalScore</code>), hardening de segurança <em>fail-closed</em>, blindagem com Fuzz Testing nativo e telemetria acoplada às métricas DORA.</p>
+
+<hr>
+
+<h2>1. Por que "LLM-as-a-Judge" (System 2) Falha em Esteiras Autônomas?</h2>
+
+<p>Em <em>Rápido e Devagar: Duas Formas de Pensar</em>, Daniel Kahneman descreve dois modos de operação cognitiva:</p>
+
+<ul>
+  <li><strong>System 2 (Lento, Deliberativo, Generativo):</strong> Analisa problemas complexos passo a passo, escreve código, projeta arquiteturas e redige relatórios. É onde brilham os modelos generativos de fronteira.</li>
+  <li><strong>System 1 (Rápido, Classificatório, Calibrado):</strong> Opera como um sensor reflexivo de baixíssima latência que classifica padrões, detecta anomalias e emite sinais de confiança calibrados.</li>
+</ul>
+
+<p>Quando usamos um LLM generativo completo (System 2) como se fosse um sensor de gate na esteira de CI/CD ou de orquestração de agentes, encontramos armadilhas clássicas:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Dimensão</th>
+      <th>LLM-as-a-Judge Tradicional (System 2)</th>
+      <th>Sensor Semântico Calibrado Jev (System 1 no Pipeline-AI)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Natureza da Saída</strong></td>
+      <td>Texto livre generativo (<em>"Analisando o código, parece que sim..."</em>).</td>
+      <td>Estruturas estritas (<code>NoulDecision</code>, <code>ChoiceDecision</code>, <code>ScoreDecision</code>).</td>
+    </tr>
+    <tr>
+      <td><strong>Calibração de Confiança</strong></td>
+      <td>Ilusão de certeza (alucina "99% de certeza" no texto sem base nos logits).</td>
+      <td>Score de confiança calibrado (<code>Confidence</code> em <code>[0.0, 1.0]</code>) validado contra <code>Threshold</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Risco de Alucinação em Roteamento</strong></td>
+      <td>Inventa uma 4ª opção quando você pede para escolher entre 3 alternativas.</td>
+      <td>Trava <code>SEC-01</code> (<em>Anti-Hallucination</em>): rejeita com <code>ErrInvalidChoice</code> qualquer opção fora do conjunto permitido.</td>
+    </tr>
+    <tr>
+      <td><strong>Pontuação Numérica</strong></td>
+      <td>Retorna notas inconsistentes ou fora de escala sem garantia de fronteira.</td>
+      <td>Trava <code>SEC-02</code>: valida <code>[0.0, MaxScore]</code>, rejeita <code>NaN</code>/<code>Inf</code> e exige dupla aprovação (<code>Confidence</code> e <code>Score/MaxScore &gt;= Threshold</code>).</td>
+    </tr>
+    <tr>
+      <td><strong>Comportamento em Falha</strong></td>
+      <td>Tenta adivinhar ou segue em frente silenciosamente (<em>fail-open</em>).</td>
+      <td>Estritamente <strong>Fail-Closed</strong>: se a confiança não atingir o threshold ou o servidor falhar, bloqueia a transição.</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>2. As Três Primitivas de Decisão Semântica (<code>internal/sensor/semantic</code>)</h2>
+
+<p>Mantendo o invariante central do <strong>Pipeline-AI</strong> — <strong>100% Go 1.24 standard library, zero dependências externas em <code>go.mod</code></strong> —, projetamos o pacote <code>internal/sensor/semantic</code> em torno de três primitivas complementares que cobrem todas as necessidades de julgamento de uma esteira autônoma:</p>
+
+<h3>2.1. <code>EvalNoul</code>: Decisão Binária Calibrada (<code>/v1/noul</code>)</h3>
+
+<p>A primitiva <code>EvalNoul</code> avalia uma hipótese binária sobre um estado (um trecho de código, um <code>git diff</code> ou um contrato de handoff) e retorna um <code>NoulDecision</code>:</p>
+
+<pre><code>// internal/sensor/semantic/types.go
+type NoulDecision struct {
+    Decision   bool    `json:"decision"`
+    Confidence float64 `json:"confidence"`
+    Reason     string  `json:"reason,omitempty"`
+}</code></pre>
+
+<p>Mesmo que o modelo responda <code>Decision: true</code>, se <code>Confidence</code> for <code>0.68</code> e o gate exigir <code>Threshold: 0.80</code>, <code>EvalNoul</code> retorna imediatamente <code>ErrInsufficientConfidence</code>. Incerteza estatística é tratada como reprovação segura.</p>
+
+<h3>2.2. <code>EvalChoice</code>: Roteamento de Múltipla Escolha com Trava Anti-Alucinação (<code>/v1/choice</code>)</h3>
+
+<p>Quando um orquestrador precisa classificar um incidente ou decidir para qual skill rotear uma demanda dentre um conjunto finito de opções, usamos <code>EvalChoice</code>.</p>
+
+<p>Aqui implementamos a salvaguarda <strong><code>SEC-01</code> (Anti-Hallucination)</strong>: o cliente exige ao menos 2 opções válidas na requisição e verifica deterministicamente se a opção retornada pelo modelo pertence de fato à lista fornecida:</p>
+
+<pre><code>// internal/sensor/semantic/client.go
+func (c *Client) EvalChoice(ctx context.Context, input ChoiceInput) (ChoiceDecision, error) {
+    // Valida estado, pergunta e mínimo de 2 opções não vazias...
+    data, err := c.doPost(ctx, "/v1/choice", payload)
+    if err != nil {
+        return ChoiceDecision{}, err
+    }
+
+    dec, err := ParseChoiceResponse(data)
+    if err != nil {
+        return ChoiceDecision{}, err
+    }
+
+    // SEC-01: Verifica se dec.Choice pertence estritamente a input.Choices
+    validChoice := false
+    for _, ch := range input.Choices {
+        if dec.Choice == ch {
+            validChoice = true
+            break
+        }
+    }
+    if !validChoice {
+        return dec, fmt.Errorf("%w: escolha %q não pertence às opções permitidas", ErrInvalidChoice, dec.Choice)
+    }
+
+    if dec.Confidence &lt; threshold {
+        return dec, fmt.Errorf("%w: confiança %.2f abaixo do threshold %.2f",
+            ErrInsufficientConfidence, dec.Confidence, threshold)
+    }
+
+    return dec, nil
+}</code></pre>
+
+<p>Se o modelo tentar inventar uma opção fora do contrato, o sensor aborta imediatamente com <code>ErrInvalidChoice</code>.</p>
+
+<h3>2.3. <code>EvalScore</code>: Pontuação Contínua com Dupla Trava de Calibração (<code>/v1/score</code>)</h3>
+
+<p>Para avaliar qualidade contínua (como clareza de documentação, cobertura de requisitos ou severidade de risco em uma escala <code>0..MaxScore</code>), implementamos <code>EvalScore</code> com a salvaguarda <strong><code>SEC-02</code></strong>:</p>
+
+<ol>
+  <li><strong>Validação de Fronteiras Numéricas:</strong> Rejeita <code>NaN</code>, <code>+Inf</code>, <code>-Inf</code>, valores negativos ou <code>Score &gt; MaxScore</code> retornando <code>ErrInvalidScore</code>.</li>
+  <li><strong>Dupla Condição de Aprovação:</strong> Não basta o modelo ter alta confiança de que a nota é baixa, nem dar uma nota alta com baixa confiança. <code>EvalScore</code> exige <strong>simultaneamente</strong> <code>Confidence &gt;= Threshold</code> e <code>(Score / MaxScore) &gt;= Threshold</code>.</li>
+</ol>
+
+<pre><code>// internal/sensor/semantic/client.go
+if dec.Score &gt; maxScore {
+    return dec, fmt.Errorf("%w: score %.2f excede max_score %.2f", ErrInvalidScore, dec.Score, maxScore)
+}
+
+if dec.Confidence &lt; threshold {
+    return dec, fmt.Errorf("%w: confiança %.2f abaixo do threshold %.2f",
+        ErrInsufficientConfidence, dec.Confidence, threshold)
+}
+
+normalizedScore := dec.Score / maxScore
+if normalizedScore &lt; threshold {
+    return dec, fmt.Errorf("%w: score normalizado %.2f (%.2f/%.2f) abaixo do threshold %.2f",
+        ErrInsufficientConfidence, normalizedScore, dec.Score, maxScore, threshold)
+}</code></pre>
+
+<hr>
+
+<h2>3. Hardening de Segurança Fail-Closed (<code>SEC-01</code>, <code>SEC-02</code>, <code>SEC-03</code>)</h2>
+
+<p>Em um sistema onde agentes autônomos invocam ferramentas via linha de comando e protocolo MCP, o cliente HTTP semântico é uma superfície de segurança crítica. Centralizamos todo o transporte no helper privado <code>Client.doPost</code>, aplicando três barreiras inegociáveis:</p>
+
+<ul>
+  <li><strong>Redação Automática de Credenciais (<code>[REDACTED]</code>):</strong> Qualquer erro de rede, DNS ou TLS passa pelo sanitizador <code>c.sanitizeError(err)</code>, que substitui ocorrências da <code>APIKey</code> (ou da variável <code>PIPELINE_AI_SEMANTIC_API_KEY</code>) por <code>[REDACTED]</code> antes de retornar o erro ao stdout, stderr ou payload JSON-RPC do MCP.</li>
+  <li><strong>Proteção contra Exaustão de Memória / DoS (<code>io.LimitReader</code>):</strong> Na entrada (CLI e MCP), o estado (<code>state</code>) é limitado estritamente a <strong>512KB</strong> (524.288 bytes) antes de abrir qualquer conexão de rede. Na resposta HTTP, a leitura do body usa <code>io.LimitReader(resp.Body, maxBytes+1)</code> (padrão <strong>10MB</strong>), abortando com <code>ErrResponseTooLarge</code> caso um servidor anômalo tente enviar um stream infinito.</li>
+  <li><strong>Timeout Mandatório via Contexto:</strong> Nenhuma chamada fica pendurada indefinidamente; <code>context.WithTimeout</code> (padrão de 10 segundos) cancela sockets lentos de forma determinística.</li>
+</ul>
+
+<hr>
+
+<h2>4. Blindagem com Fuzz Testing Nativo: Mais de 830.000 Execuções</h2>
+
+<p>Como os payloads JSON vêm de um serviço de inferência externo, nossos parsers <code>ParseNoulResponse</code>, <code>ParseChoiceResponse</code> e <code>ParseScoreResponse</code> foram submetidos ao motor de <strong>Fuzzing nativo do Go</strong> (<code>internal/sensor/semantic/fuzz_test.go</code>):</p>
+
+<pre><code>// internal/sensor/semantic/fuzz_test.go
+func FuzzParseScoreResponse(f *testing.F) {
+    f.Add([]byte(`{"score":0.85,"max_score":1.0,"confidence":0.92,"reason":"ok"}`))
+    f.Add([]byte(`{"score":-1.0,"max_score":10.0,"confidence":0.8}`))
+    f.Add([]byte(`{"score":15.0,"max_score":10.0,"confidence":0.9}`))
+    f.Add([]byte(`{}`))
+    f.Add([]byte(`not json`))
+
+    f.Fuzz(func(t *testing.T, data []byte) {
+        dec, err := ParseScoreResponse(data)
+        if err == nil {
+            if dec.Confidence &lt; 0.0 || dec.Confidence &gt; 1.0 {
+                t.Errorf("valid parse produced out-of-range confidence: %v", dec.Confidence)
+            }
+            if dec.Score &lt; 0.0 || dec.MaxScore &lt;= 0.0 || dec.Score &gt; dec.MaxScore {
+                t.Errorf("valid parse produced invalid score bounds: score=%v max=%v", dec.Score, dec.MaxScore)
+            }
+        }
+    })
+}</code></pre>
+
+<p>Executamos mais de <strong>830.000 mutações aleatórias</strong> combinadas entre <code>FuzzParseChoiceResponse</code> (421.119 execuções em 3s) e <code>FuzzParseScoreResponse</code> (410.163 execuções em 3s), comprovando <strong>zero panics</strong> e respeito absoluto às invariantes de domínio.</p>
+
+<hr>
+
+<h2>5. Ergonomia Dual (CLI + MCP) e Telemetria Semântica DORA</h2>
+
+<p>O sensor semântico foi desenhado para uso imediato tanto por humanos no terminal quanto por agentes via <strong>Model Context Protocol (MCP)</strong>:</p>
+
+<pre><code># 1. Modo Binário (default -mode noul):
+$ pipeline-ai eval -state internal/auth/token.go -question "os tokens são comparados em tempo constante?" -threshold 0.85
+
+# 2. Modo Múltipla Escolha (-mode choice):
+$ pipeline-ai eval -mode choice -state "erro SQL lock timeout" \
+    -question "qual skill deve revisar?" \
+    -choices "migration-reviewer,query-performance,code-reviewer"
+
+# 3. Modo Pontuação Contínua (-mode score):
+$ pipeline-ai eval -mode score -state docs-ai/deliveries/DEL-030/report.md \
+    -question "completude das evidências de teste" -max-score 10 -threshold 0.8 -json</code></pre>
+
+<p>Cada avaliação semântica executada registra passivamente um <code>SemanticEvalEvent</code> no banco de telemetria local (<code>.pipeline-state/metrics.json</code>). Quando consultamos <code>pipeline-ai metrics summary</code>, além das 4 métricas DORA, temos visibilidade completa da calibração do sensor:</p>
+
+<pre><code>$ pipeline-ai metrics summary
+=== Métricas DORA &amp; Telemetria (Últimos 30 dias) ===
+...
+Sensor Semântico (Jev):
+  Total de Avaliações:           42
+  Taxa de Aprovação:             88.1%
+  Confiança Média:               91.4%
+  Por Modo:                      noul=24, choice=10, score=8</code></pre>
+
+<hr>
+
+<h2>Conclusão: Orquestração Cognitiva Completa</h2>
+
+<p>A maturidade na Engenharia de IA não está em usar o maior modelo generativo para todas as tarefas, mas em <strong>combinar a arquitetura certa para cada tipo de decisão</strong>:</p>
+
+<ol>
+  <li><strong>Gates Determinísticos (<code>gofmt</code>, <code>go vet</code>, <code>go test -race</code>, <code>pipeline-validate</code>):</strong> Verdade binária absoluta para sintaxe, compilação e invariantes estáticos.</li>
+  <li><strong>Sensores Semânticos Calibrados System 1 (<code>Jev</code> — <code>EvalNoul</code>, <code>EvalChoice</code>, <code>EvalScore</code>):</strong> Classificação rápida, tipada, calibrada por threshold e protegida contra alucinações para decisões semânticas de roteamento e qualidade.</li>
+  <li><strong>Agentes Especializados System 2 (<code>architecture-guardrails</code>, <code>test-writer</code>, <code>dev-implementation</code>, <code>security-review</code>):</strong> Raciocínio profundo focado onde a criatividade e a síntese de código são realmente necessárias.</li>
+</ol>
+
+<hr>
+
+<p>O código completo do <strong>Pipeline-AI (v0.10.0)</strong> — incluindo o pacote <code>internal/sensor/semantic</code>, a CLI unificada, o servidor MCP nativo, o motor de métricas DORA e o Plugin Oficial do Google Antigravity — é 100% open-source sob licença MIT:</p>
+
+<p>👉 <strong>Repositório Oficial:</strong> <a href="https://github.com/rodrigodosanjosoliveira/pipeline-ai">github.com/rodrigodosanjosoliveira/pipeline-ai</a></p>
+
+<p>Como você tem lidado com decisões semânticas e roteamento de agentes nas suas esteiras de IA? Já enfrentou problemas de inconsistência com o padrão <em>LLM-as-a-Judge</em>? Vamos conversar nos comentários! 💬🧠🚀</p>
+
+</body>
+</html>
