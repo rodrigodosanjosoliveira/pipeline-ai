@@ -2,7 +2,7 @@
 delivery_id: DEL-030
 task_code: TASK-030
 title: "Release v0.10.0: Consolidação dos modos semânticos Jev (choice e score), telemetria e artigo técnico"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

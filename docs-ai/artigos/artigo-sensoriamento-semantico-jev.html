@@ -119,42 +119,33 @@
 
 <p>Quando usamos um LLM generativo completo (System 2) como se fosse um sensor de gate na esteira de CI/CD ou de orquestração de agentes, encontramos armadilhas clássicas:</p>
 
-<table>
-  <thead>
-    <tr>
-      <th>Dimensão</th>
-      <th>LLM-as-a-Judge Tradicional (System 2)</th>
-      <th>Sensor Semântico Calibrado Jev (System 1 no Pipeline-AI)</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>Natureza da Saída</strong></td>
-      <td>Texto livre generativo (<em>"Analisando o código, parece que sim..."</em>).</td>
-      <td>Estruturas estritas (<code>NoulDecision</code>, <code>ChoiceDecision</code>, <code>ScoreDecision</code>).</td>
-    </tr>
-    <tr>
-      <td><strong>Calibração de Confiança</strong></td>
-      <td>Ilusão de certeza (alucina "99% de certeza" no texto sem base nos logits).</td>
-      <td>Score de confiança calibrado (<code>Confidence</code> em <code>[0.0, 1.0]</code>) validado contra <code>Threshold</code>.</td>
-    </tr>
-    <tr>
-      <td><strong>Risco de Alucinação em Roteamento</strong></td>
-      <td>Inventa uma 4ª opção quando você pede para escolher entre 3 alternativas.</td>
-      <td>Trava <code>SEC-01</code> (<em>Anti-Hallucination</em>): rejeita com <code>ErrInvalidChoice</code> qualquer opção fora do conjunto permitido.</td>
-    </tr>
-    <tr>
-      <td><strong>Pontuação Numérica</strong></td>
-      <td>Retorna notas inconsistentes ou fora de escala sem garantia de fronteira.</td>
-      <td>Trava <code>SEC-02</code>: valida <code>[0.0, MaxScore]</code>, rejeita <code>NaN</code>/<code>Inf</code> e exige dupla aprovação (<code>Confidence</code> e <code>Score/MaxScore &gt;= Threshold</code>).</td>
-    </tr>
-    <tr>
-      <td><strong>Comportamento em Falha</strong></td>
-      <td>Tenta adivinhar ou segue em frente silenciosamente (<em>fail-open</em>).</td>
-      <td>Estritamente <strong>Fail-Closed</strong>: se a confiança não atingir o threshold ou o servidor falhar, bloqueia a transição.</td>
-    </tr>
-  </tbody>
-</table>
+<ul>
+  <li>
+    <strong>1. Natureza da Saída:</strong><br>
+    • <em>LLM-as-a-Judge Tradicional (System 2):</em> Texto livre generativo (<em>"Analisando o código, parece que sim..."</em>).<br>
+    • <em>Sensor Semântico Calibrado Jev (System 1 no Pipeline-AI):</em> Estruturas estritas e tipadas (<code>NoulDecision</code>, <code>ChoiceDecision</code>, <code>ScoreDecision</code>).
+  </li>
+  <li>
+    <strong>2. Calibração de Confiança:</strong><br>
+    • <em>LLM-as-a-Judge Tradicional (System 2):</em> Ilusão de certeza (alucina "99% de certeza" no texto sem base nos logits).<br>
+    • <em>Sensor Semântico Calibrado Jev (System 1 no Pipeline-AI):</em> Score de confiança calibrado (<code>Confidence</code> em <code>[0.0, 1.0]</code>) validado contra <code>Threshold</code>.
+  </li>
+  <li>
+    <strong>3. Risco de Alucinação em Roteamento:</strong><br>
+    • <em>LLM-as-a-Judge Tradicional (System 2):</em> Inventa uma 4ª opção quando você pede para escolher entre 3 alternativas.<br>
+    • <em>Sensor Semântico Calibrado Jev (System 1 no Pipeline-AI):</em> Trava <code>SEC-01</code> (<em>Anti-Hallucination</em>): rejeita com <code>ErrInvalidChoice</code> qualquer opção fora do conjunto permitido.
+  </li>
+  <li>
+    <strong>4. Pontuação Numérica:</strong><br>
+    • <em>LLM-as-a-Judge Tradicional (System 2):</em> Retorna notas inconsistentes ou fora de escala sem garantia de fronteira.<br>
+    • <em>Sensor Semântico Calibrado Jev (System 1 no Pipeline-AI):</em> Trava <code>SEC-02</code>: valida <code>[0.0, MaxScore]</code>, rejeita <code>NaN</code>/<code>Inf</code> e exige dupla aprovação (<code>Confidence</code> e <code>Score/MaxScore &gt;= Threshold</code>).
+  </li>
+  <li>
+    <strong>5. Comportamento em Falha:</strong><br>
+    • <em>LLM-as-a-Judge Tradicional (System 2):</em> Tenta adivinhar ou segue em frente silenciosamente (<em>fail-open</em>).<br>
+    • <em>Sensor Semântico Calibrado Jev (System 1 no Pipeline-AI):</em> Estritamente <strong>Fail-Closed</strong>: se a confiança não atingir o threshold ou o servidor falhar, bloqueia a transição.
+  </li>
+</ul>
 
 <hr>
 
