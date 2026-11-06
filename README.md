@@ -32,7 +32,50 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 
 ## Fluxo de Execução
 
-![Fluxo de Execução do Pipeline AI](docs-ai/pipeline-ai.png)
+```mermaid
+flowchart LR
+    subgraph S1["📐 1. Escopo & Design (PRE)"]
+        direction TB
+        T["pm-triage<br/>(Escopo, Sinais & DEL-ID)"]
+        AG["architecture-guardrails<br/>(Invariantes & REQUISITOS_SEGURANCA)"]
+        DM["[data-model]<br/>(PostgreSQL / Mongo / Dynamo)"]
+        T --> AG
+        AG -. "persistência" .-> DM
+    end
+
+    subgraph S2["🧪 2. TDD & Implementação"]
+        direction TB
+        TW["test-writer<br/>(TDD, Testes Adversariais & Fuzzing)"]
+        HOOK{{"🛡️ PreToolUse Hook<br/>(Delivery Ativa TTL +<br/>editor_agents + immutable_paths)"}}
+        DEV["dev-implementation<br/>(Código estrito aos testes +<br/>gofmt PostToolUse)"]
+        TW --> HOOK --> DEV
+    end
+
+    subgraph S3["🔍 3. Revisão & Segurança (POST)"]
+        direction TB
+        CR["code-reviewer<br/>(Bloqueios vs Sugestões — Sem escrita)"]
+        MQ["[migration-reviewer] &<br/>[query-performance]"]
+        SR["security-review<br/>(Auditoria Diff vs PRE)"]
+        SC["supply-chain-review<br/>(govulncheck em go.mod/go.sum)"]
+        CR --> MQ --> SR --> SC
+    end
+
+    subgraph S4["🚀 4. Validação, Observabilidade & Entrega"]
+        direction TB
+        QA["qa-validation<br/>(Suíte completa -race)"]
+        RO["[release-ops]<br/>(SemVer & Manifests)"]
+        DU["docs-update<br/>(Relatório report.md & INDEX.md)"]
+        RUN{{"⚡ pipeline-ai run<br/>(doctor → sensor → validate)<br/>+ Jev Semantic Eval (noul/choice/score)"}}
+        DORA[("📊 Telemetria Passiva<br/>Métricas DORA & Dashboard")]
+        GD["git-delivery<br/>(Branch task/*, Commit & PR)"]
+        QA --> RO --> DU --> RUN --> GD
+        RUN -. "grava eventos" .-> DORA
+    end
+
+    S1 -- "handoff validate" --> S2
+    S2 -- "handoff validate" --> S3
+    S3 -- "handoff validate" --> S4
+```
 
 ---
 
@@ -71,10 +114,10 @@ Consulte o [Guia de Criação de Projetos](docs-ai/GUIA-CRIACAO-PROJETOS.md) par
 Requer Go 1.24 ou superior (a diretiva `tool` no `go.mod` é obrigatória):
 
 ```bash
-go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@v0.6.0
+go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@v0.10.0
 ```
 
-*(Os comandos legados `cmd/pipeline-hook@v0.6.0` e `cmd/pipeline-validate@v0.6.0` também permanecem disponíveis).*
+*(Os comandos legados `cmd/pipeline-hook@v0.10.0` e `cmd/pipeline-validate@v0.10.0` também permanecem disponíveis).*
 
 *(Se o repositório for privado, configure `go env -w GOPRIVATE="github.com/rodrigodosanjosoliveira/*"` e autentique o Git via SSH)*.
 
@@ -88,13 +131,13 @@ O fluxo do Antigravity é orquestrado por skills especializadas em `.agents/skil
 | Skill | Responsabilidade | Roteamento |
 |---|---|---|
 | `pm-triage` | Ponto de entrada de toda demanda. Classifica escopo, atribui `DEL-NNN` e roteia. | `architecture-guardrails` |
-| `architecture-guardrails` | Define a abordagem técnica, limites de implementação e bloqueia violação de invariantes. | `data-model` ou `test-writer` |
-| `test-writer` | Escreve os testes antes da implementação (TDD) e alvos de fuzzing determinísticos. | `dev-implementation` |
+| `architecture-guardrails` | Define a abordagem técnica, limites de implementação, bloqueia violação de invariantes e emite `REQUISITOS_SEGURANCA` no PRE quando `SECURITY: sim` (D-22). | `data-model` ou `test-writer` |
+| `test-writer` | Escreve os testes antes da implementação (TDD), testes adversariais de segurança e alvos de fuzzing determinísticos. | `dev-implementation` |
 | `dev-implementation` | Implementa o código estritamente dentro do escopo até os 4 gates passarem. | `code-reviewer` |
-| `code-reviewer` | Revisa o diff contra os invariantes e escopo. Não possui permissão de edição direta. | `migration-reviewer` / `query-performance` / `security-review` / `qa-validation` |
-| `security-review` | Audita superfícies de autenticação, criptografia, storage e CI quando tocadas. | `supply-chain-review` ou `qa-validation` |
+| `code-reviewer` | Revisa o diff contra os invariantes e escopo. Não possui permissão de edição direta (D-04). | `migration-reviewer` / `query-performance` / `security-review` / `qa-validation` |
+| `security-review` | Audita o diff pós-implementação contra os `REQUISITOS_SEGURANCA` definidos no PRE (D-22) e superfícies sensíveis. | `supply-chain-review` ou `qa-validation` |
 | `supply-chain-review` | Audita alterações em `go.mod` e `go.sum` com `govulncheck` e `go mod verify`. | `qa-validation` |
-| `qa-validation` | Valida o comportamento entregue contra o escopo inicial com suíte completa de testes. | `release-ops` ou `docs-update` |
+| `qa-validation` | Valida o comportamento entregue contra o escopo inicial com suíte completa de testes (`-race`). | `release-ops` ou `docs-update` |
 | `docs-update` | Atualiza documentação afetada e monta o relatório em `docs-ai/deliveries/`. | `git-delivery` |
 | `git-delivery` | Cria a branch `task/*`, o commit padronizado e abre o Pull Request (`gh pr create`). | Encerramento |
 
@@ -184,16 +227,16 @@ go tool pipeline-validate -json docs-ai/deliveries/DEL-001/report.md
 
 ---
 
-## Gestão de Entregas, Sensores e Módulos (v0.6.0)
+## Gestão de Entregas, Sensores e Módulos (v0.6.0 – v0.10.0)
 
 A CLI unificada expande os recursos de governança autônoma e determinística:
 
 ### Ciclo de Delivery (`pipeline-ai delivery`)
 Controla o estado e ciclo temporal das entregas (D-21):
 ```bash
-pipeline-ai delivery open DEL-015 TASK-015 "Release v0.6.0" 168h  # Abre delivery com TTL de 7 dias
-pipeline-ai delivery status                                      # Exibe status e tempo restante
-pipeline-ai delivery close                                       # Fecha a delivery ativa
+pipeline-ai delivery open DEL-030 TASK-030 "Release v0.10.0" 168h # Abre delivery com TTL de 7 dias
+pipeline-ai delivery status                                       # Exibe status e tempo restante
+pipeline-ai delivery close                                        # Fecha a delivery ativa
 ```
 
 ### Sensores de Qualidade (`pipeline-ai sensor`)
@@ -294,7 +337,16 @@ pipeline-ai metrics summary -json
 pipeline-ai metrics list
 ```
 
-Persistência atômica e fail-safe em `.pipeline-state/metrics.json`, com parser blindado por **Fuzz Testing contínuo** (mais de 1.1M de iterações sem panics).
+Persistência atômica e fail-safe em `.pipeline-state/metrics.json` (incluindo agregação `SemanticSummary` para avaliações Jev por modo `noul`, `choice` e `score`), com parser blindado por **Fuzz Testing contínuo** (mais de 1.1M de iterações sem panics).
+
+---
+
+## Série de Artigos Técnicos (`docs-ai/artigos/`)
+
+1. **Governança Determinística em Go:** [artigo-governanca-ia-go.md](docs-ai/artigos/artigo-governanca-ia-go.md) | [Dev.to (EN)](docs-ai/artigos/article-ai-governance-go-devto.md)
+2. **Orquestração Autônoma Contínua e Pipeline Runner:** [artigo-orquestracao-autonoma-runner.md](docs-ai/artigos/artigo-orquestracao-autonoma-runner.md) | [Dev.to (EN)](docs-ai/artigos/article-autonomous-orchestration-runner-devto.md)
+3. **Métricas DORA e Telemetria Passiva para Agentes de IA:** [artigo-dora-metrics-telemetria-ia.md](docs-ai/artigos/artigo-dora-metrics-telemetria-ia.md) | [Dev.to (EN)](docs-ai/artigos/article-dora-metrics-ai-agents-devto.md)
+4. **System 1 vs. System 2: Sensoriamento Semântico Calibrado com Jev:** [artigo-sensoriamento-semantico-jev.md](docs-ai/artigos/artigo-sensoriamento-semantico-jev.md) | [Dev.to (EN)](docs-ai/artigos/article-semantic-sensing-jev-go-devto.md)
 
 ---
 
