@@ -53,6 +53,9 @@ func setupTestWorkspace(t *testing.T) string {
 		Duration:   30 * time.Minute,
 		Success:    true,
 	})
+	_ = metrics.RecordSemanticEval(tmpDir, "DEL-002", "noul", 35*time.Millisecond, true, 0.94)
+	_ = metrics.RecordSemanticEval(tmpDir, "DEL-002", "choice", 45*time.Millisecond, true, 0.88)
+	_ = metrics.RecordSemanticEval(tmpDir, "DEL-002", "score", 55*time.Millisecond, false, 0.60)
 
 	// Cria docs-ai/deliveries/INDEX.md
 	delivDir := filepath.Join(tmpDir, "docs-ai", "deliveries")
@@ -102,6 +105,15 @@ func TestCollectDashboardData(t *testing.T) {
 				}
 				if data.DORA.DeploymentsTotal != 2 {
 					t.Errorf("DORA.DeploymentsTotal = %d, esperado 2", data.DORA.DeploymentsTotal)
+				}
+				if data.DORA.Semantic.TotalEvaluations != 3 {
+					t.Errorf("DORA.Semantic.TotalEvaluations = %d, esperado 3", data.DORA.Semantic.TotalEvaluations)
+				}
+				if data.DORA.Semantic.ApprovedTotal != 2 || data.DORA.Semantic.RejectedTotal != 1 {
+					t.Errorf("DORA.Semantic Approved/Rejected = %d/%d, esperado 2/1", data.DORA.Semantic.ApprovedTotal, data.DORA.Semantic.RejectedTotal)
+				}
+				if data.DORA.Semantic.ByMode["noul"] != 1 || data.DORA.Semantic.ByMode["choice"] != 1 || data.DORA.Semantic.ByMode["score"] != 1 {
+					t.Errorf("DORA.Semantic.ByMode inesperado: %v", data.DORA.Semantic.ByMode)
 				}
 			},
 		},
@@ -200,6 +212,19 @@ func TestRenderHTML(t *testing.T) {
 					FailedDeployments:   1,
 					TimeToRestore:       15 * time.Minute,
 					RestoresTotal:       1,
+					Semantic: metrics.SemanticSummary{
+						TotalEvaluations:  6,
+						ApprovedTotal:     5,
+						RejectedTotal:     1,
+						ApprovalRate:      83.3333,
+						AverageConfidence: 0.915,
+						AverageDuration:   42 * time.Millisecond,
+						ByMode: map[string]int{
+							"noul":   3,
+							"choice": 2,
+							"score":  1,
+						},
+					},
 				},
 				Pillars: []dashboard.PillarInfo{
 					{Name: "PreToolUse Fail-Closed", Description: "Bloqueio determinístico de edição direta", Status: "Ativo"},
@@ -246,6 +271,12 @@ func TestRenderHTML(t *testing.T) {
 				"TASK-022",
 				"Dashboard HTML interativo de engenharia",
 				"draft",
+				"Sensor Semântico",
+				"83.3%",
+				"91.5%",
+				"noul",
+				"choice",
+				"score",
 			},
 		},
 		{

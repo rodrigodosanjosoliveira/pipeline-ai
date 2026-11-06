@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -82,15 +84,27 @@ type MetricsData struct {
 	Deliveries []DeliveryMetric `json:"deliveries,omitempty"`
 }
 
+// SemanticSummary agrega a telemetria das avaliações semânticas (System One / Jev).
+type SemanticSummary struct {
+	TotalEvaluations  int            `json:"total_evaluations"`
+	ApprovedTotal     int            `json:"approved_total"`
+	RejectedTotal     int            `json:"rejected_total"`
+	ApprovalRate      float64        `json:"approval_rate"`      // Percentual (0.0 a 100.0)
+	AverageConfidence float64        `json:"average_confidence"` // Confiança média (0.0 a 1.0)
+	AverageDuration   time.Duration  `json:"average_duration"`
+	ByMode            map[string]int `json:"by_mode"` // Contagem por modo ("noul", "choice", "score")
+}
+
 // DORAMetrics consolida as quatro métricas-chave DORA.
 type DORAMetrics struct {
-	DeploymentFrequency float64       `json:"deployment_frequency"` // Deploys por dia
-	DeploymentsTotal    int           `json:"deployments_total"`
-	LeadTimeForChanges  time.Duration `json:"lead_time_for_changes"` // Lead time médio
-	ChangeFailureRate   float64       `json:"change_failure_rate"`   // Taxa percentual de falha (0.0 a 100.0)
-	FailedDeployments   int           `json:"failed_deployments"`
-	TimeToRestore       time.Duration `json:"time_to_restore"` // MTTR médio
-	RestoresTotal       int           `json:"restores_total"`
+	DeploymentFrequency float64         `json:"deployment_frequency"` // Deploys por dia
+	DeploymentsTotal    int             `json:"deployments_total"`
+	LeadTimeForChanges  time.Duration   `json:"lead_time_for_changes"` // Lead time médio
+	ChangeFailureRate   float64         `json:"change_failure_rate"`   // Taxa percentual de falha (0.0 a 100.0)
+	FailedDeployments   int             `json:"failed_deployments"`
+	TimeToRestore       time.Duration   `json:"time_to_restore"` // MTTR médio
+	RestoresTotal       int             `json:"restores_total"`
+	Semantic            SemanticSummary `json:"semantic"`
 }
 
 // DORAOptions configura parâmetros de janela temporal para cálculo DORA.
@@ -319,8 +333,17 @@ func RecordSemanticEval(rootDir, deliveryID, mode string, duration time.Duration
 
 // CalculateDORA calcula as 4 métricas DORA sobre o conjunto de dados fornecido.
 func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
+	byMode := map[string]int{
+		"noul":   0,
+		"choice": 0,
+		"score":  0,
+	}
 	if data == nil {
-		return DORAMetrics{}
+		return DORAMetrics{
+			Semantic: SemanticSummary{
+				ByMode: byMode,
+			},
+		}
 	}
 
 	var opt DORAOptions
@@ -490,6 +513,58 @@ func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
 		mttr = time.Duration(int64(totalRestoreDuration) / int64(restoresTotal))
 	}
 
+	// 5. Semantic Sensor Summary (System One / Jev)
+	var semanticTotal int
+	var semanticApproved int
+	var semanticRejected int
+	var totalSemanticDur time.Duration
+	var totalConfidence float64
+
+	for _, e := range data.Events {
+		if e.Type != EventSemanticEval {
+			continue
+		}
+		if !filterEvent(e.Timestamp) {
+			continue
+		}
+		semanticTotal++
+		if e.Success {
+			semanticApproved++
+		} else {
+			semanticRejected++
+		}
+		if e.Duration > 0 {
+			totalSemanticDur += e.Duration
+		}
+		if e.Metadata != nil {
+			if rawConf, ok := e.Metadata["confidence"]; ok {
+				if c, err := strconv.ParseFloat(strings.TrimSpace(rawConf), 64); err == nil && !math.IsNaN(c) && !math.IsInf(c, 0) && c >= 0.0 && c <= 1.0 {
+					totalConfidence += c
+				}
+			}
+		}
+		var mode string
+		if e.Metadata != nil {
+			mode = strings.ToLower(strings.TrimSpace(e.Metadata["mode"]))
+		}
+		if mode == "" {
+			mode = strings.ToLower(strings.TrimSpace(e.Stage))
+		}
+		if mode == "" {
+			mode = "noul"
+		}
+		byMode[mode]++
+	}
+
+	var semanticApprovalRate float64
+	var avgConfidence float64
+	var avgSemanticDur time.Duration
+	if semanticTotal > 0 {
+		semanticApprovalRate = (float64(semanticApproved) / float64(semanticTotal)) * 100.0
+		avgConfidence = totalConfidence / float64(semanticTotal)
+		avgSemanticDur = time.Duration(int64(totalSemanticDur) / int64(semanticTotal))
+	}
+
 	return DORAMetrics{
 		DeploymentFrequency: deployFreq,
 		DeploymentsTotal:    deploymentsTotal,
@@ -498,6 +573,15 @@ func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
 		FailedDeployments:   failedDeployments,
 		TimeToRestore:       mttr,
 		RestoresTotal:       restoresTotal,
+		Semantic: SemanticSummary{
+			TotalEvaluations:  semanticTotal,
+			ApprovedTotal:     semanticApproved,
+			RejectedTotal:     semanticRejected,
+			ApprovalRate:      semanticApprovalRate,
+			AverageConfidence: avgConfidence,
+			AverageDuration:   avgSemanticDur,
+			ByMode:            byMode,
+		},
 	}
 }
 

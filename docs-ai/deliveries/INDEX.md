@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-031 | TASK-031 | Atualização do diagrama de fluxo de execução no README.md para v0.10.0 e ajuste de lista no artigo HTML do Jev | docs | 2026-11-06 | draft |
+| DEL-032 | TASK-032 | Painel de telemetria semântica Jev (SemanticSummary) no Dashboard Generative UI e CLI metrics | feat | 2026-11-06 | draft |
+| DEL-031 | TASK-031 | Atualização do diagrama de fluxo de execução no README.md para v0.10.0 e ajuste de lista no artigo HTML do Jev | docs | 2026-11-06 | merged |
 | DEL-030 | TASK-030 | Release v0.10.0: Consolidação dos modos semânticos Jev (choice e score), telemetria e artigo técnico | chore | 2026-11-05 | merged |
 | DEL-029 | TASK-029 | Expansão do sensor semântico Jev (EvalChoice e EvalScore), CLI eval -mode, MCP e telemetria | feat | 2026-11-02 | merged |
 | DEL-028 | TASK-028 | Resolução recursiva de symlinks ancestrais no hook/config (macOS) e atualização do artigo DORA Metrics | bugfix | 2026-10-30 | merged |

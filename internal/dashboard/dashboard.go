@@ -335,6 +335,66 @@ const dashboardHTMLTemplate = `<!DOCTYPE html>
           <p class="text-xs text-slate-400">{{.DORA.RestoresTotal}} restaurações realizadas</p>
         </div>
       </div>
+
+      <!-- Sensor Semântico Calibrado (System 1 / Jev) -->
+      <div class="pt-4 border-t border-slate-800/80 space-y-4">
+        <div>
+          <h3 class="text-base font-bold text-white">Sensor Semântico Calibrado (System 1 / Jev)</h3>
+          <p class="text-xs text-slate-400">Telemetria das avaliações semânticas executadas nos modos noul, choice e score.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Total de Avaliações -->
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total de Avaliações</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">Volume</span>
+            </div>
+            <div class="text-2xl font-black text-white">
+              {{.DORA.Semantic.TotalEvaluations}}
+            </div>
+            <p class="text-xs text-slate-400">{{.DORA.Semantic.ApprovedTotal}} aprovadas • {{.DORA.Semantic.RejectedTotal}} reprovadas</p>
+          </div>
+
+          <!-- Taxa de Aprovação -->
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Taxa de Aprovação</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Acurácia</span>
+            </div>
+            <div class="text-2xl font-black text-white">
+              {{printf "%.1f" .DORA.Semantic.ApprovalRate}}%
+            </div>
+            <p class="text-xs text-slate-400">Conformidade contra threshold configurado</p>
+          </div>
+
+          <!-- Confiança Média -->
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Confiança Média</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 font-medium">Calibração</span>
+            </div>
+            <div class="text-2xl font-black text-white">
+              {{printf "%.1f" (mul100 .DORA.Semantic.AverageConfidence)}}%
+            </div>
+            <p class="text-xs text-slate-400">Latência média: {{if eq .DORA.Semantic.AverageDuration 0}}0s{{else}}{{.DORA.Semantic.AverageDuration}}{{end}}</p>
+          </div>
+
+          <!-- Distribuição por Modo -->
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Distribuição por Modo</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">Modos</span>
+            </div>
+            <div class="flex items-center gap-3 text-sm font-mono text-slate-200 pt-1">
+              <span>noul: <strong>{{modeCount .DORA.Semantic.ByMode "noul"}}</strong></span>
+              <span>choice: <strong>{{modeCount .DORA.Semantic.ByMode "choice"}}</strong></span>
+              <span>score: <strong>{{modeCount .DORA.Semantic.ByMode "score"}}</strong></span>
+            </div>
+            <p class="text-xs text-slate-400">Contagem acumulada por primitiva</p>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- Aba 2: Esteira de Skills -->
@@ -516,7 +576,17 @@ const dashboardHTMLTemplate = `<!DOCTYPE html>
 </html>
 `
 
-var parsedTemplate = template.Must(template.New("dashboard").Parse(dashboardHTMLTemplate))
+var parsedTemplate = template.Must(template.New("dashboard").Funcs(template.FuncMap{
+	"mul100": func(v float64) float64 {
+		return v * 100.0
+	},
+	"modeCount": func(m map[string]int, k string) int {
+		if m == nil {
+			return 0
+		}
+		return m[k]
+	},
+}).Parse(dashboardHTMLTemplate))
 
 // RenderHTML renderiza a página HTML interativa autocontida com TailwindCSS a partir dos dados agregados.
 func RenderHTML(data *DashboardData) (string, error) {

@@ -789,6 +789,15 @@ func runMetrics(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "  Lead Time for Changes:   %s\n", dora.LeadTimeForChanges)
 		fmt.Fprintf(stdout, "  Change Failure Rate:     %.1f%% (falhas: %d)\n", dora.ChangeFailureRate, dora.FailedDeployments)
 		fmt.Fprintf(stdout, "  Time to Restore Service: %s (restaurações: %d)\n", dora.TimeToRestore, dora.RestoresTotal)
+		fmt.Fprintln(stdout)
+		fmt.Fprintln(stdout, "Sensor Semântico (Jev):")
+		fmt.Fprintf(stdout, "  Total de Avaliações:     %d (aprovadas: %d, reprovadas: %d)\n",
+			dora.Semantic.TotalEvaluations, dora.Semantic.ApprovedTotal, dora.Semantic.RejectedTotal)
+		fmt.Fprintf(stdout, "  Taxa de Aprovação:       %.1f%%\n", dora.Semantic.ApprovalRate)
+		fmt.Fprintf(stdout, "  Confiança Média:         %.1f%% (latência média: %s)\n",
+			dora.Semantic.AverageConfidence*100.0, dora.Semantic.AverageDuration)
+		fmt.Fprintf(stdout, "  Por Modo:                noul=%d, choice=%d, score=%d\n",
+			dora.Semantic.ByMode["noul"], dora.Semantic.ByMode["choice"], dora.Semantic.ByMode["score"])
 		return 0
 
 	case "list":

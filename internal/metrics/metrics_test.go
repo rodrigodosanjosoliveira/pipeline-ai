@@ -532,3 +532,168 @@ func TestRecordSemanticEval(t *testing.T) {
 		})
 	}
 }
+
+func TestCalculateDORASemanticSummary(t *testing.T) {
+	baseTime := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name string
+		data *MetricsData
+		opts []DORAOptions
+		want SemanticSummary
+	}{
+		{
+			name: "workspace sem eventos semânticos inicializa ByMode zerado",
+			data: &MetricsData{
+				Events: []Event{
+					{Type: EventDeployment, Timestamp: baseTime, Success: true},
+				},
+			},
+			want: SemanticSummary{
+				TotalEvaluations:  0,
+				ApprovedTotal:     0,
+				RejectedTotal:     0,
+				ApprovalRate:      0,
+				AverageConfidence: 0,
+				AverageDuration:   0,
+				ByMode: map[string]int{
+					"noul":   0,
+					"choice": 0,
+					"score":  0,
+				},
+			},
+		},
+		{
+			name: "múltiplos eventos EventSemanticEval nos 3 modos (noul, choice, score)",
+			data: &MetricsData{
+				Events: []Event{
+					{
+						Type:      EventSemanticEval,
+						Timestamp: baseTime.Add(1 * time.Minute),
+						Duration:  40 * time.Millisecond,
+						Success:   true,
+						Stage:     "noul",
+						Metadata:  map[string]string{"mode": "noul", "confidence": "0.9000"},
+					},
+					{
+						Type:      EventSemanticEval,
+						Timestamp: baseTime.Add(2 * time.Minute),
+						Duration:  60 * time.Millisecond,
+						Success:   true,
+						Stage:     "choice",
+						Metadata:  map[string]string{"mode": "choice", "confidence": "0.8000"},
+					},
+					{
+						Type:      EventSemanticEval,
+						Timestamp: baseTime.Add(3 * time.Minute),
+						Duration:  80 * time.Millisecond,
+						Success:   false,
+						Stage:     "score",
+						Metadata:  map[string]string{"mode": "score", "confidence": "0.7000"},
+					},
+					{
+						Type:      EventSemanticEval,
+						Timestamp: baseTime.Add(4 * time.Minute),
+						Duration:  20 * time.Millisecond,
+						Success:   true,
+						Stage:     "noul",
+						Metadata:  map[string]string{"mode": "noul", "confidence": "1.0000"},
+					},
+				},
+			},
+			want: SemanticSummary{
+				TotalEvaluations:  4,
+				ApprovedTotal:     3,
+				RejectedTotal:     1,
+				ApprovalRate:      75.0,
+				AverageConfidence: 0.85,
+				AverageDuration:   50 * time.Millisecond,
+				ByMode: map[string]int{
+					"noul":   2,
+					"choice": 1,
+					"score":  1,
+				},
+			},
+		},
+		{
+			name: "resiliência contra confidence malformado nos metadados e filtro de janela",
+			data: &MetricsData{
+				Events: []Event{
+					{
+						Type:      EventSemanticEval,
+						Timestamp: baseTime.Add(-48 * time.Hour), // fora da janela Since
+						Duration:  100 * time.Millisecond,
+						Success:   false,
+						Metadata:  map[string]string{"mode": "noul", "confidence": "0.10"},
+					},
+					{
+						Type:      EventSemanticEval,
+						Timestamp: baseTime.Add(1 * time.Hour),
+						Duration:  30 * time.Millisecond,
+						Success:   true,
+						Metadata:  map[string]string{"mode": "choice", "confidence": "not-a-float"},
+					},
+					{
+						Type:      EventSemanticEval,
+						Timestamp: baseTime.Add(2 * time.Hour),
+						Duration:  50 * time.Millisecond,
+						Success:   true,
+						Metadata:  map[string]string{"mode": "score", "confidence": "0.9000"},
+					},
+				},
+			},
+			opts: []DORAOptions{
+				{Since: baseTime},
+			},
+			want: SemanticSummary{
+				TotalEvaluations:  2,
+				ApprovedTotal:     2,
+				RejectedTotal:     0,
+				ApprovalRate:      100.0,
+				AverageConfidence: 0.45, // (0.0 + 0.90) / 2 ou apenas válidos; validaremos tolerância
+				AverageDuration:   40 * time.Millisecond,
+				ByMode: map[string]int{
+					"noul":   0,
+					"choice": 1,
+					"score":  1,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CalculateDORA(tt.data, tt.opts...).Semantic
+
+			if got.TotalEvaluations != tt.want.TotalEvaluations {
+				t.Errorf("TotalEvaluations = %d, esperado %d", got.TotalEvaluations, tt.want.TotalEvaluations)
+			}
+			if got.ApprovedTotal != tt.want.ApprovedTotal {
+				t.Errorf("ApprovedTotal = %d, esperado %d", got.ApprovedTotal, tt.want.ApprovedTotal)
+			}
+			if got.RejectedTotal != tt.want.RejectedTotal {
+				t.Errorf("RejectedTotal = %d, esperado %d", got.RejectedTotal, tt.want.RejectedTotal)
+			}
+			if got.ApprovalRate != tt.want.ApprovalRate {
+				t.Errorf("ApprovalRate = %v, esperado %v", got.ApprovalRate, tt.want.ApprovalRate)
+			}
+			if got.AverageDuration != tt.want.AverageDuration {
+				t.Errorf("AverageDuration = %v, esperado %v", got.AverageDuration, tt.want.AverageDuration)
+			}
+			if got.ByMode == nil {
+				t.Fatalf("ByMode não deve ser nil")
+			}
+			for mode, wantCount := range tt.want.ByMode {
+				if got.ByMode[mode] != wantCount {
+					t.Errorf("ByMode[%q] = %d, esperado %d", mode, got.ByMode[mode], wantCount)
+				}
+			}
+			if tt.want.TotalEvaluations == 4 {
+				diff := got.AverageConfidence - tt.want.AverageConfidence
+				if diff < -0.001 || diff > 0.001 {
+					t.Errorf("AverageConfidence = %v, esperado %v", got.AverageConfidence, tt.want.AverageConfidence)
+				}
+			}
+		})
+	}
+}

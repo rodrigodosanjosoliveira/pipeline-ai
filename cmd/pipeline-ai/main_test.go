@@ -805,8 +805,20 @@ func TestCLIMetricsCommand(t *testing.T) {
 		if code != 0 {
 			t.Fatalf("metrics summary falhou: code=%d, stderr:\n%s", code, stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "Deployment Frequency") {
-			t.Errorf("saída esperada contendo 'Deployment Frequency', obteve:\n%s", stdout.String())
+		out := stdout.String()
+		if !strings.Contains(out, "Deployment Frequency") {
+			t.Errorf("saída esperada contendo 'Deployment Frequency', obteve:\n%s", out)
+		}
+		for _, expected := range []string{
+			"Sensor Semântico (Jev):",
+			"Total de Avaliações",
+			"Taxa de Aprovação",
+			"Confiança Média",
+			"Por Modo:",
+		} {
+			if !strings.Contains(out, expected) {
+				t.Errorf("metrics summary não contém %q; saída:\n%s", expected, out)
+			}
 		}
 	})
 
@@ -822,6 +834,9 @@ func TestCLIMetricsCommand(t *testing.T) {
 		}
 		if _, ok := dora["deployment_frequency"]; !ok {
 			t.Errorf("campo deployment_frequency ausente no JSON: %v", dora)
+		}
+		if _, ok := dora["semantic"]; !ok {
+			t.Errorf("campo semantic ausente no JSON de metrics summary: %v", dora)
 		}
 	})
 
