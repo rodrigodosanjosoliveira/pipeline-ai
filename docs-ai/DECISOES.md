@@ -617,4 +617,23 @@ Expansão do sensor semântico (`internal/sensor/semantic`), CLI (`pipeline-ai e
 4. **Telemetria Semântica (`internal/metrics`):**
    - Adição de `SemanticEvalEvent` em `TelemetryStore` e agregação `SemanticSummary` em `DORAMetrics` (total de avaliações, taxa de aprovação, confiança média e contagem por modo), mantendo cálculo das 4 métricas DORA intacto.
 
+---
+
+### D-36 — Painel de Telemetria Semântica Jev no Dashboard Generative UI e CLI Metrics (DEL-032)
+
+Integração visual e analítica da telemetria semântica (`SemanticSummary`) no cockpit HTML interativo (`internal/dashboard`) e na CLI (`pipeline-ai metrics summary`):
+1. **Agregação Unificada em `DORAMetrics` (`internal/metrics`):**
+   - O campo `Semantic SemanticSummary` (`json:"semantic"`) em `DORAMetrics` consolida `TotalEvals`, `ApprovedRate` (`0.0..1.0`), `AvgConfidence` (`0.0..1.0`) e `ByMode` (`map[string]int`) calculados deterministicamente em `CalculateDORA` sobre a janela de eventos `EventSemanticEval`.
+   - Em `MetricsData` (persisted state), o slice `SemanticEvals []SemanticEvalEvent` convive de forma transparente com `Events []Event`, preservando compatibilidade com todos os clientes existentes.
+2. **Painel Visual na Aba 1 do Dashboard Generative UI (`internal/dashboard`):**
+   - Adicionada a seção **"Sensor Semântico Calibrado (System 1 / Jev)"** na Aba 1 (`tab-dora`) com 4 cards responsivos:
+     - **Total de Avaliações (`total_evals`)**: volume de inferências calibradas Jev na janela.
+     - **Taxa de Aprovação (`approved_rate`)**: percentual formatado (`mul100`) de decisões que superaram o threshold.
+     - **Confiança Média (`avg_confidence`)**: calibração média das respostas em porcentagem.
+     - **Distribuição por Modo (`by_mode`)**: desagregação entre `noul`, `choice` e `score` via helper seguro `modeCount`.
+   - Renderizado exclusivamente via `html/template` da standard library com auto-escaping nativo contra XSS.
+3. **Saída na CLI (`pipeline-ai metrics summary`):**
+   - Exibição automática do bloco `Sensor Semântico (Jev):` no modo texto quando `TotalEvals > 0` e inclusão do objeto `"semantic"` na saída estruturada `-json`.
+
+
 

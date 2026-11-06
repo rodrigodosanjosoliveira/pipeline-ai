@@ -2,7 +2,7 @@
 delivery_id: DEL-031
 task_code: TASK-031
 title: "Atualização do diagrama de fluxo de execução no README.md para v0.10.0 e ajuste de lista no artigo HTML do Jev"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false
