@@ -591,9 +591,15 @@ func runDeliveryClose(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	d, _ := state.Get(*dir)
+
 	if err := state.Close(*dir); err != nil {
 		fmt.Fprintf(stderr, "ERRO ao fechar delivery: %v\n", err)
 		return 1
+	}
+
+	if d != nil && strings.TrimSpace(d.DeliveryID) != "" {
+		_ = metrics.RecordDeliveryClose(*dir, d.DeliveryID, d.TaskCode, d.OpenedAt, time.Now().UTC())
 	}
 
 	fmt.Fprintln(stdout, "Delivery ativa fechada com sucesso.")

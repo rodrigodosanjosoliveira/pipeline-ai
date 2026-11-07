@@ -697,3 +697,170 @@ func TestCalculateDORASemanticSummary(t *testing.T) {
 		})
 	}
 }
+
+func TestCalculateDORAFromGateEventsAndAutoMTTR(t *testing.T) {
+	baseTime := time.Date(2026, 11, 6, 18, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name              string
+		data              *MetricsData
+		opts              []DORAOptions
+		wantDeployments   int
+		wantFailed        int
+		wantCFRMin        float64
+		wantCFRMax        float64
+		wantLeadTime      time.Duration
+		wantRestoresTotal int
+		wantMTTR          time.Duration
+	}{
+		{
+			name: "fallback EventGate com 1 falha e 2 sucessos calcula DORA e MTTR automático",
+			data: &MetricsData{
+				Events: []Event{
+					{
+						Type:       EventGate,
+						DeliveryID: "DEL-033",
+						Stage:      "pipeline_run",
+						Timestamp:  baseTime.Add(-20 * time.Minute),
+						Duration:   2 * time.Second,
+						Success:    false,
+					},
+					{
+						Type:       EventGate,
+						DeliveryID: "DEL-033",
+						Stage:      "pipeline_run",
+						Timestamp:  baseTime.Add(-10 * time.Minute),
+						Duration:   4 * time.Second,
+						Success:    true,
+					},
+					{
+						Type:       EventGate,
+						DeliveryID: "DEL-033",
+						Stage:      "pipeline_run",
+						Timestamp:  baseTime,
+						Duration:   6 * time.Second,
+						Success:    true,
+					},
+				},
+			},
+			wantDeployments:   3,
+			wantFailed:        1,
+			wantCFRMin:        33.3,
+			wantCFRMax:        33.4,
+			wantLeadTime:      5 * time.Second,
+			wantRestoresTotal: 1,
+			wantMTTR:          10 * time.Minute,
+		},
+		{
+			name: "múltiplos ciclos de falha e recuperação em EventDeployment sem EventRestore explícito",
+			data: &MetricsData{
+				Events: []Event{
+					{
+						Type:      EventDeployment,
+						Timestamp: baseTime.Add(-60 * time.Minute),
+						Duration:  10 * time.Minute,
+						Success:   false,
+					},
+					{
+						Type:      EventDeployment,
+						Timestamp: baseTime.Add(-40 * time.Minute),
+						Duration:  10 * time.Minute,
+						Success:   true, // restauração 1: 20m
+					},
+					{
+						Type:      EventDeployment,
+						Timestamp: baseTime.Add(-30 * time.Minute),
+						Duration:  10 * time.Minute,
+						Success:   false,
+					},
+					{
+						Type:      EventDeployment,
+						Timestamp: baseTime.Add(-20 * time.Minute),
+						Duration:  10 * time.Minute,
+						Success:   false, // continua em estado de falha desde -30m
+					},
+					{
+						Type:      EventDeployment,
+						Timestamp: baseTime,
+						Duration:  10 * time.Minute,
+						Success:   true, // restauração 2: 30m (desde -30m)
+					},
+				},
+			},
+			wantDeployments:   5,
+			wantFailed:        3,
+			wantCFRMin:        60.0,
+			wantCFRMax:        60.0,
+			wantLeadTime:      10 * time.Minute,
+			wantRestoresTotal: 2,
+			wantMTTR:          25 * time.Minute, // (20m + 30m) / 2
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CalculateDORA(tt.data, tt.opts...)
+
+			if got.DeploymentsTotal != tt.wantDeployments {
+				t.Errorf("DeploymentsTotal = %d, esperado %d", got.DeploymentsTotal, tt.wantDeployments)
+			}
+			if got.FailedDeployments != tt.wantFailed {
+				t.Errorf("FailedDeployments = %d, esperado %d", got.FailedDeployments, tt.wantFailed)
+			}
+			if got.ChangeFailureRate < tt.wantCFRMin || got.ChangeFailureRate > tt.wantCFRMax {
+				t.Errorf("ChangeFailureRate = %.2f, esperado entre %.2f e %.2f", got.ChangeFailureRate, tt.wantCFRMin, tt.wantCFRMax)
+			}
+			if got.LeadTimeForChanges != tt.wantLeadTime {
+				t.Errorf("LeadTimeForChanges = %v, esperado %v", got.LeadTimeForChanges, tt.wantLeadTime)
+			}
+			if got.RestoresTotal != tt.wantRestoresTotal {
+				t.Errorf("RestoresTotal = %d, esperado %d", got.RestoresTotal, tt.wantRestoresTotal)
+			}
+			if got.TimeToRestore != tt.wantMTTR {
+				t.Errorf("TimeToRestore = %v, esperado %v", got.TimeToRestore, tt.wantMTTR)
+			}
+		})
+	}
+}
+
+func TestRecordDeliveryClose(t *testing.T) {
+	dir := t.TempDir()
+	openedAt := time.Date(2026, 11, 6, 16, 0, 0, 0, time.UTC)
+	completedAt := openedAt.Add(45 * time.Minute)
+
+	if err := RecordDeliveryClose(dir, "DEL-033", "TASK-033", openedAt, completedAt); err != nil {
+		t.Fatalf("RecordDeliveryClose falhou: %v", err)
+	}
+
+	data, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load falhou: %v", err)
+	}
+
+	if len(data.Deliveries) != 1 {
+		t.Fatalf("len(Deliveries) = %d, esperado 1", len(data.Deliveries))
+	}
+	dm := data.Deliveries[0]
+	if dm.DeliveryID != "DEL-033" || dm.TaskCode != "TASK-033" || !dm.Success {
+		t.Errorf("DeliveryMetric inesperado: %+v", dm)
+	}
+	if dm.LeadTime != 45*time.Minute {
+		t.Errorf("LeadTime = %v, esperado 45m", dm.LeadTime)
+	}
+
+	if len(data.Events) != 1 {
+		t.Fatalf("len(Events) = %d, esperado 1", len(data.Events))
+	}
+	evt := data.Events[0]
+	if evt.Type != EventDeployment || evt.DeliveryID != "DEL-033" || !evt.Success || evt.Stage != "delivery_close" {
+		t.Errorf("Event inesperado: %+v", evt)
+	}
+
+	dora := CalculateDORA(data)
+	if dora.DeploymentsTotal != 1 {
+		t.Errorf("dora.DeploymentsTotal = %d, esperado 1", dora.DeploymentsTotal)
+	}
+	if dora.LeadTimeForChanges != 45*time.Minute {
+		t.Errorf("dora.LeadTimeForChanges = %v, esperado 45m", dora.LeadTimeForChanges)
+	}
+}
