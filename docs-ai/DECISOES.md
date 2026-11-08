@@ -635,5 +635,19 @@ Integração visual e analítica da telemetria semântica (`SemanticSummary`) no
 3. **Saída na CLI (`pipeline-ai metrics summary`):**
    - Exibição automática do bloco `Sensor Semântico (Jev):` no modo texto quando `TotalEvals > 0` e inclusão do objeto `"semantic"` na saída estruturada `-json`.
 
+---
+
+### D-37 — Integração Automática do Pipeline Runner (EventGate), Delivery Close e MTTR Inferido nas Métricas DORA (DEL-033)
+
+Fechamento do ciclo de observabilidade passiva nas 4 Métricas DORA (`internal/metrics` e `cmd/pipeline-ai`):
+1. **Registro Automático no Fechamento da Delivery (`RecordDeliveryClose`):**
+   - Ao executar `pipeline-ai delivery close`, o CLI lê a delivery ativa (`.pipeline-state/active-delivery.json`) antes de removê-la e invoca `metrics.RecordDeliveryClose(rootDir, active.DeliveryID, active.CreatedAt, time.Now().UTC(), true)`.
+   - Caso execuções anteriores do `pipeline-ai run` tenham gerado eventos `EventGate` com `Success: false` para a mesma delivery, `FailedGateCount` é preenchido automaticamente no `DeliveryMetric`.
+2. **Fallback Automático via `EventGate` em `CalculateDORA`:**
+   - Para entregas cujas validações ocorreram via `pipeline-ai run` sem um registro explícito em `data.Deliveries`, `CalculateDORA` agrupa os eventos `EventGate` por `DeliveryID` (dentro da janela temporal) e sintetiza registros `DeliveryMetric` virtuais com `LeadTime`, `Success` e `FailedGateCount`, garantindo que `DeploymentFrequency`, `LeadTimeForChanges` e `ChangeFailureRate` reflitam 100% da atividade real da esteira.
+3. **Cálculo Automático de MTTR (`TimeToRestore` e `RestoresTotal`) a partir de Recuperações de Gate:**
+   - Além de eventos explícitos `EventRestore`, `CalculateDORA` analisa cronologicamente a sequência de `EventGate` de cada `DeliveryID`: quando um gate falha (`Success: false`) e posteriormente volta a passar (`Success: true`), o intervalo `e.Timestamp.Sub(failStart)` é contabilizado automaticamente no MTTR (`TimeToRestore` e `RestoresTotal`).
+
+
 
 

@@ -334,6 +334,37 @@ func TestCLIDeliveryCommands(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("delivery close registra metricas DORA automaticamente", func(t *testing.T) {
+		delivDir := t.TempDir()
+		var stdout, stderr bytes.Buffer
+
+		if code := run([]string{"delivery", "open", "DEL-050", "-task", "TASK-050", "-dir", delivDir}, &stdout, &stderr); code != 0 {
+			t.Fatalf("delivery open falhou: code=%d, stderr=%s", code, stderr.String())
+		}
+
+		stdout.Reset()
+		stderr.Reset()
+		if code := run([]string{"delivery", "close", "-dir", delivDir}, &stdout, &stderr); code != 0 {
+			t.Fatalf("delivery close falhou: code=%d, stderr=%s", code, stderr.String())
+		}
+
+		stdout.Reset()
+		stderr.Reset()
+		if code := run([]string{"metrics", "summary", "-dir", delivDir, "-json"}, &stdout, &stderr); code != 0 {
+			t.Fatalf("metrics summary -json falhou: code=%d, stderr=%s", code, stderr.String())
+		}
+
+		var dora struct {
+			DeploymentsTotal int `json:"deployments_total"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &dora); err != nil {
+			t.Fatalf("JSON inválido em metrics summary: %v; raw:\n%s", err, stdout.String())
+		}
+		if dora.DeploymentsTotal != 1 {
+			t.Errorf("DeploymentsTotal após delivery close = %d, esperado 1", dora.DeploymentsTotal)
+		}
+	})
 }
 
 func TestCLIValidateJSON(t *testing.T) {

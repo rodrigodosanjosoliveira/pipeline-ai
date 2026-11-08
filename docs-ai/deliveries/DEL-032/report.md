@@ -2,7 +2,7 @@
 delivery_id: DEL-032
 task_code: TASK-032
 title: "Painel de telemetria semântica Jev (SemanticSummary) no Dashboard Generative UI e CLI metrics"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

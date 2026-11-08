@@ -160,6 +160,11 @@ func (s *Store) RecordSemanticEval(deliveryID, mode string, duration time.Durati
 	return RecordSemanticEval(s.rootDir, deliveryID, mode, duration, success, confidence)
 }
 
+// RecordDeliveryClose registra o fechamento de uma delivery na Store.
+func (s *Store) RecordDeliveryClose(deliveryID, taskCode string, openedAt, completedAt time.Time) error {
+	return RecordDeliveryClose(s.rootDir, deliveryID, taskCode, openedAt, completedAt)
+}
+
 // CalculateDORA calcula as métricas DORA sobre os dados da Store.
 func (s *Store) CalculateDORA(opts ...DORAOptions) (*DORAMetrics, error) {
 	return GetDORA(s.rootDir, opts...)
@@ -331,6 +336,52 @@ func RecordSemanticEval(rootDir, deliveryID, mode string, duration time.Duration
 	})
 }
 
+// RecordDeliveryClose registra a conclusão de uma delivery com cálculo de Lead Time e evento de deployment DORA.
+func RecordDeliveryClose(rootDir, deliveryID, taskCode string, openedAt, completedAt time.Time) error {
+	data, err := Load(rootDir)
+	if err != nil {
+		return err
+	}
+
+	if completedAt.IsZero() {
+		completedAt = time.Now().UTC()
+	}
+	if openedAt.IsZero() {
+		openedAt = completedAt
+	}
+
+	leadTime := completedAt.Sub(openedAt)
+	if leadTime < 0 {
+		leadTime = 0
+	}
+
+	cleanDelID := strings.TrimSpace(deliveryID)
+	cleanTask := strings.TrimSpace(taskCode)
+
+	compCopy := completedAt
+	data.Deliveries = append(data.Deliveries, DeliveryMetric{
+		DeliveryID:  cleanDelID,
+		TaskCode:    cleanTask,
+		StartedAt:   openedAt,
+		CompletedAt: &compCopy,
+		Success:     true,
+		LeadTime:    leadTime,
+	})
+
+	data.Events = append(data.Events, Event{
+		ID:         fmt.Sprintf("evt-%d", len(data.Events)+1),
+		Type:       EventDeployment,
+		DeliveryID: cleanDelID,
+		Timestamp:  completedAt,
+		Duration:   leadTime,
+		Success:    true,
+		Stage:      "delivery_close",
+	})
+
+	data.UpdatedAt = completedAt
+	return Save(rootDir, data)
+}
+
 // CalculateDORA calcula as 4 métricas DORA sobre o conjunto de dados fornecido.
 func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
 	byMode := map[string]int{
@@ -395,6 +446,17 @@ func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
 		}
 	}
 
+	if deploymentsTotal == 0 {
+		for _, e := range data.Events {
+			if e.Type == EventGate && filterEvent(e.Timestamp) {
+				deploymentsTotal++
+				if !e.Success {
+					failedDeployments++
+				}
+			}
+		}
+	}
+
 	var cfr float64
 	if deploymentsTotal > 0 {
 		cfr = (float64(failedDeployments) / float64(deploymentsTotal)) * 100.0
@@ -420,7 +482,7 @@ func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
 		} else {
 			var minT, maxT time.Time
 			for _, e := range data.Events {
-				if e.Type == EventDeployment {
+				if e.Type == EventDeployment && filterEvent(e.Timestamp) {
 					if minT.IsZero() || e.Timestamp.Before(minT) {
 						minT = e.Timestamp
 					}
@@ -435,11 +497,26 @@ func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
 					if d.CompletedAt != nil {
 						t = *d.CompletedAt
 					}
+					if !filterEvent(t) {
+						continue
+					}
 					if minT.IsZero() || t.Before(minT) {
 						minT = t
 					}
 					if maxT.IsZero() || t.After(maxT) {
 						maxT = t
+					}
+				}
+			}
+			if minT.IsZero() {
+				for _, e := range data.Events {
+					if e.Type == EventGate && filterEvent(e.Timestamp) {
+						if minT.IsZero() || e.Timestamp.Before(minT) {
+							minT = e.Timestamp
+						}
+						if maxT.IsZero() || e.Timestamp.After(maxT) {
+							maxT = e.Timestamp
+						}
 					}
 				}
 			}
@@ -488,6 +565,14 @@ func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
 				evtCount++
 			}
 		}
+		if evtCount == 0 {
+			for _, e := range data.Events {
+				if e.Type == EventGate && e.Success && e.Duration > 0 && filterEvent(e.Timestamp) {
+					evtDur += e.Duration
+					evtCount++
+				}
+			}
+		}
 		if evtCount > 0 {
 			avgLeadTime = time.Duration(int64(evtDur) / int64(evtCount))
 		}
@@ -504,6 +589,31 @@ func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
 			restoresTotal++
 			if e.Duration > 0 {
 				totalRestoreDuration += e.Duration
+			}
+		}
+	}
+
+	if restoresTotal == 0 {
+		var inFailure bool
+		var failStart time.Time
+		for _, e := range data.Events {
+			if e.Type != EventDeployment && e.Type != EventGate {
+				continue
+			}
+			if !filterEvent(e.Timestamp) {
+				continue
+			}
+			if !e.Success {
+				if !inFailure {
+					inFailure = true
+					failStart = e.Timestamp
+				}
+			} else if inFailure {
+				restoresTotal++
+				if e.Timestamp.After(failStart) {
+					totalRestoreDuration += e.Timestamp.Sub(failStart)
+				}
+				inFailure = false
 			}
 		}
 	}
