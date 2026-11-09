@@ -439,7 +439,7 @@ func TestOfficialPluginBundleVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateManifest(%s) retornou erro: %v", manifestPath, err)
 	}
-	if m.Version != "0.10.0" {
-		t.Errorf("plugin/plugin.json Version = %q, esperado %q", m.Version, "0.10.0")
+	if m.Version != "0.11.0" {
+		t.Errorf("plugin/plugin.json Version = %q, esperado %q", m.Version, "0.11.0")
 	}
 }

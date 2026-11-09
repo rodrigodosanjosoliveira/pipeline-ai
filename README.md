@@ -23,7 +23,8 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 | `pipeline-ai sensor` | Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada e salvaguarda contra falsos positivos (suporta `-json`) (D-24). |
 | `pipeline-ai module` | Gerencia módulos opcionais (`list`, `enable`, `disable`) dinamicamente no `.pipeline-ai.json` (D-25). |
 | `pipeline-ai doctor` | Diagnostica a integridade do ambiente local (Go 1.24+, git, gh, pre-push hook e `.pipeline-ai.json`). Suporta `--json` para automações e CI. |
-| `pipeline-ai eval` | Submete avaliação semântica calibrada (System One / Jev) nos modos `noul`, `choice` e `score` via arquivo, string ou stdin (D-34, D-35). |
+| `pipeline-ai debt` | Lista e audita o inventário determinístico de atalhos deliberados (`// shortcut: <limite> \| upgrade: <gatilho>`) no código Go (`-dir`, `-json`) (D-38). |
+| `pipeline-ai eval` | Submete avaliação semântica calibrada (System One / Jev) nos modos `noul`, `choice` e `score` ou via `-preset yagni` (D-34, D-35, D-38). |
 | `pipeline-ai mcp` | Servidor MCP nativo (JSON-RPC 2.0 sobre stdio) expondo ferramentas de governança para Antigravity e IDEs. |
 
 *(Os binários individuais `pipeline-hook`, `pipeline-validate` e `pipeline-init` permanecem disponíveis para retrocompatibilidade com diretivas `tool` existentes).*
@@ -84,7 +85,7 @@ flowchart LR
 - Compilado e testado com **100% de sucesso em Go 1.24+** (stdlib pura, compatível com detector de concorrência `-race`).
 - Integrado nativamente ao ecossistema **Antigravity** via `.agents/hooks.json`, regras e **16 skills modulares**.
 - Automação via **`Taskfile.yml`** e workflow completo no **GitHub Actions** (`.github/workflows/ci.yml`).
-- Versão estável atual: **`v0.10.0`**.
+- Versão estável atual: **`v0.11.0`**.
 
 ---
 
@@ -114,10 +115,10 @@ Consulte o [Guia de Criação de Projetos](docs-ai/GUIA-CRIACAO-PROJETOS.md) par
 Requer Go 1.24 ou superior (a diretiva `tool` no `go.mod` é obrigatória):
 
 ```bash
-go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@v0.10.0
+go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@v0.11.0
 ```
 
-*(Os comandos legados `cmd/pipeline-hook@v0.10.0` e `cmd/pipeline-validate@v0.10.0` também permanecem disponíveis).*
+*(Os comandos legados `cmd/pipeline-hook@v0.11.0` e `cmd/pipeline-validate@v0.11.0` também permanecem disponíveis).*
 
 *(Se o repositório for privado, configure `go env -w GOPRIVATE="github.com/rodrigodosanjosoliveira/*"` e autentique o Git via SSH)*.
 
@@ -227,16 +228,23 @@ go tool pipeline-validate -json docs-ai/deliveries/DEL-001/report.md
 
 ---
 
-## Gestão de Entregas, Sensores e Módulos (v0.6.0 – v0.10.0)
+## Gestão de Entregas, Sensores e Módulos (v0.6.0 – v0.11.0)
 
 A CLI unificada expande os recursos de governança autônoma e determinística:
 
 ### Ciclo de Delivery (`pipeline-ai delivery`)
 Controla o estado e ciclo temporal das entregas (D-21):
 ```bash
-pipeline-ai delivery open DEL-030 TASK-030 "Release v0.10.0" 168h # Abre delivery com TTL de 7 dias
+pipeline-ai delivery open DEL-035 TASK-035 "Release v0.11.0" 168h # Abre delivery com TTL de 7 dias
 pipeline-ai delivery status                                       # Exibe status e tempo restante
-pipeline-ai delivery close                                        # Fecha a delivery ativa
+pipeline-ai delivery close                                        # Fecha a delivery ativa e registra DORA
+```
+
+### Inventário de Atalhos Deliberados (`pipeline-ai debt`)
+Rastreia simplificações conscientes anotadas com `// shortcut: <limite> | upgrade: <gatilho>` no código Go, sem depender de comentários vagos (D-38):
+```bash
+pipeline-ai debt                # Lista atalhos deliberados com arquivo:linha, limite e gatilho
+pipeline-ai debt -dir . -json   # Emite o inventário estruturado em JSON
 ```
 
 ### Sensores de Qualidade (`pipeline-ai sensor`)
@@ -268,6 +276,9 @@ pipeline-ai eval -mode score -state main.go -question "qualidade do tratamento d
 
 # Avaliação lendo do stdin com saída estruturada em JSON:
 cat main.go | pipeline-ai eval -question "o pacote é main?" -json
+
+# Auditoria anti-overengineering usando o preset semântico calibrado YAGNI:
+git diff | pipeline-ai eval -preset yagni -threshold 0.8
 ```
 Protegido por salvaguardas mandatórias: anti-hallucination em escolhas (SEC-01), bounds e calibração normalizada em scores (SEC-02), redação de tokens (`[REDACTED]`), limite de 512KB no estado e timeout estrito (SEC-03).
 
@@ -347,6 +358,7 @@ Persistência atômica e fail-safe em `.pipeline-state/metrics.json` (incluindo 
 2. **Orquestração Autônoma Contínua e Pipeline Runner:** [artigo-orquestracao-autonoma-runner.md](docs-ai/artigos/artigo-orquestracao-autonoma-runner.md) | [Dev.to (EN)](docs-ai/artigos/article-autonomous-orchestration-runner-devto.md)
 3. **Métricas DORA e Telemetria Passiva para Agentes de IA:** [artigo-dora-metrics-telemetria-ia.md](docs-ai/artigos/artigo-dora-metrics-telemetria-ia.md) | [Dev.to (EN)](docs-ai/artigos/article-dora-metrics-ai-agents-devto.md)
 4. **System 1 vs. System 2: Sensoriamento Semântico Calibrado com Jev:** [artigo-sensoriamento-semantico-jev.md](docs-ai/artigos/artigo-sensoriamento-semantico-jev.md) | [Dev.to (EN)](docs-ai/artigos/article-semantic-sensing-jev-go-devto.md)
+5. **Governança Anti-Overengineering: Decision Ladder, Debt Ledger e Sensores YAGNI:** [artigo-governanca-anti-overengineering-yagni.md](docs-ai/artigos/artigo-governanca-anti-overengineering-yagni.md) | [Dev.to (EN)](docs-ai/artigos/article-anti-overengineering-yagni-go-devto.md)
 
 ---
 
@@ -396,7 +408,8 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 - **`pipeline_sync_skills`**: Sincroniza e atualiza `.agents/skills` e regras a partir dos templates embutidos (`dir`).
 - **`pipeline_close_delivery`**: Encerra a delivery ativa no repositório.
 - **`pipeline_run_sensors`**: Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada e salvaguarda contra falsos positivos (`dir`).
-- **`pipeline_eval_semantic`**: Submete uma avaliação semântica calibrada (Jev / System One) nos modos `noul`, `choice` ou `score` (`state`, `question`, `mode`, `choices`, `max_score`, `threshold`, `endpoint`, `api_key`, `timeout_seconds`).
+- **`pipeline_list_debt`**: Varre o diretório e retorna o inventário JSON de atalhos deliberados (`// shortcut: <limite> | upgrade: <gatilho>`) (`dir`).
+- **`pipeline_eval_semantic`**: Submete uma avaliação semântica calibrada (Jev / System One) nos modos `noul`, `choice` ou `score`, ou via `preset` (`yagni`, `minimalism`, `ponytail`) (`state`, `question`, `preset`, `mode`, `choices`, `max_score`, `threshold`, `endpoint`, `api_key`, `timeout_seconds`).
 - **`pipeline_manage_modules`**: Gerencia módulos opcionais (`action`: list, enable, disable; `module`, `dir`).
 
 ---

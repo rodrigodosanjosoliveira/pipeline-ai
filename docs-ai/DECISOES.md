@@ -648,6 +648,22 @@ Fechamento do ciclo de observabilidade passiva nas 4 Métricas DORA (`internal/m
 3. **Cálculo Automático de MTTR (`TimeToRestore` e `RestoresTotal`) a partir de Recuperações de Gate:**
    - Além de eventos explícitos `EventRestore`, `CalculateDORA` analisa cronologicamente a sequência de `EventGate` de cada `DeliveryID`: quando um gate falha (`Success: false`) e posteriormente volta a passar (`Success: true`), o intervalo `e.Timestamp.Sub(failStart)` é contabilizado automaticamente no MTTR (`TimeToRestore` e `RestoresTotal`).
 
+---
+
+## 13. Consolidação Arquitetural da v0.11.0 (Governança Anti-Overengineering: Decision Ladder, Debt Ledger e Preset YAGNI)
+
+### D-38 — Decision Ladder, Debt Ledger Determinístico (`internal/debt`) e Preset Semântico YAGNI (DEL-034 / DEL-035)
+
+Prevenção de complexidade acidental (over-engineering) e rastreamento determinístico de atalhos conscientes de engenharia:
+1. **Escada de Decisão (Decision Ladder) nas Skills Core:**
+   - Incorporada em `architecture-guardrails`, `dev-implementation` e `code-reviewer` (`.agents/skills/`, templates de `scaffold` e `plugin/skills/`): `1. YAGNI → 2. Reuso no repo → 3. Stdlib → 4. Dependência já instalada → 5. Código novo mínimo`.
+2. **Rastreador Determinístico de Atalhos Deliberados (`internal/debt`):**
+   - Anotação padronizada `// shortcut: <limite> | upgrade: <gatilho>` extraída por `debt.ParseComment` (em Go puro sem regexes vulneráveis a ReDoS, validado por `FuzzParseComment`) e inventariada por `debt.ScanDir`.
+   - Exposto via subcomando CLI `pipeline-ai debt [-dir] [-json]`, ferramenta MCP `pipeline_list_debt` e renderizado automaticamente na seção "Atalhos Deliberados (Debt Ledger)" do Dashboard Generative UI (`internal/dashboard`).
+3. **Preset Semântico YAGNI no Sensor Jev (`internal/sensor/semantic`):**
+   - Função `semantic.ResolvePreset` suportando `-preset yagni` (e aliases `minimalism` e `ponytail`) na CLI `pipeline-ai eval` e no argumento `preset` da tool MCP `pipeline_eval_semantic`.
+
+
 
 
 
