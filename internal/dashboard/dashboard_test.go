@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/dashboard"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/debt"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/metrics"
 )
 
@@ -73,6 +74,20 @@ func setupTestWorkspace(t *testing.T) string {
 		t.Fatalf("falha ao criar INDEX.md: %v", err)
 	}
 
+	// Cria arquivo Go com atalho deliberado rastreável (shortcut)
+	srcDir := filepath.Join(tmpDir, "internal", "store")
+	if err := os.MkdirAll(srcDir, 0755); err != nil {
+		t.Fatalf("falha ao criar internal/store: %v", err)
+	}
+	goFile := `package store
+
+// shortcut: armazenamento JSON local | upgrade: migrar para SQLite quando > 50MB
+type Store struct{}
+`
+	if err := os.WriteFile(filepath.Join(srcDir, "store.go"), []byte(goFile), 0644); err != nil {
+		t.Fatalf("falha ao criar store.go: %v", err)
+	}
+
 	return tmpDir
 }
 
@@ -114,6 +129,14 @@ func TestCollectDashboardData(t *testing.T) {
 				}
 				if data.DORA.Semantic.ByMode["noul"] != 1 || data.DORA.Semantic.ByMode["choice"] != 1 || data.DORA.Semantic.ByMode["score"] != 1 {
 					t.Errorf("DORA.Semantic.ByMode inesperado: %v", data.DORA.Semantic.ByMode)
+				}
+				if data.Shortcuts.Total != 1 || len(data.Shortcuts.Items) != 1 {
+					t.Errorf("Shortcuts.Total = %d, len(Items) = %d, esperado 1/1", data.Shortcuts.Total, len(data.Shortcuts.Items))
+				} else {
+					item := data.Shortcuts.Items[0]
+					if item.Limit != "armazenamento JSON local" || item.UpgradeTrigger != "migrar para SQLite quando > 50MB" {
+						t.Errorf("Shortcuts.Items[0] inesperado: %+v", item)
+					}
 				}
 			},
 		},
@@ -248,6 +271,17 @@ func TestRenderHTML(t *testing.T) {
 						Status: "draft",
 					},
 				},
+				Shortcuts: debt.Summary{
+					Total: 1,
+					Items: []debt.ShortcutItem{
+						{
+							File:           "internal/store/store.go",
+							Line:           3,
+							Limit:          "armazenamento JSON local",
+							UpgradeTrigger: "migrar para SQLite quando > 50MB",
+						},
+					},
+				},
 				TotalDeploys: 3,
 			},
 			wantErr: false,
@@ -277,6 +311,9 @@ func TestRenderHTML(t *testing.T) {
 				"noul",
 				"choice",
 				"score",
+				"internal/store/store.go",
+				"armazenamento JSON local",
+				"migrar para SQLite quando &gt; 50MB",
 			},
 		},
 		{

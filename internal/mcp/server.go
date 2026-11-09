@@ -15,6 +15,7 @@ import (
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/dashboard"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/debt"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/handoff"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/metrics"
@@ -448,6 +449,10 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 						"type":        "string",
 						"description": "Pergunta ou critério de verificação semântica",
 					},
+					"preset": map[string]any{
+						"type":        "string",
+						"description": "Preset semântico calibrado opcional (ex: 'yagni', 'minimalism', 'ponytail')",
+					},
 					"threshold": map[string]any{
 						"type":        "number",
 						"description": "Score mínimo de confiança requerido (0.0 a 1.0, padrão 0.8)",
@@ -477,7 +482,20 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 						"description": "Chave de autenticação da API semântica (opcional)",
 					},
 				},
-				"required": []string{"state", "question"},
+				"required": []string{"state"},
+			},
+		},
+		{
+			Name:        "pipeline_list_debt",
+			Description: "Lista o inventário de atalhos deliberados (// shortcut:) com seus limites conhecidos e gatilhos de evolução.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"dir": map[string]any{
+						"type":        "string",
+						"description": "Diretório raiz do projeto a ser analisado (padrão: raiz atual)",
+					},
+				},
 			},
 		},
 	}
@@ -1132,16 +1150,39 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 	case "pipeline_eval_semantic":
 		rawState, _ := params.Arguments["state"].(string)
 		rawQuestion, _ := params.Arguments["question"].(string)
+		rawPreset, _ := params.Arguments["preset"].(string)
 
 		stateStr := strings.TrimSpace(rawState)
 		questionStr := strings.TrimSpace(rawQuestion)
+		presetStr := strings.TrimSpace(rawPreset)
+
+		var presetMode string
+		if presetStr != "" {
+			pm, pq, err := semantic.ResolvePreset(presetStr)
+			if err != nil {
+				s.sendResult(out, req.ID, ToolResult{
+					Content: []ToolContent{
+						{
+							Type: "text",
+							Text: fmt.Sprintf("ERRO: preset semântico inválido %q: %v", presetStr, err),
+						},
+					},
+					IsError: true,
+				})
+				return
+			}
+			presetMode = pm
+			if questionStr == "" {
+				questionStr = pq
+			}
+		}
 
 		if stateStr == "" || questionStr == "" {
 			s.sendResult(out, req.ID, ToolResult{
 				Content: []ToolContent{
 					{
 						Type: "text",
-						Text: "ERRO: argumentos 'state' e 'question' são obrigatórios e não podem ser vazios",
+						Text: "ERRO: argumentos 'state' e 'question' (ou 'preset') são obrigatórios e não podem ser vazios",
 					},
 				},
 				IsError: true,
@@ -1181,6 +1222,9 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 		}
 
 		mode := "noul"
+		if presetMode != "" {
+			mode = presetMode
+		}
 		if rawMode, ok := params.Arguments["mode"].(string); ok && strings.TrimSpace(rawMode) != "" {
 			mode = strings.ToLower(strings.TrimSpace(rawMode))
 		}
@@ -1363,6 +1407,54 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 					{
 						Type: "text",
 						Text: fmt.Sprintf("ERRO ao serializar decisão: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		s.sendResult(out, req.ID, ToolResult{
+			Content: []ToolContent{
+				{
+					Type: "text",
+					Text: string(rawJSON),
+				},
+			},
+			IsError: false,
+		})
+
+	case "pipeline_list_debt":
+		targetDir := s.RootDir
+		if rawDir, ok := params.Arguments["dir"].(string); ok && strings.TrimSpace(rawDir) != "" {
+			if filepath.IsAbs(rawDir) {
+				targetDir = rawDir
+			} else {
+				targetDir = filepath.Join(s.RootDir, rawDir)
+			}
+		}
+
+		summary, err := debt.ScanDir(targetDir)
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO ao escanear atalhos deliberados: %v", err),
+					},
+				},
+				IsError: true,
+			})
+			return
+		}
+
+		rawJSON, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil {
+			s.sendResult(out, req.ID, ToolResult{
+				Content: []ToolContent{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("ERRO ao serializar inventário de atalhos: %v", err),
 					},
 				},
 				IsError: true,

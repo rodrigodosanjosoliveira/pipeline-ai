@@ -32,6 +32,8 @@ Uma revisão que só produz `SUGESTAO`, em um diff com problema real, é `DRIFT`
 - Mutação de slice ou map compartilhado sem sincronização
 - Interface definida no pacote que a implementa, em vez de no que a consome
 - Abstração que a stdlib já cobre
+- Over-engineering: interfaces de implementação única desnecessárias, tipos duplicados do domínio ou abstrações especulativas (YAGNI)
+- Atalhos deliberados: validar que simplificações conscientes usam a anotação estruturada `// shortcut: <limite> | upgrade: <gatilho>` em vez de comentários `TODO` vagos
 
 **Frontend (React + TypeScript)**
 - Componente de classe em código novo: usar funcional com hooks

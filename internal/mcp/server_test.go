@@ -1379,4 +1379,123 @@ func TestMCPEvalSemanticTool(t *testing.T) {
 			t.Errorf("resposta não contém score=8.8: %s", text)
 		}
 	})
+
+	t.Run("tools/call com preset yagni sem question explicita", func(t *testing.T) {
+		var receivedBody bytes.Buffer
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.Copy(&receivedBody, r.Body)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"decision": true,
+				"confidence": 0.96,
+				"reason": "Implementação direta e minimalista",
+				"latency_ms": 11
+			}`))
+		}))
+		defer mockServer.Close()
+
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      148,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_eval_semantic",
+				"arguments": map[string]any{
+					"endpoint": mockServer.URL,
+					"api_key":  "dummy-token",
+					"preset":   "yagni",
+					"state":    "package p\nfunc Sum(a, b int) int { return a + b }",
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		callRes := runRPC(t, s, string(reqBytes))
+		callResult, ok := callRes["result"].(map[string]any)
+		if !ok || callResult["isError"] == true {
+			t.Fatalf("esperava sucesso em pipeline_eval_semantic com preset=yagni, obteve: %v", callRes)
+		}
+		if !strings.Contains(strings.ToLower(receivedBody.String()), "yagni") {
+			t.Errorf("payload enviado ao sensor não contém pergunta do preset yagni: %s", receivedBody.String())
+		}
+	})
+}
+
+func TestMCPToolsListDebt(t *testing.T) {
+	tmpDir := t.TempDir()
+	goCode := `package store
+
+// shortcut: cache em memória sem LRU | upgrade: adicionar evicção acima de 50k itens
+type Cache struct{}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "cache.go"), []byte(goCode), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(tmpDir)
+
+	t.Run("tools/list contem pipeline_list_debt", func(t *testing.T) {
+		req := `{"jsonrpc":"2.0","id":160,"method":"tools/list"}`
+		res := runRPC(t, s, req)
+		result, ok := res["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente em tools/list: %v", res)
+		}
+		tools, _ := result["tools"].([]any)
+		found := false
+		for _, raw := range tools {
+			tool, ok := raw.(map[string]any)
+			if ok && tool["name"] == "pipeline_list_debt" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("ferramenta pipeline_list_debt não encontrada em tools/list")
+		}
+	})
+
+	t.Run("tools/call pipeline_list_debt retorna inventario JSON", func(t *testing.T) {
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      161,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_list_debt",
+				"arguments": map[string]any{
+					"dir": tmpDir,
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		callRes := runRPC(t, s, string(reqBytes))
+		callResult, ok := callRes["result"].(map[string]any)
+		if !ok || callResult["isError"] == true {
+			t.Fatalf("pipeline_list_debt retornou erro: %v", callRes)
+		}
+		content, _ := callResult["content"].([]any)
+		if len(content) == 0 {
+			t.Fatalf("content vazio em pipeline_list_debt")
+		}
+		first, _ := content[0].(map[string]any)
+		text, _ := first["text"].(string)
+
+		var summary struct {
+			Total int `json:"total"`
+			Items []struct {
+				File           string `json:"file"`
+				Limit          string `json:"limit"`
+				UpgradeTrigger string `json:"upgrade_trigger"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal([]byte(text), &summary); err != nil {
+			t.Fatalf("retorno de pipeline_list_debt não é JSON válido: %v; raw: %s", err, text)
+		}
+		if summary.Total != 1 || len(summary.Items) != 1 {
+			t.Fatalf("summary.Total = %d, len(Items) = %d, esperado 1/1", summary.Total, len(summary.Items))
+		}
+		if summary.Items[0].File != "cache.go" || summary.Items[0].Limit != "cache em memória sem LRU" {
+			t.Errorf("Items[0] inesperado: %+v", summary.Items[0])
+		}
+	})
 }

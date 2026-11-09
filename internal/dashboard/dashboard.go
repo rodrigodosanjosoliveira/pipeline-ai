@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/debt"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/metrics"
 )
 
@@ -53,6 +54,7 @@ type DashboardData struct {
 	Pillars      []PillarInfo        `json:"pillars"`
 	Skills       []SkillInfo         `json:"skills"`
 	Deliveries   []DeliverySummary   `json:"deliveries"`
+	Shortcuts    debt.Summary        `json:"shortcuts"`
 	TotalDeploys int                 `json:"total_deploys"`
 }
 
@@ -85,6 +87,12 @@ func CollectDashboardData(rootDir string) (*DashboardData, error) {
 	// 4. Catálogo de skills da esteira
 	skills := defaultSkills()
 
+	// 5. Atalhos deliberados rastreados (Shortcuts / Debt Ledger)
+	shortcuts := debt.Summary{Total: 0, Items: []debt.ShortcutItem{}}
+	if s, err := debt.ScanDir(rootDir); err == nil && s != nil {
+		shortcuts = *s
+	}
+
 	return &DashboardData{
 		ProjectName:  projectName,
 		ProjectType:  projectType,
@@ -93,6 +101,7 @@ func CollectDashboardData(rootDir string) (*DashboardData, error) {
 		Pillars:      pillars,
 		Skills:       skills,
 		Deliveries:   deliveries,
+		Shortcuts:    shortcuts,
 		TotalDeploys: dora.DeploymentsTotal,
 	}, nil
 }
@@ -395,6 +404,48 @@ const dashboardHTMLTemplate = `<!DOCTYPE html>
           </div>
         </div>
       </div>
+
+      <!-- Atalhos Deliberados (Shortcuts / Debt Ledger) -->
+      <div class="pt-4 border-t border-slate-800/80 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-base font-bold text-white">Atalhos Deliberados (Debt Ledger)</h3>
+            <p class="text-xs text-slate-400">Inventário de simplificações conscientes (// shortcut:) com limites conhecidos e gatilhos de evolução.</p>
+          </div>
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            Total: {{.Shortcuts.Total}}
+          </span>
+        </div>
+
+        {{if .Shortcuts.Items}}
+        <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr class="border-b border-slate-800 bg-slate-900/80 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  <th class="px-4 py-3">Arquivo:Linha</th>
+                  <th class="px-4 py-3">Limite Conhecido</th>
+                  <th class="px-4 py-3">Gatilho de Evolução (Upgrade)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800/60">
+                {{range .Shortcuts.Items}}
+                <tr class="hover:bg-slate-800/40 transition-colors">
+                  <td class="px-4 py-3 font-mono text-xs text-indigo-400">{{.File}}:{{.Line}}</td>
+                  <td class="px-4 py-3 text-slate-200">{{.Limit}}</td>
+                  <td class="px-4 py-3 text-amber-300 font-medium">{{.UpgradeTrigger}}</td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {{else}}
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-xs text-slate-500">
+          Nenhum atalho deliberado registrado no código-fonte.
+        </div>
+        {{end}}
+      </div>
     </section>
 
     <!-- Aba 2: Esteira de Skills -->
@@ -600,4 +651,9 @@ func RenderHTML(data *DashboardData) (string, error) {
 	}
 
 	return buf.String(), nil
+}
+
+// GenerateDashboardHTML é um alias para RenderHTML.
+func GenerateDashboardHTML(data *DashboardData) (string, error) {
+	return RenderHTML(data)
 }
