@@ -1388,3 +1388,115 @@ func TestCLIEval(t *testing.T) {
 		}
 	})
 }
+
+func TestRunDebt(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcFile := filepath.Join(tmpDir, "service.go")
+	srcContent := `package service
+
+// shortcut: armazenamento em memória | upgrade: quando exceder 10k registros
+func Save() {}
+`
+	if err := os.WriteFile(srcFile, []byte(srcContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("saida textual padrao", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"debt", "-dir", tmpDir}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("run(debt) exitCode = %d, esperado 0; stderr: %s", code, stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"service.go", "armazenamento em memória", "quando exceder 10k registros"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout de debt não contém %q; saída:\n%s", want, out)
+			}
+		}
+	})
+
+	t.Run("saida json estruturada", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"debt", "-dir", tmpDir, "-json"}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("run(debt -json) exitCode = %d, esperado 0; stderr: %s", code, stderr.String())
+		}
+		var summary struct {
+			Total int `json:"total"`
+			Items []struct {
+				File           string `json:"file"`
+				Line           int    `json:"line"`
+				Limit          string `json:"limit"`
+				UpgradeTrigger string `json:"upgrade_trigger"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+			t.Fatalf("saída JSON inválida em debt -json: %v; raw: %s", err, stdout.String())
+		}
+		if summary.Total != 1 || len(summary.Items) != 1 {
+			t.Fatalf("summary.Total = %d, len(Items) = %d, esperado 1/1", summary.Total, len(summary.Items))
+		}
+		if summary.Items[0].File != "service.go" || summary.Items[0].Limit != "armazenamento em memória" {
+			t.Errorf("Item[0] inesperado: %+v", summary.Items[0])
+		}
+	})
+}
+
+func TestRunEvalPresetYAGNI(t *testing.T) {
+	var receivedBody bytes.Buffer
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(&receivedBody, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"decision": true,
+			"confidence": 0.95,
+			"reason": "Código enxuto sem abstrações especulativas.",
+			"latency_ms": 12
+		}`))
+	}))
+	defer mockServer.Close()
+
+	t.Run("preset yagni sem passar -question", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		args := []string{
+			"eval",
+			"-preset", "yagni",
+			"-state", "package p\n\nfunc Add(a, b int) int { return a + b }",
+			"-endpoint", mockServer.URL,
+			"-api-key", "test-key",
+			"-json",
+		}
+		code := run(args, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("eval -preset yagni falhou com código %d, stderr: %s", code, stderr.String())
+		}
+		var res struct {
+			Decision   bool    `json:"decision"`
+			Confidence float64 `json:"confidence"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			t.Fatalf("JSON inválido: %v; raw: %s", err, stdout.String())
+		}
+		if !res.Decision {
+			t.Errorf("esperava Decision=true, obteve false")
+		}
+		if !strings.Contains(strings.ToLower(receivedBody.String()), "yagni") {
+			t.Errorf("payload enviado ao sensor não contém pergunta YAGNI: %s", receivedBody.String())
+		}
+	})
+
+	t.Run("preset desconhecido retorna erro", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		args := []string{
+			"eval",
+			"-preset", "preset-invalido",
+			"-state", "package p",
+			"-endpoint", mockServer.URL,
+			"-api-key", "test-key",
+		}
+		if code := run(args, &stdout, &stderr); code == 0 {
+			t.Errorf("esperava erro ao passar preset inválido")
+		}
+	})
+}

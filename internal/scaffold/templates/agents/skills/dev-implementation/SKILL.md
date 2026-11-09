@@ -31,10 +31,11 @@ Nenhum gate pode ser pulado. `go test` com falha significa `STATUS: bloqueado`, 
 ## Procedimento
 
 1. Reler `NAO_FAZER` do handoff da arquitetura antes da primeira linha de código.
-2. Implementar o mínimo necessário que faz os testes passarem.
-3. Rodar os quatro gates obrigatórios.
-4. Se precisar de dependência externa não prevista: parar, marcar `SUPPLY_CHAIN: sim` e justificar por que a stdlib não resolve.
-5. Se a implementação exigir sair do escopo, parar com `STATUS: bloqueado` e devolver para `architecture-guardrails`. Não expandir por conta própria.
+2. Implementar o mínimo necessário que faz os testes passarem (minimalismo estrito: verificar structs reais antes de instanciar, sem criar abstrações ou interfaces não pedidas).
+3. Quando adotar um atalho deliberado de engenharia, anotar obrigatoriamente no código com `// shortcut: <limite> | upgrade: <gatilho>` (nunca usar `TODO` vago sem gatilho objetivo).
+4. Rodar os quatro gates obrigatórios.
+5. Se precisar de dependência externa não prevista: parar, marcar `SUPPLY_CHAIN: sim` e justificar por que a stdlib não resolve.
+6. Se a implementação exigir sair do escopo, parar com `STATUS: bloqueado` e devolver para `architecture-guardrails`. Não expandir por conta própria.
 
 ## O que NÃO fazer
 

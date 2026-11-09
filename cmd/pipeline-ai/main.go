@@ -29,6 +29,7 @@ import (
 
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/config"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/dashboard"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/debt"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/handoff"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/hook"
@@ -116,6 +117,9 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	case "eval":
 		return runEval(cmdArgs, stdin, stdout, stderr)
 
+	case "debt":
+		return runDebt(cmdArgs, stdout, stderr)
+
 	default:
 		fmt.Fprintf(stderr, "pipeline-ai: comando desconhecido: %q\nExecute 'pipeline-ai help' para ver a lista de comandos.\n", cmd)
 		return 1
@@ -140,6 +144,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  dashboard  Gera e renderiza dashboard HTML interativo de engenharia e métricas")
 	fmt.Fprintln(w, "  mcp        Executa o servidor MCP sobre stdio (JSON-RPC 2.0)")
 	fmt.Fprintln(w, "  eval       Submete uma avaliação semântica calibrada (System One / Jev)")
+	fmt.Fprintln(w, "  debt       Lista atalhos deliberados (// shortcut:) com limites e gatilhos de evolução")
 	fmt.Fprintln(w, "  plugin     Gerencia o bundle e instalação do plugin Antigravity (verify, install)")
 	fmt.Fprintln(w, "  version    Exibe a versão do pipeline-ai")
 	fmt.Fprintln(w, "  help       Exibe esta mensagem de ajuda")
@@ -989,12 +994,52 @@ func runPluginInstall(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+func runDebt(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("debt", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	dirFlag := fs.String("dir", ".", "diretório raiz do projeto a ser analisado")
+	jsonFlag := fs.Bool("json", false, "emite o inventário de atalhos em formato JSON")
+
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	summary, err := debt.ScanDir(*dirFlag)
+	if err != nil {
+		fmt.Fprintf(stderr, "debt: erro ao escanear diretório %q: %v\n", *dirFlag, err)
+		return 1
+	}
+
+	if *jsonFlag {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(summary); err != nil {
+			fmt.Fprintf(stderr, "debt: erro ao serializar JSON: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
+	fmt.Fprintf(stdout, "Atalhos deliberados rastreados (total: %d):\n", summary.Total)
+	if summary.Total == 0 {
+		fmt.Fprintln(stdout, "  (nenhum atalho registrado)")
+		return 0
+	}
+
+	for _, item := range summary.Items {
+		fmt.Fprintf(stdout, "  - %s:%d | Limite: %s | Upgrade: %s\n", item.File, item.Line, item.Limit, item.UpgradeTrigger)
+	}
+	return 0
+}
+
 func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("eval", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	stateFlag := fs.String("state", "", "caminho de arquivo ou string de estado para avaliação")
 	questionFlag := fs.String("question", "", "pergunta ou critério semântico a ser avaliado")
+	presetFlag := fs.String("preset", "", "preset semântico calibrado (ex: yagni, minimalism, ponytail)")
 	thresholdFlag := fs.Float64("threshold", 0.8, "score mínimo de confiança requerido (0.0 a 1.0)")
 	modeFlag := fs.String("mode", "noul", "modo de avaliação: noul, choice ou score")
 	choicesFlag := fs.String("choices", "", "opções separadas por vírgula para -mode choice")
@@ -1007,6 +1052,29 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	if err := fs.Parse(args); err != nil {
 		return 1
+	}
+
+	modeExplicit := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "mode" {
+			modeExplicit = true
+		}
+	})
+
+	var presetMode, presetQuestion string
+	if strings.TrimSpace(*presetFlag) != "" {
+		var err error
+		presetMode, presetQuestion, err = semantic.ResolvePreset(*presetFlag)
+		if err != nil {
+			if *jsonFlag {
+				res := map[string]any{"error": err.Error()}
+				data, _ := json.MarshalIndent(res, "", "  ")
+				fmt.Fprintln(stdout, string(data))
+			} else {
+				fmt.Fprintf(stderr, "eval: preset inválido %q: %v\n", *presetFlag, err)
+			}
+			return 1
+		}
 	}
 
 	const maxStateBytes = 512 * 1024
@@ -1059,8 +1127,11 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	question := strings.TrimSpace(*questionFlag)
+	if question == "" && presetQuestion != "" {
+		question = presetQuestion
+	}
 	if strings.TrimSpace(stateContent) == "" || question == "" {
-		fmt.Fprintln(stderr, "eval: os parâmetros -state e -question são obrigatórios. Uso: pipeline-ai eval -state <string|arquivo> -question <pergunta> [opções]")
+		fmt.Fprintln(stderr, "eval: os parâmetros -state e -question (ou -preset) são obrigatórios. Uso: pipeline-ai eval -state <string|arquivo> -question <pergunta> [opções]")
 		return 1
 	}
 
@@ -1070,6 +1141,9 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	mode := strings.ToLower(strings.TrimSpace(*modeFlag))
+	if !modeExplicit && presetMode != "" {
+		mode = presetMode
+	}
 	if mode == "" {
 		mode = "noul"
 	}

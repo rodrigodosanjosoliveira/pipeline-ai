@@ -113,7 +113,19 @@ Projetos no formato CLI estruturam ferramentas de terminal puras sem dependênci
 
 ---
 
-## 4. Diretórios Globais do Padrão (Todos os Formatos)
+## 4. Módulos Internos de Governança (`pipeline-ai`)
+
+| Pacote / Comando | Responsabilidade | Símbolos / Ferramentas Principais |
+|---|---|---|
+| `internal/debt` | Inventário determinístico de atalhos deliberados (`// shortcut: <limite> \| upgrade: <gatilho>`) | `ParseComment`, `ScanDir`, `ShortcutItem`, `Summary` |
+| `internal/sensor/semantic` | Sensoriamento semântico Jev (`noul`, `choice`, `score`) e presets calibrados | `ResolvePreset` (preset `yagni`, aliases `minimalism` e `ponytail`) |
+| `internal/dashboard` | Geração de relatórios e Dashboard Generative UI HTML com DORA, Jev e Debt Ledger | `GenerateData`, `RenderHTML`, `RenderMarkdown` |
+| `cmd/pipeline-ai` | CLI unificada da esteira | Subcomandos `debt`, `eval -preset`, `dashboard`, `metrics`, `run` |
+| `internal/mcp` | Servidor MCP stdio nativo | Tools `pipeline_list_debt`, `pipeline_eval_semantic`, `pipeline_get_dashboard_html` |
+
+---
+
+## 5. Diretórios Globais do Padrão (Todos os Formatos)
 
 | Diretório / Arquivo | Função | Nível de Acesso |
 |---|---|---|

@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-033 | TASK-033 | Integração automática de EventGate (runner), delivery close e MTTR inferido no cálculo das 4 métricas DORA | feat | 2026-11-06 | draft |
+| DEL-034 | TASK-034 | Governança Anti-Overengineering: Decision Ladder, Debt Ledger (internal/debt) e preset semântico YAGNI | feat | 2026-11-09 | merged |
+| DEL-033 | TASK-033 | Integração automática de EventGate (runner), delivery close e MTTR inferido no cálculo das 4 métricas DORA | feat | 2026-11-06 | merged |
 | DEL-032 | TASK-032 | Painel de telemetria semântica Jev (SemanticSummary) no Dashboard Generative UI e CLI metrics | feat | 2026-11-06 | merged |
 | DEL-031 | TASK-031 | Atualização do diagrama de fluxo de execução no README.md para v0.10.0 e ajuste de lista no artigo HTML do Jev | docs | 2026-11-06 | merged |
 | DEL-030 | TASK-030 | Release v0.10.0: Consolidação dos modos semânticos Jev (choice e score), telemetria e artigo técnico | chore | 2026-11-05 | merged |
