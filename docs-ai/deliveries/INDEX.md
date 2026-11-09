@@ -7,6 +7,7 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
+| DEL-035 | TASK-035 | Release v0.11.0: Consolidação da Governança Anti-Overengineering, Debt Ledger, DORA auto-MTTR e 5º artigo técnico | chore | 2026-11-09 | merged |
 | DEL-034 | TASK-034 | Governança Anti-Overengineering: Decision Ladder, Debt Ledger (internal/debt) e preset semântico YAGNI | feat | 2026-11-09 | merged |
 | DEL-033 | TASK-033 | Integração automática de EventGate (runner), delivery close e MTTR inferido no cálculo das 4 métricas DORA | feat | 2026-11-06 | merged |
 | DEL-032 | TASK-032 | Painel de telemetria semântica Jev (SemanticSummary) no Dashboard Generative UI e CLI metrics | feat | 2026-11-06 | merged |

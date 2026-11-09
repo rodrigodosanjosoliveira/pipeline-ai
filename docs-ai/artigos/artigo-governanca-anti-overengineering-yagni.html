@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>O Paradoxo da Produtividade em IA: Como Combater o Over-Engineering dos LLMs com Decision Ladders, Debt Ledgers Determinísticos e Sensores YAGNI</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 820px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: #1a1a1a;
+  }
+  h1 { font-size: 2.1em; line-height: 1.25; margin-bottom: 8px; color: #0a66c2; }
+  h2 { font-size: 1.5em; margin-top: 36px; margin-bottom: 12px; border-bottom: 1px solid #e0e0e0; padding-bottom: 6px; }
+  h3 { font-size: 1.2em; margin-top: 24px; margin-bottom: 8px; }
+  p { margin: 14px 0; }
+  blockquote {
+    border-left: 4px solid #0a66c2;
+    margin: 20px 0;
+    padding: 10px 20px;
+    background: #f3f6f8;
+    font-style: italic;
+  }
+  pre {
+    background: #f4f4f5;
+    border: 1px solid #e4e4e7;
+    border-radius: 6px;
+    padding: 14px;
+    overflow-x: auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.9em;
+  }
+  code {
+    background: #f1f2f4;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9em;
+  }
+  ul, ol {
+    padding-left: 24px;
+  }
+  li {
+    margin-bottom: 8px;
+  }
+  .author {
+    color: #555;
+    font-size: 1.05em;
+    font-style: italic;
+    margin-bottom: 24px;
+  }
+  .banner-tip {
+    background: #e8f4fd;
+    border: 1px solid #b8daff;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+    font-size: 0.95em;
+  }
+</style>
+</head>
+<body>
+
+<div class="banner-tip">
+  💡 <strong>Dica para o LinkedIn Articles / Substack:</strong><br>
+  1. <strong>Capa do Artigo:</strong> No topo do editor do LinkedIn, clique em <em>"Carregar imagem de capa"</em> e selecione o arquivo <code>docs-ai/artigos/capa-artigo-governanca-anti-overengineering-yagni.jpg</code>.<br>
+  2. <strong>Corpo do Artigo:</strong> Abra este arquivo HTML no navegador, selecione o conteúdo abaixo (<code>Ctrl+A</code> / <code>Cmd+A</code>), copie (<code>Ctrl+C</code> / <code>Cmd+C</code>) e cole (<code>Ctrl+V</code> / <code>Cmd+V</code>) no LinkedIn Articles. Todas as listas e blocos de código estão formatados sem tabelas para compatibilidade total com o editor ProseMirror do LinkedIn!
+</div>
+
+<h1>O Paradoxo da Produtividade em IA: Como Combater o Over-Engineering dos LLMs com Decision Ladders, Debt Ledgers Determinísticos e Sensores YAGNI</h1>
+
+<p class="author">Por Rodrigo Oliveira — Engenheiro de Software &amp; Pós-Graduando em Engenharia de IA Aplicada</p>
+
+<hr>
+
+<p>Existe um paradoxo silencioso nas equipes que adotaram agentes de IA para escrever código em larga escala: <strong>nunca geramos tantas linhas de código por minuto e, ao mesmo tempo, nunca acumulamos tanta complexidade acidental em tão pouco tempo.</strong></p>
+
+<p>Peça a um LLM de fronteira para implementar uma persistência simples de carteiras financeiras em Go. Se não houver freios arquiteturais rígidos, em menos de trinta segundos ele provavelmente entregará:</p>
+
+<ul>
+  <li>Uma interface <code>WalletRepository</code> com uma única implementação concreta no mesmo pacote (violando o idioma clássico de Go onde interfaces pertencem ao consumidor);</li>
+  <li>Um <code>AbstractStorageFactory</code> com padrão Strategy para um banco de dados que nunca mudará;</li>
+  <li>Três structs duplicadas do domínio (<code>CreditCard</code>, <code>VoucherBalance</code>, <code>WeeklyEnvelope</code>) que já existiam consolidadas em uma única entidade <code>domain.Wallet</code>;</li>
+  <li>Um wrapper próprio sobre <code>database/sql</code> e meia dúzia de comentários vagos de pendência espalhados pelo caminho.</li>
+</ul>
+
+<p>O código compila? Às vezes nem isso — quando alucina tipos que não batem com o pacote <code>domain</code>. E, quando compila, você acabou de herdar 800 linhas de <strong>over-engineering especulativo</strong> para resolver um problema de 120 linhas.</p>
+
+<p>Neste 5º artigo técnico da série sobre a arquitetura do <strong>Pipeline-AI</strong> — celebrando o lançamento da <strong>versão <code>v0.11.0</code> (entregas DEL-032 a DEL-035)</strong> —, apresento como atacamos a raiz do viés aditivo dos LLMs combinando <strong>Decision Ladders no fluxo cognitivo</strong>, um <strong>Debt Ledger determinístico em Go 1.24 puro (<code>internal/debt</code>)</strong> e um <strong>Sensor Semântico Calibrado YAGNI (<code>pipeline-ai eval -preset yagni</code>)</strong>, além de demonstrar os resultados reais em produção no projeto <strong><code>gestao-financas</code></strong>.</p>
+
+<hr>
+
+<h2>1. Por que os LLMs Sofrem de Viés Aditivo Crônico?</h2>
+
+<p>Modelos de linguagem de grande porte (LLMs) foram treinados sobre bilhões de linhas de repositórios públicos e tutoriais corporativos onde "arquitetura limpa" frequentemente é confundida com <strong>excesso de camadas de indireção</strong>. Além disso, o treinamento por reforço com feedback humano (RLHF) tende a recompensar respostas longas, "completas" e aparentemente sofisticadas.</p>
+
+<p>Na prática da engenharia de software, isso se manifesta em quatro patologias recorrentes:</p>
+
+<ul>
+  <li><strong>1. Abstração Prematura (Violação de YAGNI):</strong> Criação de interfaces genéricas, canais de eventos e opções de configuração para requisitos futuros que ninguém pediu.</li>
+  <li><strong>2. Duplicação e Alucinação de Tipos de Domínio:</strong> Em vez de inspecionar as structs existentes no pacote <code>internal/domain</code>, o agente inventa novas structs locais que fragmentam o modelo mental do sistema.</li>
+  <li><strong>3. Reimplementação da Standard Library:</strong> Em Go, onde a biblioteca padrão (<code>net/http</code>, <code>database/sql</code>, <code>encoding/json</code>, <code>context</code>, <code>io</code>) já resolve 90% dos problemas de infraestrutura, LLMs insistem em criar wrappers ou puxar dependências externas desnecessárias no <code>go.mod</code>.</li>
+  <li><strong>4. Dívida Técnica Invisível:</strong> Quando o agente toma um atalho real (como usar um mapa em memória ou serializar um campo em JSONB), ele deixa um comentário genérico ou nenhum aviso, sem documentar <strong>qual é o limite operacional daquele atalho</strong> nem <strong>qual gatilho objetivo exige sua evolução</strong>.</li>
+</ul>
+
+<hr>
+
+<h2>2. Inspiração e Evolução Arquitetural: De Regras de Prompt (ponytail) à Governança Determinística + System 1 (pipeline-ai v0.11.0)</h2>
+
+<p>Recentemente, o projeto open-source <a href="https://github.com/dietrichgebert/ponytail">dietrichgebert/ponytail</a> sintetizou com brilhantismo uma filosofia que todo engenheiro sênior conhece:</p>
+
+<blockquote>"The best code is the code you never wrote."</blockquote>
+
+<p>O <code>ponytail</code> introduziu três ideias conceituais excelentes para guiar agentes de código: uma escada de decisão (<em>Decision Ladder</em>), disciplina de minimalismo e a exigência de anotar atalhos de engenharia com comentários estruturados.</p>
+
+<p>Contudo, ao analisarmos essa abordagem sob a ótica da arquitetura do <strong>Pipeline-AI</strong>, identificamos uma limitação estrutural: <strong>regras que vivem apenas em texto de prompt (System 2) sofrem de degradação de atenção (<em>context drift</em>)</strong>. Quando a janela de contexto cresce durante uma sessão longa de TDD, o LLM simplesmente esquece a instrução do prompt ou ignora os comentários <code>// shortcut:</code> que ficaram espalhados nos arquivos.</p>
+
+<p>Para transformar boas intenções de prompt em <strong>engenharia determinística e auditável</strong>, o <strong><code>pipeline-ai v0.11.0</code></strong> evoluiu esses conceitos em três dimensões inéditas:</p>
+
+<ul>
+  <li><strong>De Prompt Passivo para Parser &amp; Scanner Determinístico em Go (<code>internal/debt</code>):</strong> Os comentários <code>// shortcut:</code> deixam de ser texto morto no código e passam a ser extraídos, validados e inventariados por um motor em Go 1.24 puro (<code>pipeline-ai debt</code>), exposto via CLI, servidor MCP (<code>pipeline_list_debt</code>) e renderizado automaticamente no <strong>Dashboard Generative UI</strong>.</li>
+  <li><strong>Blindagem contra Marcadores Vagos + Rastreabilidade de Atalhos Conscientes:</strong> No Pipeline-AI, o validador de entregas (<code>pipeline-validate</code>) já bloqueia marcadores vagos órfãos. Agora, diferenciamos <strong>pendência esquecida</strong> (proibida) de <strong>atalho arquitetural deliberado</strong> (auditado com limite e gatilho explícitos).</li>
+  <li><strong>Do "LLM-as-a-Judge" Lento para o Sensor Semântico Calibrado (System 1 / Jev):</strong> Criamos o preset nativo <code>pipeline-ai eval -preset yagni</code>, permitindo que agentes e pipelines de CI submetam qualquer <code>git diff</code> a um sensor calibrado de baixíssima latência (<code>/v1/noul</code>) para detectar over-engineering antes do code review humano.</li>
+</ul>
+
+<hr>
+
+<h2>3. Os Três Pilares Anti-Overengineering do pipeline-ai v0.11.0</h2>
+
+<h3>3.1. Pilar 1: A Decision Ladder nas Skills Core (architecture-guardrails, dev-implementation e code-reviewer)</h3>
+
+<p>Antes de escrever uma única linha de código ou propor um novo pacote, a skill <code>architecture-guardrails</code> agora obriga a passagem explícita pelos <strong>5 degraus da Escada de Decisão (Decision Ladder)</strong>:</p>
+
+<ul>
+  <li><strong>Degrau 1 — YAGNI (<em>You Aren't Gonna Need It</em>):</strong> A mudança é realmente necessária para atender ao escopo atual da delivery ou estamos projetando para um futuro hipotético? Se for especulativa, corte imediatamente.</li>
+  <li><strong>Degrau 2 — Reuso Interno no Repositório:</strong> Já existe uma struct, função ou tipo no pacote <code>internal/domain</code> ou em outro pacote interno que resolve o problema? Nunca crie structs espelhadas ou tipos duplicados.</li>
+  <li><strong>Degrau 3 — Standard Library do Go 1.24+:</strong> A biblioteca padrão do Go (<code>net/http</code>, <code>database/sql</code>, <code>encoding/json</code>, <code>slices</code>, <code>maps</code>, <code>sync</code>, <code>context</code>) já oferece a primitiva necessária? Se sim, use-a diretamente sem wrappers.</li>
+  <li><strong>Degrau 4 — Dependência já presente no <code>go.mod</code>:</strong> Se a stdlib não cobrir, existe algo já aprovado no grafo atual do projeto sem adicionar novas dependências?</li>
+  <li><strong>Degrau 5 — Código Novo Mínimo Viável:</strong> Somente se os 4 degraus anteriores não bastarem, escreva a menor quantidade possível de código concreto, sem interfaces de implementação única no pacote produtor.</li>
+</ul>
+
+<p>Em seguida, a skill <code>dev-implementation</code> impõe o <strong>minimalismo estrito</strong> na codificação, e o <code>code-reviewer</code> audita o <code>git diff</code> buscando especificamente abstrações especulativas e interfaces desnecessárias.</p>
+
+<h3>3.2. Pilar 2: O Debt Ledger Determinístico (internal/debt, pipeline-ai debt e MCP pipeline_list_debt)</h3>
+
+<p>Ser minimalista não significa fingir que um código simples aguenta escala infinita. Quando optamos conscientemente por uma implementação simples (por exemplo, um lock em memória ou uma consulta SQL direta sem cache distribuído), precisamos registrar esse <strong>atalho deliberado</strong> com duas informações obrigatórias:</p>
+
+<ul>
+  <li><strong>Qual é o limite conhecido da solução atual?</strong> (<code>&lt;limite&gt;</code>)</li>
+  <li><strong>Qual é o gatilho objetivo e mensurável para evoluí-la no futuro?</strong> (<code>&lt;gatilho&gt;</code>)</li>
+</ul>
+
+<p>Padronizamos essa anotação diretamente no código Go com a sintaxe:</p>
+
+<pre><code>// shortcut: &lt;limite conhecido&gt; | upgrade: &lt;gatilho objetivo de evolução&gt;</code></pre>
+
+<p>Para extrair e auditar essas anotações em qualquer repositório Go sem depender de expressões regulares complexas (que podem sofrer de <em>catastrophic backtracking</em> / ReDoS), construímos o pacote <code>internal/debt</code> em Go 1.24 puro:</p>
+
+<pre><code>// internal/debt/debt.go
+package debt
+
+// ShortcutItem representa um atalho deliberado rastreado por limite e gatilho de evolução.
+type ShortcutItem struct {
+	File           string `json:"file"`
+	Line           int    `json:"line"`
+	Limit          string `json:"limit"`
+	UpgradeTrigger string `json:"upgrade_trigger"`
+	Raw            string `json:"raw"`
+}
+
+// ParseComment extrai o limite conhecido e o gatilho de evolução de comentários no formato:
+// "// shortcut: &lt;limite&gt; | upgrade: &lt;gatilho&gt;" ou "// shortcut: &lt;limite&gt;, &lt;gatilho&gt;"
+func ParseComment(line string) (limit string, trigger string, ok bool) {
+	idx := strings.Index(line, "//")
+	if idx == -1 {
+		return "", "", false
+	}
+
+	comment := strings.TrimSpace(line[idx+2:])
+	if len(comment) &lt; len("shortcut:") || !strings.EqualFold(comment[:len("shortcut:")], "shortcut:") {
+		return "", "", false
+	}
+
+	rest := strings.TrimSpace(comment[len("shortcut:"):])
+	if pipeIdx := strings.Index(rest, "|"); pipeIdx != -1 {
+		limit = strings.TrimSpace(rest[:pipeIdx])
+		right := strings.TrimSpace(rest[pipeIdx+1:])
+		if len(right) &gt;= len("upgrade:") &amp;&amp; strings.EqualFold(right[:len("upgrade:")], "upgrade:") {
+			trigger = strings.TrimSpace(right[len("upgrade:"):])
+		} else {
+			trigger = right
+		}
+	} else if commaIdx := strings.Index(rest, ","); commaIdx != -1 {
+		limit = strings.TrimSpace(rest[:commaIdx])
+		right := strings.TrimSpace(rest[commaIdx+1:])
+		if len(right) &gt;= len("upgrade:") &amp;&amp; strings.EqualFold(right[:len("upgrade:")], "upgrade:") {
+			trigger = strings.TrimSpace(right[len("upgrade:"):])
+		} else {
+			trigger = right
+		}
+	} else {
+		return "", "", false
+	}
+
+	if limit == "" || trigger == "" {
+		return "", "", false
+	}
+	return limit, trigger, true
+}</code></pre>
+
+<p>O scanner <code>debt.ScanDir(rootDir)</code>:</p>
+
+<ul>
+  <li>Varre recursivamente a árvore de diretórios via <code>filepath.WalkDir</code>;</li>
+  <li>Ignora deterministicamente arquivos de teste (<code>*_test.go</code>), pastas ocultas (<code>.git</code>, <code>.agents</code>), <code>vendor</code> e <code>node_modules</code>;</li>
+  <li>Ignora comentários comuns ou anotações <code>// shortcut:</code> incompletas que não declarem gatilho de evolução;</li>
+  <li>Ordena os resultados por arquivo e linha (<code>File</code>, <code>Line</code>) e foi submetido a <strong>mais de 6,5 milhões de execuções de Fuzz Testing (<code>FuzzParseComment</code>)</strong> com zero panics.</li>
+</ul>
+
+<p>Com isso, qualquer engenheiro ou agente de IA pode inspecionar instantaneamente o inventário de atalhos deliberados via terminal ou MCP:</p>
+
+<pre><code>$ pipeline-ai debt
+Atalhos Deliberados (Debt Ledger): 2 encontrado(s)
+- internal/storage/postgres.go:68 | Limite: serialização JSONB de recurrence e sub_items na coluna da carteira | Gatilho de evolução: extrair para tabelas relacionais se houver query analítica por sub-item
+- internal/storage/storage.go:48 | Limite: MemoryStore guarda estado apenas em RAM com RWMutex local | Gatilho de evolução: usar PostgresStore quando DATABASE_URL estiver configurado em produção</code></pre>
+
+<p>Ou em JSON estruturado (<code>pipeline-ai debt -json</code> / tool MCP <code>pipeline_list_debt</code>):</p>
+
+<pre><code>{
+  "total": 2,
+  "items": [
+    {
+      "file": "internal/storage/postgres.go",
+      "line": 68,
+      "limit": "serialização JSONB de recurrence e sub_items na coluna da carteira",
+      "upgrade_trigger": "extrair para tabelas relacionais se houver query analítica por sub-item",
+      "raw": "// shortcut: serialização JSONB de recurrence e sub_items na coluna da carteira | upgrade: extrair para tabelas relacionais se houver query analítica por sub-item"
+    },
+    {
+      "file": "internal/storage/storage.go",
+      "line": 48,
+      "limit": "MemoryStore guarda estado apenas em RAM com RWMutex local",
+      "upgrade_trigger": "usar PostgresStore quando DATABASE_URL estiver configurado em produção",
+      "raw": "// shortcut: MemoryStore guarda estado apenas em RAM com RWMutex local | upgrade: usar PostgresStore quando DATABASE_URL estiver configurado em produção"
+    }
+  ]
+}</code></pre>
+
+<p>Além disso, o comando <code>pipeline-ai dashboard</code> agora inclui automaticamente a seção <strong>"Atalhos Deliberados (Debt Ledger)"</strong> no cockpit Generative UI, dando visibilidade executiva e técnica sobre cada decisão de simplicidade tomada no projeto.</p>
+
+<h3>3.3. Pilar 3: O Preset Semântico YAGNI no Sensor Jev (pipeline-ai eval -preset yagni)</h3>
+
+<p>Como garantir que um <code>git diff</code> recém-implementado realmente respeitou a Decision Ladder sem precisar invocar um modelo lento de raciocínio profundo?</p>
+
+<p>No pacote <code>internal/sensor/semantic</code>, adicionamos o resolvedor de presets calibrados <code>ResolvePreset</code> (<code>yagni</code>, com aliases <code>minimalism</code> e <code>ponytail</code>), que configura automaticamente uma decisão binária calibrada (<code>EvalNoul</code> em <code>/v1/noul</code>) com a pergunta de auditoria anti-bloat:</p>
+
+<pre><code>// internal/sensor/semantic/presets.go
+const yagniQuestion = "Este código respeita estritamente o princípio YAGNI e minimalismo, sem overengineering, interfaces de implementação única desnecessárias, tipos duplicados do domínio ou abstrações especulativas não solicitadas?"
+
+func ResolvePreset(name string) (mode string, question string, err error) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "yagni", "minimalism", "ponytail":
+		return "noul", yagniQuestion, nil
+	default:
+		return "", "", ErrInvalidPreset
+	}
+}</code></pre>
+
+<p>Na prática, validar semanticamente um diff na esteira passa a ser um comando de linha única:</p>
+
+<pre><code>git diff | pipeline-ai eval -preset yagni -threshold 0.80</code></pre>
+
+<p>Se o sensor System 1 detectar abstrações especulativas ou se a confiança calibrada ficar abaixo de <code>0.80</code>, o comando falha de forma <em>fail-closed</em> (<code>exit code 1</code>) e registra o evento automaticamente na telemetria semântica das métricas DORA.</p>
+
+<hr>
+
+<h2>4. Estudo de Caso Real em Produção: A Camada internal/storage do Projeto gestao-financas</h2>
+
+<p>Para comprovar o impacto concreto dessa governança, aplicamos o <code>pipeline-ai v0.11.0</code> ao desenvolvimento da camada de persistência (<code>internal/storage</code>) do sistema <strong><code>gestao-financas</code></strong> (uma aplicação desktop/API em Go + Wails v3 + PostgreSQL para gestão financeira pessoal por envelopes semanais, cartões de crédito e benefícios VA/VR).</p>
+
+<h3>O Cenário Antes da Decision Ladder (A Armadilha da Alucinação Aditiva)</h3>
+
+<p>Em um rascunho anterior gerado sem a Decision Ladder, um agente de IA tentou implementar <code>internal/storage</code> criando estruturas paralelas da sua própria imaginação (<code>CreditCard</code>, <code>VoucherBalance</code>, <code>WeeklyEnvelope</code>, <code>MonthlySummary</code>) e métodos que não existiam em <code>internal/domain</code>. O resultado imediato:</p>
+
+<ul>
+  <li><code>go vet ./...</code> e <code>go test ./...</code> falharam com <strong>mais de 15 erros de compilação</strong> (<code>undefined: domain.CreditCard</code>, <code>undefined: domain.VoucherBalance</code>);</li>
+  <li>Centenas de linhas de código morto que duplicavam o que <code>domain.Wallet</code> e <code>domain.Transaction</code> já modelavam de forma limpa e unificada.</li>
+</ul>
+
+<h3>A Intervenção com a Decision Ladder + Debt Ledger (DEL-002 no gestao-financas)</h3>
+
+<p>Ao reiniciarmos a entrega sob a governança do <strong><code>pipeline-ai v0.11.0</code></strong>, a skill <code>architecture-guardrails</code> aplicou os 5 degraus:</p>
+
+<ul>
+  <li><strong>1. YAGNI:</strong> Nada de ORMs pesados, migrações dinâmicas complexas ou repositórios separados por subtipo de carteira.</li>
+  <li><strong>2. Reuso no Repositório:</strong> Reutilização 100% fiel das entidades reais <code>domain.Wallet</code> (que já encapsula contas, cartões de crédito com limite/fechamento, vales VA/VR e envelopes com <code>SubItem</code> e <code>RecurrenceRule</code>), <code>domain.Transaction</code> e <code>domain.DashboardSummary</code> (calculado via <code>domain.CalculateDashboard</code>).</li>
+  <li><strong>3. Stdlib Pura:</strong> Uso direto de <code>sync.RWMutex</code> para o <code>MemoryStore</code> e <code>database/sql</code> + <code>encoding/json</code> para o <code>PostgresStore</code>.</li>
+  <li><strong>4. Rastreabilidade no Debt Ledger:</strong> Os dois atalhos arquiteturais conscientes foram documentados com <code>// shortcut:</code> em <code>internal/storage/storage.go:48</code> e <code>internal/storage/postgres.go:68</code>.</li>
+</ul>
+
+<p>O resultado foi imediato:</p>
+
+<ul>
+  <li><strong>100% dos testes passando com <code>-race</code></strong> (<code>go test -race ./...</code>) na primeira execução;</li>
+  <li><strong>Zero warnings no <code>go vet ./...</code></strong> e build limpo;</li>
+  <li><strong>2 atalhos deliberados inventariados deterministicamente</strong> pelo <code>pipeline-ai debt</code> e exibidos em tempo real no Dashboard HTML do projeto;</li>
+  <li><strong>Métricas DORA reais auto-computadas</strong> (<code>Lead Time</code>, <code>Deployment Frequency</code>, <code>Change Failure Rate</code> e <code>MTTR</code> inferido automaticamente dos eventos de gate do runner).</li>
+</ul>
+
+<hr>
+
+<h2>5. Conclusão: Simplicidade Não é Ausência de Arquitetura — É Arquitetura Governada</h2>
+
+<p>Na era dos agentes autônomos de IA, escrever código deixou de ser o gargalo; <strong>impedir que a IA escreva código desnecessário tornou-se a verdadeira disciplina de engenharia</strong>.</p>
+
+<p>Ao unir a clareza filosófica da <strong>Decision Ladder</strong> (inspirada no <code>ponytail</code>), a precisão determinística do <strong>Debt Ledger em Go puro (<code>internal/debt</code>)</strong> e a velocidade calibrada do <strong>Sensor Semântico Jev (<code>-preset yagni</code>)</strong>, o <strong><code>pipeline-ai v0.11.0</code></strong> garante que seus agentes construam sistemas enxutos hoje, sem perder a visão exata de quando e como escalar amanhã.</p>
+
+<p>O <strong>Pipeline-AI v0.11.0</strong> é 100% open-source (licença MIT) e já está disponível no GitHub:<br>
+🔗 <strong>Repositório Oficial:</strong> <a href="https://github.com/rodrigodosanjosoliveira/pipeline-ai">https://github.com/rodrigodosanjosoliveira/pipeline-ai</a></p>
+
+</body>
+</html>
