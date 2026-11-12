@@ -1,34 +1,40 @@
 Nunca geramos tantas linhas de código por minuto com IA — e, ao mesmo tempo, nunca acumulamos tanta complexidade acidental (over-engineering) em tão pouco tempo.
 
 Peça para um LLM implementar uma camada de persistência em Go sem freios arquiteturais e observe o "viés aditivo" em ação:
+
 ❌ Interfaces de implementação única que ninguém pediu;
-❌ Wrappers desnecessários por cima da stdlib (`database/sql`, `net/http`);
-❌ Structs alucinadas que duplicam entidades que já existiam no pacote `domain`;
-❌ Dezenas de `// TODO: improve later` sem nenhum critério objetivo de evolução.
+❌ Wrappers desnecessários por cima da stdlib (database/sql, net/http);
+❌ Structs alucinadas duplicando entidades que já existiam no pacote domain;
+❌ Dezenas de "// TODO: improve later" sem nenhum critério objetivo de evolução.
 
-Vimos isso acontecer na prática no projeto `gestao-financas`: um rascunho sem guardrails anti-bloat tentou inventar structs paralelas (`CreditCard`, `VoucherBalance`, `WeeklyEnvelope`) que quebraram o `go vet` com mais de 15 erros de compilação.
+Vimos isso acontecer na prática no projeto gestao-financas: um rascunho sem guardrails anti-bloat tentou inventar structs paralelas (CreditCard, VoucherBalance, WeeklyEnvelope) que quebraram o go vet com mais de 15 erros de compilação.
 
-Inspirados pela filosofia do projeto open-source `dietrichgebert/ponytail` ("The best code is the code you never wrote"), demos um passo além na engenharia: regras que vivem apenas em prompt (System 2) sofrem de esquecimento quando o contexto cresce. Por isso, transformamos o combate ao over-engineering em **governança determinística em Go 1.24 + sensoriamento calibrado (System 1 / Jev)**!
+Inspirados pela filosofia do projeto open-source dietrichgebert/ponytail ("The best code is the code you never wrote"), demos um passo além na engenharia:
 
-Acabei de publicar o 5º artigo técnico da série celebrando o lançamento do **Pipeline-AI v0.11.0**:
+Regras que vivem apenas em prompt (System 2) sofrem de esquecimento quando a janela de contexto cresce. Por isso, transformamos o combate ao over-engineering em GOVERNANÇA DETERMINÍSTICA em Go 1.24 + SENSORIAMENTO CALIBRADO (System 1 / Jev)!
+
+Acabei de publicar o 5º artigo técnico da série celebrando o lançamento do Pipeline-AI v0.11.0:
 
 📄 "O Paradoxo da Produtividade em IA: Como Combater o Over-Engineering dos LLMs com Decision Ladders, Debt Ledgers Determinísticos e Sensores YAGNI"
 
-O que entrou na release `v0.11.0` do `pipeline-ai`:
+O que entrou na release v0.11.0 do pipeline-ai:
 
-1️⃣ Decision Ladder em 5 Degraus nas Skills Core (`architecture-guardrails`, `dev-implementation`, `code-reviewer`):
-`1. YAGNI → 2. Reuso Interno (domain) → 3. Stdlib Go → 4. Dependência já no go.mod → 5. Código Mínimo Viável`. No `gestao-financas`, isso eliminou 100% das structs duplicadas, reusando `domain.Wallet` + `database/sql` puro com `go test -race` verde de primeira!
+1️⃣ DECISION LADDER EM 5 DEGRAUS
+Nas skills core (architecture-guardrails, dev-implementation, code-reviewer):
+➔ 1. YAGNI → 2. Reuso Interno (domain) → 3. Stdlib Go → 4. Dependência no go.mod → 5. Código Mínimo Viável.
+No gestao-financas, isso eliminou 100% das structs duplicadas, reusando domain.Wallet + database/sql puro com go test -race verde de primeira!
 
-2️⃣ Debt Ledger Determinístico (`internal/debt`, CLI `pipeline-ai debt` e MCP `pipeline_list_debt`):
-Bloquear `TODO` órfão é essencial, mas todo bom engenheiro faz simplificações conscientes. Criamos o parser determinístico (sem regex vulnerável a ReDoS, blindado com +6,5 milhões de execuções de Fuzzing) para a anotação:
-`// shortcut: <limite conhecido> | upgrade: <gatilho objetivo>`
-Agora o comando `pipeline-ai debt` e o Dashboard Generative UI listam exatamente cada atalho deliberado do repositório e quando evoluí-lo!
+2️⃣ DEBT LEDGER DETERMINÍSTICO
+(internal/debt, CLI "pipeline-ai debt" e MCP "pipeline_list_debt"):
+Bloquear TODO órfão é essencial, mas todo bom engenheiro faz simplificações conscientes. Criamos um parser determinístico (sem regex vulnerável a ReDoS, blindado com +6,5 milhões de execuções de Fuzzing) para a anotação:
+➔ // shortcut: <limite conhecido> | upgrade: <gatilho objetivo>
+Agora o comando "pipeline-ai debt" e o Dashboard Generative UI listam exatamente cada atalho deliberado do repositório e quando evoluí-lo!
 
-3️⃣ Preset Semântico YAGNI no Sensor Jev (`pipeline-ai eval -preset yagni`):
-Um gate calibrado System 1 em linha única (`git diff | pipeline-ai eval -preset yagni`) para barrar abstrações especulativas em sub-100ms, somado à inferência automática das 4 métricas DORA (incluindo MTTR automático a partir de eventos do runner).
+3️⃣ PRESET SEMÂNTICO YAGNI NO SENSOR JEV
+(pipeline-ai eval -preset yagni):
+Um gate calibrado System 1 em linha única (git diff | pipeline-ai eval -preset yagni) para barrar abstrações especulativas em sub-100ms, somado à inferência automática das 4 métricas DORA (incluindo MTTR automático a partir de eventos do runner).
 
-Confira o artigo completo no link abaixo! 👇
-[LINK DO ARTIGO NO PRIMEIRO COMENTÁRIO]
+Confira o artigo completo no primeiro comentário! 👇
 
 Repositório 100% Open-Source (MIT): https://github.com/rodrigodosanjosoliveira/pipeline-ai
 
