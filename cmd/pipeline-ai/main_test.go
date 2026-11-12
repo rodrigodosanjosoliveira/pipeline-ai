@@ -1544,3 +1544,467 @@ func TestRunEvalPresetYAGNI(t *testing.T) {
 		}
 	})
 }
+
+func TestExtractAgentModeAndIsTTY(t *testing.T) {
+	t.Run("flag -agent ativa agentMode", func(t *testing.T) {
+		mode, filtered := extractAgentMode([]string{"-agent", "version"})
+		if !mode {
+			t.Errorf("esperava agentMode=true com flag -agent")
+		}
+		if len(filtered) != 1 || filtered[0] != "version" {
+			t.Errorf("filtered inesperado: %v", filtered)
+		}
+	})
+
+	t.Run("flag --agent ativa agentMode", func(t *testing.T) {
+		mode, filtered := extractAgentMode([]string{"--agent", "doctor"})
+		if !mode {
+			t.Errorf("esperava agentMode=true com flag --agent")
+		}
+		if len(filtered) != 1 || filtered[0] != "doctor" {
+			t.Errorf("filtered inesperado: %v", filtered)
+		}
+	})
+
+	t.Run("flag -no-agent sobrescreve env", func(t *testing.T) {
+		t.Setenv("PIPELINE_AGENT_MODE", "1")
+		mode, filtered := extractAgentMode([]string{"doctor", "-no-agent"})
+		if mode {
+			t.Errorf("esperava agentMode=false com flag -no-agent")
+		}
+		if len(filtered) != 1 || filtered[0] != "doctor" {
+			t.Errorf("filtered inesperado: %v", filtered)
+		}
+	})
+
+	t.Run("flag --no-agent sobrescreve env", func(t *testing.T) {
+		t.Setenv("AI_AGENT", "true")
+		mode, filtered := extractAgentMode([]string{"module", "list", "--no-agent"})
+		if mode {
+			t.Errorf("esperava agentMode=false com flag --no-agent")
+		}
+		if len(filtered) != 2 || filtered[0] != "module" || filtered[1] != "list" {
+			t.Errorf("filtered inesperado: %v", filtered)
+		}
+	})
+
+	t.Run("env PIPELINE_AGENT_MODE=1 ativa agentMode", func(t *testing.T) {
+		t.Setenv("PIPELINE_AGENT_MODE", "1")
+		mode, filtered := extractAgentMode([]string{"version"})
+		if !mode {
+			t.Errorf("esperava agentMode=true com PIPELINE_AGENT_MODE=1")
+		}
+		if len(filtered) != 1 || filtered[0] != "version" {
+			t.Errorf("filtered inesperado: %v", filtered)
+		}
+	})
+
+	t.Run("env AI_AGENT=1 ativa agentMode", func(t *testing.T) {
+		t.Setenv("AI_AGENT", "1")
+		mode, filtered := extractAgentMode([]string{"version"})
+		if !mode {
+			t.Errorf("esperava agentMode=true com AI_AGENT=1")
+		}
+		if len(filtered) != 1 || filtered[0] != "version" {
+			t.Errorf("filtered inesperado: %v", filtered)
+		}
+	})
+
+	t.Run("env PIPELINE_AGENT_MODE=0 desativa agentMode", func(t *testing.T) {
+		t.Setenv("PIPELINE_AGENT_MODE", "0")
+		mode, filtered := extractAgentMode([]string{"version"})
+		if mode {
+			t.Errorf("esperava agentMode=false com PIPELINE_AGENT_MODE=0")
+		}
+		if len(filtered) != 1 || filtered[0] != "version" {
+			t.Errorf("filtered inesperado: %v", filtered)
+		}
+	})
+
+	t.Run("isTTY com buffers e readers", func(t *testing.T) {
+		if isTTY(&bytes.Buffer{}) {
+			t.Errorf("esperava isTTY(&bytes.Buffer{}) == false")
+		}
+		if isTTY(strings.NewReader("x")) {
+			t.Errorf("esperava isTTY(strings.NewReader(\"x\")) == false")
+		}
+		if isTTY(nil) {
+			t.Errorf("esperava isTTY(nil) == false")
+		}
+		if isTTY(io.Discard) {
+			t.Errorf("esperava isTTY(io.Discard) == false")
+		}
+	})
+}
+
+func TestCLIAgentModeAndJSONSubcommands(t *testing.T) {
+	t.Run("version -json", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"version", "-json"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("version -json falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+		var res struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v; raw:\n%s", err, stdout.String())
+		}
+		if res.Name != "pipeline-ai" || res.Version != version {
+			t.Errorf("resposta inesperada: %+v (esperava name=pipeline-ai e version=%s)", res, version)
+		}
+	})
+
+	t.Run("-agent version emite JSON automaticamente", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"-agent", "version"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("-agent version falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+		var res struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v; raw:\n%s", err, stdout.String())
+		}
+		if res.Name != "pipeline-ai" || res.Version != version {
+			t.Errorf("resposta inesperada: %+v", res)
+		}
+	})
+
+	t.Run("delivery status -json", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := `{"version": 1, "project_type": "api", "protected_paths": ["internal/"]}`
+		if err := os.WriteFile(filepath.Join(tmpDir, ".pipeline-ai.json"), []byte(cfg), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Sem delivery ativa
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"delivery", "status", "-dir", tmpDir, "-json"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("delivery status -json falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+		var st struct {
+			Active     bool   `json:"active"`
+			Expired    bool   `json:"expired"`
+			DeliveryID string `json:"delivery_id"`
+			TaskCode   string `json:"task_code"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &st); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v; raw:\n%s", err, stdout.String())
+		}
+		if st.Active {
+			t.Errorf("esperava active=false sem delivery aberta, obteve: %+v", st)
+		}
+
+		// Abre delivery DEL-038
+		stdout.Reset()
+		stderr.Reset()
+		openCode := run([]string{"delivery", "open", "DEL-038", "-task", "T-038", "-dir", tmpDir}, &stdout, &stderr)
+		if openCode != 0 {
+			t.Fatalf("falha ao abrir delivery: %s", stderr.String())
+		}
+
+		// Com delivery ativa
+		stdout.Reset()
+		stderr.Reset()
+		exitCode = run([]string{"delivery", "status", "-dir", tmpDir, "-json"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("delivery status -json falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+		var stActive struct {
+			Active     bool   `json:"active"`
+			Expired    bool   `json:"expired"`
+			DeliveryID string `json:"delivery_id"`
+			TaskCode   string `json:"task_code"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &stActive); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v; raw:\n%s", err, stdout.String())
+		}
+		if !stActive.Active || stActive.DeliveryID != "DEL-038" || stActive.TaskCode != "T-038" {
+			t.Errorf("dados de delivery ativa inesperados: %+v", stActive)
+		}
+	})
+
+	t.Run("module list -json", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := `{
+			"version": 1,
+			"project_type": "desktop",
+			"protected_paths": ["internal/"],
+			"enabled_modules": ["release-ops"]
+		}`
+		if err := os.WriteFile(filepath.Join(tmpDir, ".pipeline-ai.json"), []byte(cfg), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"module", "list", "-dir", tmpDir, "-json"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("module list -json falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+		var res struct {
+			Modules []struct {
+				Name    string `json:"name"`
+				Enabled bool   `json:"enabled"`
+			} `json:"modules"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v; raw:\n%s", err, stdout.String())
+		}
+		if len(res.Modules) == 0 {
+			t.Fatalf("nenhum módulo retornado no JSON: %+v", res)
+		}
+		foundReleaseOps := false
+		foundDataModel := false
+		for _, m := range res.Modules {
+			if m.Name == "release-ops" {
+				foundReleaseOps = true
+				if !m.Enabled {
+					t.Errorf("esperava release-ops enabled=true")
+				}
+			}
+			if m.Name == "data-model" {
+				foundDataModel = true
+				if m.Enabled {
+					t.Errorf("esperava data-model enabled=false")
+				}
+			}
+		}
+		if !foundReleaseOps || !foundDataModel {
+			t.Errorf("módulos esperados não encontrados na resposta JSON: %+v", res.Modules)
+		}
+	})
+
+	t.Run("plugin verify e install -json", func(t *testing.T) {
+		// plugin verify
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"plugin", "verify", "-dir", "plugin", "-json"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("plugin verify -json falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+		var verifyRes struct {
+			OK      bool   `json:"ok"`
+			Dir     string `json:"dir"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &verifyRes); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v; raw:\n%s", err, stdout.String())
+		}
+		if !verifyRes.OK {
+			t.Errorf("esperava plugin verify ok=true, obteve: %+v", verifyRes)
+		}
+
+		// plugin install
+		targetDir := filepath.Join(t.TempDir(), "installed-plugin")
+		stdout.Reset()
+		stderr.Reset()
+		exitCode = run([]string{"plugin", "install", "-src", "plugin", "-target", targetDir, "-json"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("plugin install -json falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+		var installRes struct {
+			OK      bool   `json:"ok"`
+			Dir     string `json:"dir"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &installRes); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v; raw:\n%s", err, stdout.String())
+		}
+		if !installRes.OK {
+			t.Errorf("esperava plugin install ok=true, obteve: %+v", installRes)
+		}
+	})
+
+	t.Run("sync -json", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var initOut, initErr bytes.Buffer
+		initArgs := []string{
+			"init",
+			"-name", "app-sync-json",
+			"-type", "desktop",
+			"-db", "postgres",
+			"-dir", tmpDir,
+			"-no-git",
+		}
+		if code := run(initArgs, &initOut, &initErr); code != 0 {
+			t.Fatalf("falha ao preparar projeto para sync: %s", initErr.String())
+		}
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"sync", "-dir", tmpDir, "-json"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("sync -json falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+		var syncRes struct {
+			OK      bool   `json:"ok"`
+			Dir     string `json:"dir"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &syncRes); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v; raw:\n%s", err, stdout.String())
+		}
+		if !syncRes.OK {
+			t.Errorf("esperava sync ok=true, obteve: %+v", syncRes)
+		}
+	})
+
+	t.Run("PIPELINE_AGENT_MODE=1 emite JSON automaticamente e -no-agent restaura texto", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := `{"version": 1, "project_type": "desktop", "protected_paths": ["internal/"]}`
+		if err := os.WriteFile(filepath.Join(tmpDir, ".pipeline-ai.json"), []byte(cfg), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		t.Setenv("PIPELINE_AGENT_MODE", "1")
+
+		// 1. Sem passar -json, deve emitir JSON porque agentMode == true
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"module", "list", "-dir", tmpDir}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("module list falhou com agent mode ativo: exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+		var res struct {
+			Modules []struct {
+				Name    string `json:"name"`
+				Enabled bool   `json:"enabled"`
+			} `json:"modules"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			t.Fatalf("saída com PIPELINE_AGENT_MODE=1 deveria ser JSON válido, mas falhou: %v; raw:\n%s", err, stdout.String())
+		}
+
+		// 2. Com -no-agent, força modo texto humano
+		stdout.Reset()
+		stderr.Reset()
+		exitCode = run([]string{"module", "list", "-dir", tmpDir, "-no-agent"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("module list com -no-agent falhou: exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+		outText := stdout.String()
+		if !strings.Contains(outText, "Módulos opcionais do pipeline-ai:") {
+			t.Errorf("saída com -no-agent deveria ser texto humano, mas foi:\n%s", outText)
+		}
+		if strings.HasPrefix(strings.TrimSpace(outText), "{") {
+			t.Errorf("saída com -no-agent não deveria começar com JSON: %s", outText)
+		}
+	})
+}
+
+func TestCLIInitNonInteractiveHardening(t *testing.T) {
+	t.Run("init sem -name e stdin não-TTY falha imediatamente com dica de uso", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var stdout, stderr bytes.Buffer
+		stdin := strings.NewReader("")
+
+		exitCode := runWithStdin([]string{"init", "-dir", tmpDir, "-no-git"}, stdin, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("esperava exitCode = 1 para init sem -name em stdin não-TTY, obteve %d", exitCode)
+		}
+		errOut := stderr.String()
+		if !strings.Contains(strings.ToLower(errOut), "-name") && !strings.Contains(strings.ToLower(errOut), "nome") {
+			t.Errorf("stderr deveria conter dica sobre flag -name; saída:\n%s", errOut)
+		}
+	})
+
+	t.Run("init sem -name com flag -json falha emitindo JSON com ok false e hint", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var stdout, stderr bytes.Buffer
+		stdin := strings.NewReader("")
+
+		exitCode := runWithStdin([]string{"init", "-dir", tmpDir, "-no-git", "-json"}, stdin, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("esperava exitCode = 1, obteve %d. Stderr: %s", exitCode, stderr.String())
+		}
+		var res struct {
+			OK    bool   `json:"ok"`
+			Error string `json:"error"`
+			Hint  string `json:"hint"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v; raw:\n%s", err, stdout.String())
+		}
+		if res.OK {
+			t.Errorf("esperava ok=false no JSON, obteve: %+v", res)
+		}
+		if res.Error == "" {
+			t.Errorf("esperava campo error preenchido no JSON: %+v", res)
+		}
+		if !strings.Contains(strings.ToLower(res.Hint), "-name") {
+			t.Errorf("esperava hint mencionando -name, obteve: %q", res.Hint)
+		}
+	})
+
+	t.Run("init com -name e -non-interactive aplica defaults desktop e postgres sem bloquear", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var stdout, stderr bytes.Buffer
+		stdin := strings.NewReader("")
+
+		args := []string{
+			"init",
+			"-name", "app-auto",
+			"-dir", tmpDir,
+			"-no-git",
+			"-non-interactive",
+		}
+		exitCode := runWithStdin(args, stdin, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("init -non-interactive falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+
+		// Valida que defaults foram aplicados
+		cfgPath := filepath.Join(tmpDir, ".pipeline-ai.json")
+		data, err := os.ReadFile(cfgPath)
+		if err != nil {
+			t.Fatalf("arquivo .pipeline-ai.json não encontrado: %v", err)
+		}
+		var cfg struct {
+			ProjectType string `json:"project_type"`
+		}
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			t.Fatalf("erro ao decodificar .pipeline-ai.json: %v", err)
+		}
+		if cfg.ProjectType != "desktop" {
+			t.Errorf("esperava default project_type=desktop, obteve: %s", cfg.ProjectType)
+		}
+
+		agentsPath := filepath.Join(tmpDir, "AGENTS.md")
+		agentsData, err := os.ReadFile(agentsPath)
+		if err != nil {
+			t.Fatalf("arquivo AGENTS.md não encontrado: %v", err)
+		}
+		if !strings.Contains(string(agentsData), "PostgreSQL") {
+			t.Errorf("esperava default de banco PostgreSQL no AGENTS.md, obteve:\n%s", string(agentsData))
+		}
+	})
+
+	t.Run("init sob agentMode ativo aplica defaults automaticamente sem flag explicita", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var stdout, stderr bytes.Buffer
+		stdin := strings.NewReader("")
+
+		t.Setenv("PIPELINE_AGENT_MODE", "1")
+		args := []string{
+			"init",
+			"-name", "app-agent-auto",
+			"-dir", tmpDir,
+			"-no-git",
+		}
+		exitCode := runWithStdin(args, stdin, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("init sob agentMode falhou com exitCode = %d, stderr: %s", exitCode, stderr.String())
+		}
+
+		cfgPath := filepath.Join(tmpDir, ".pipeline-ai.json")
+		data, err := os.ReadFile(cfgPath)
+		if err != nil {
+			t.Fatalf("arquivo .pipeline-ai.json não encontrado: %v", err)
+		}
+		if !strings.Contains(string(data), "desktop") {
+			t.Errorf("esperava default desktop no .pipeline-ai.json")
+		}
+	})
+}

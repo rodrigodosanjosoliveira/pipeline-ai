@@ -2,7 +2,7 @@
 delivery_id: DEL-037
 task_code: TASK-037
 title: "Bounded Output, Smart Test Filtering e marcação de resultados parciais no sensor e runner (CLI e MCP)"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

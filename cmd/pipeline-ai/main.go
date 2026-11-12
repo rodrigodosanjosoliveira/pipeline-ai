@@ -54,7 +54,91 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return runWithStdin(args, os.Stdin, stdout, stderr)
 }
 
+func isTTY(v any) bool {
+	f, ok := v.(*os.File)
+	if !ok || f == nil {
+		return false
+	}
+	stat, err := f.Stat()
+	return err == nil && (stat.Mode()&os.ModeCharDevice) != 0
+}
+
+func extractAgentMode(args []string) (bool, []string) {
+	hasExplicitFlag := false
+	flagAgent := false
+	var filtered []string
+
+	for _, arg := range args {
+		switch arg {
+		case "-agent", "--agent":
+			hasExplicitFlag = true
+			flagAgent = true
+		case "-no-agent", "--no-agent":
+			hasExplicitFlag = true
+			flagAgent = false
+		default:
+			filtered = append(filtered, arg)
+		}
+	}
+
+	if hasExplicitFlag {
+		return flagAgent, filtered
+	}
+
+	parseEnvBool := func(v string) (bool, bool) {
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "1", "true":
+			return true, true
+		case "0", "false":
+			return false, true
+		default:
+			return false, false
+		}
+	}
+
+	if val := os.Getenv("PIPELINE_AGENT_MODE"); val != "" {
+		if b, ok := parseEnvBool(val); ok {
+			return b, filtered
+		}
+	}
+
+	if val := os.Getenv("AI_AGENT"); val != "" {
+		if b, ok := parseEnvBool(val); ok {
+			return b, filtered
+		}
+	}
+
+	return false, filtered
+}
+
+func runVersion(args []string, agentMode bool, stdout io.Writer) int {
+	asJSON := false
+	for _, a := range args {
+		if a == "-json" || a == "--json" {
+			asJSON = true
+			break
+		}
+	}
+
+	if asJSON || agentMode {
+		enc := json.NewEncoder(stdout)
+		_ = enc.Encode(struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		}{
+			Name:    "pipeline-ai",
+			Version: version,
+		})
+		return 0
+	}
+
+	fmt.Fprintf(stdout, "pipeline-ai %s\n", version)
+	return 0
+}
+
 func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	agentMode, args := extractAgentMode(args)
+
 	if len(args) == 0 {
 		printUsage(stdout)
 		return 0
@@ -69,56 +153,55 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 		return 0
 
 	case "version", "-v", "--version":
-		fmt.Fprintf(stdout, "pipeline-ai %s\n", version)
-		return 0
+		return runVersion(cmdArgs, agentMode, stdout)
 
 	case "hook":
 		return hook.Run(stdin, stdout, stderr)
 
 	case "validate":
-		return runValidate(cmdArgs, stdout, stderr)
+		return runValidate(cmdArgs, agentMode, stdout, stderr)
 
 	case "handoff":
-		return runHandoff(cmdArgs, stdout, stderr)
+		return runHandoff(cmdArgs, agentMode, stdout, stderr)
 
 	case "run":
-		return runRun(cmdArgs, stdout, stderr)
+		return runRun(cmdArgs, agentMode, stdout, stderr)
 
 	case "init":
-		return runInit(cmdArgs, stdout, stderr)
+		return runInit(cmdArgs, stdin, agentMode, stdout, stderr)
 
 	case "sync":
-		return runSync(cmdArgs, stdout, stderr)
+		return runSync(cmdArgs, agentMode, stdout, stderr)
 
 	case "delivery":
-		return runDelivery(cmdArgs, stdout, stderr)
+		return runDelivery(cmdArgs, agentMode, stdout, stderr)
 
 	case "doctor":
-		return runDoctor(cmdArgs, stdout, stderr)
+		return runDoctor(cmdArgs, agentMode, stdout, stderr)
 
 	case "module":
-		return runModule(cmdArgs, stdout, stderr)
+		return runModule(cmdArgs, agentMode, stdout, stderr)
 
 	case "sensor":
-		return runSensor(cmdArgs, stdout, stderr)
+		return runSensor(cmdArgs, agentMode, stdout, stderr)
 
 	case "metrics":
-		return runMetrics(cmdArgs, stdout, stderr)
+		return runMetrics(cmdArgs, agentMode, stdout, stderr)
 
 	case "dashboard":
-		return runDashboard(cmdArgs, stdout, stderr)
+		return runDashboard(cmdArgs, agentMode, stdout, stderr)
 
 	case "mcp":
 		return runMCP(cmdArgs, stdin, stdout, stderr)
 
 	case "plugin":
-		return runPlugin(cmdArgs, stdout, stderr)
+		return runPlugin(cmdArgs, agentMode, stdout, stderr)
 
 	case "eval":
-		return runEval(cmdArgs, stdin, stdout, stderr)
+		return runEval(cmdArgs, stdin, agentMode, stdout, stderr)
 
 	case "debt":
-		return runDebt(cmdArgs, stdout, stderr)
+		return runDebt(cmdArgs, agentMode, stdout, stderr)
 
 	default:
 		fmt.Fprintf(stderr, "pipeline-ai: comando desconhecido: %q\nExecute 'pipeline-ai help' para ver a lista de comandos.\n", cmd)
@@ -128,31 +211,36 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Uso: pipeline-ai <comando> [argumentos]")
+	fmt.Fprintln(w, "     pipeline-ai [-agent|-no-agent] <comando> [argumentos]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Flags globais:")
+	fmt.Fprintln(w, "  -agent, --agent          Ativa modo agente (saída estruturada em JSON, desativa prompts interativos)")
+	fmt.Fprintln(w, "  -no-agent, --no-agent    Força modo humano interativo (ignora variáveis de ambiente)")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Comandos disponíveis:")
-	fmt.Fprintln(w, "  init       Inicializa um novo projeto com o padrão pipeline-ai")
+	fmt.Fprintln(w, "  init       Inicializa um novo projeto com o padrão pipeline-ai (suporta -non-interactive, -json)")
 	fmt.Fprintln(w, "  hook       Executa o hook PreToolUse que impede edição direta em caminhos protegidos")
 	fmt.Fprintln(w, "  run        Executa a suíte integrada de gates de governança (doctor, sensor, validate)")
 	fmt.Fprintln(w, "  validate   Valida o relatório de delivery e salvaguardas de segurança antes do PR")
 	fmt.Fprintln(w, "  handoff    Valida integridade e contratos de blocos de handoff (validate [-json])")
-	fmt.Fprintln(w, "  sync       Sincroniza skills, regras e hooks em .agents/ a partir dos templates")
-	fmt.Fprintln(w, "  delivery   Gerencia o ciclo de vida da delivery ativa (open, close, status)")
+	fmt.Fprintln(w, "  sync       Sincroniza skills, regras e hooks em .agents/ a partir dos templates (-json)")
+	fmt.Fprintln(w, "  delivery   Gerencia o ciclo de vida da delivery ativa (open, close, status [-json])")
 	fmt.Fprintln(w, "  doctor     Diagnostica o ambiente local (Go 1.24+, git, gh, hooks e .pipeline-ai.json)")
-	fmt.Fprintln(w, "  module     Gerencia módulos opcionais do pipeline (list, enable, disable)")
+	fmt.Fprintln(w, "  module     Gerencia módulos opcionais do pipeline (list [-json], enable, disable)")
 	fmt.Fprintln(w, "  sensor     Executa os sensores de qualidade (fmt, vet, test) com saída estruturada")
 	fmt.Fprintln(w, "  metrics    Exibe métricas de engenharia e governança DORA (summary, list)")
 	fmt.Fprintln(w, "  dashboard  Gera e renderiza dashboard HTML interativo de engenharia e métricas")
 	fmt.Fprintln(w, "  mcp        Executa o servidor MCP sobre stdio (JSON-RPC 2.0)")
 	fmt.Fprintln(w, "  eval       Submete uma avaliação semântica calibrada (System One / Jev)")
 	fmt.Fprintln(w, "  debt       Lista atalhos deliberados (// shortcut:) com limites e gatilhos de evolução")
-	fmt.Fprintln(w, "  plugin     Gerencia o bundle e instalação do plugin Antigravity (verify, install)")
-	fmt.Fprintln(w, "  version    Exibe a versão do pipeline-ai")
+	fmt.Fprintln(w, "  plugin     Gerencia o bundle e instalação do plugin Antigravity (verify, install [-json])")
+	fmt.Fprintln(w, "  version    Exibe a versão do pipeline-ai (-json)")
 	fmt.Fprintln(w, "  help       Exibe esta mensagem de ajuda")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Execute 'pipeline-ai <comando> --help' para detalhes sobre opções específicas.")
 }
 
-func runRun(args []string, stdout, stderr io.Writer) int {
+func runRun(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -183,7 +271,7 @@ func runRun(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if *asJSON {
+	if *asJSON || agentMode {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(res); err != nil {
@@ -209,7 +297,7 @@ func runRun(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runValidate(args []string, stdout, stderr io.Writer) int {
+func runValidate(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -226,13 +314,13 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 		return validate.ExitBadUsage
 	}
 
-	if *asJSON {
+	if *asJSON || agentMode {
 		return validate.RunJSON(fs.Arg(0), *baseRef, *noGit, stdout, stderr)
 	}
 	return validate.Run(fs.Arg(0), *baseRef, *noGit, stdout, stderr)
 }
 
-func runHandoff(args []string, stdout, stderr io.Writer) int {
+func runHandoff(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "uso: pipeline-ai handoff <subcomando> [flags] [argumento]")
 		fmt.Fprintln(stderr, "Subcomandos disponíveis: validate")
@@ -285,7 +373,7 @@ func runHandoff(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 
-		if *asJSON {
+		if *asJSON || agentMode {
 			enc := json.NewEncoder(stdout)
 			enc.SetIndent("", "  ")
 			if err := enc.Encode(res); err != nil {
@@ -324,7 +412,7 @@ func runHandoff(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-func runSensor(args []string, stdout, stderr io.Writer) int {
+func runSensor(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("sensor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -345,7 +433,7 @@ func runSensor(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if *asJSON {
+	if *asJSON || agentMode {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(res); err != nil {
@@ -373,23 +461,47 @@ func runSensor(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runSync(args []string, stdout, stderr io.Writer) int {
+func runSync(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	dir := fs.String("dir", ".", "diretório raiz do projeto a ser sincronizado")
+	asJSON := fs.Bool("json", false, "Exibe o resultado em formato JSON")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
-	if err := scaffold.Sync(*dir, stdout, stderr); err != nil {
+	isJSON := *asJSON || agentMode
+	syncStdout := stdout
+	if isJSON {
+		syncStdout = io.Discard
+	}
+
+	if err := scaffold.Sync(*dir, syncStdout, stderr); err != nil {
 		fmt.Fprintf(stderr, "ERRO: %v\n", err)
+		if isJSON {
+			_ = json.NewEncoder(stdout).Encode(map[string]any{
+				"ok":    false,
+				"dir":   *dir,
+				"error": err.Error(),
+			})
+		}
 		return 1
 	}
+
+	if isJSON {
+		_ = json.NewEncoder(stdout).Encode(map[string]any{
+			"ok":      true,
+			"dir":     *dir,
+			"message": "Skills e regras sincronizadas com sucesso.",
+		})
+		return 0
+	}
+
 	return 0
 }
 
-func runDoctor(args []string, stdout, stderr io.Writer) int {
+func runDoctor(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -399,19 +511,20 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if *asJSON {
+	if *asJSON || agentMode {
 		return doctor.RunJSON(*dir, stdout)
 	}
 	return doctor.Run(*dir, stdout, stderr)
 }
 
-func runModule(args []string, stdout, stderr io.Writer) int {
+func runModule(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "uso: pipeline-ai module <list|enable|disable> [nome] [-dir <caminho>]")
 		return 1
 	}
 
 	dir := "."
+	asJSON := false
 	var filtered []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -420,6 +533,8 @@ func runModule(args []string, stdout, stderr io.Writer) int {
 			i++
 		} else if strings.HasPrefix(arg, "-dir=") {
 			dir = strings.TrimPrefix(arg, "-dir=")
+		} else if arg == "-json" || arg == "--json" {
+			asJSON = true
 		} else {
 			filtered = append(filtered, arg)
 		}
@@ -430,11 +545,17 @@ func runModule(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	isJSON := asJSON || agentMode
 	subcmd := strings.ToLower(filtered[0])
 	switch subcmd {
 	case "list":
 		cfg, err := config.Load(dir)
 		if err != nil {
+			if isJSON {
+				_ = json.NewEncoder(stdout).Encode(map[string]any{
+					"error": err.Error(),
+				})
+			}
 			fmt.Fprintf(stderr, "module: erro ao carregar configuração: %v\n", err)
 			return 1
 		}
@@ -443,6 +564,27 @@ func runModule(args []string, stdout, stderr io.Writer) int {
 			mods = append(mods, m)
 		}
 		sort.Strings(mods)
+
+		if isJSON {
+			type moduleItem struct {
+				Name    string `json:"name"`
+				Enabled bool   `json:"enabled"`
+			}
+			type moduleListJSON struct {
+				Modules []moduleItem `json:"modules"`
+			}
+			var list []moduleItem
+			for _, m := range mods {
+				list = append(list, moduleItem{
+					Name:    m,
+					Enabled: cfg.IsModuleEnabled(m),
+				})
+			}
+			enc := json.NewEncoder(stdout)
+			_ = enc.Encode(moduleListJSON{Modules: list})
+			return 0
+		}
+
 		fmt.Fprintln(stdout, "Módulos opcionais do pipeline-ai:")
 		for _, m := range mods {
 			status := "[desabilitado]"
@@ -520,7 +662,7 @@ func runMCP(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runDelivery(args []string, stdout, stderr io.Writer) int {
+func runDelivery(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		printDeliveryUsage(stderr)
 		return 1
@@ -535,7 +677,7 @@ func runDelivery(args []string, stdout, stderr io.Writer) int {
 	case "close":
 		return runDeliveryClose(subArgs, stdout, stderr)
 	case "status":
-		return runDeliveryStatus(subArgs, stdout, stderr)
+		return runDeliveryStatus(subArgs, agentMode, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "pipeline-ai delivery: subcomando desconhecido %q (use open, close ou status)\n", sub)
 		return 1
@@ -548,7 +690,7 @@ func printDeliveryUsage(w io.Writer) {
 	fmt.Fprintln(w, "Subcomandos:")
 	fmt.Fprintln(w, "  open <DEL-ID> [-task <TASK_CODE>] [-ttl <duration>] [-dir <dir>]")
 	fmt.Fprintln(w, "  close [-dir <dir>]")
-	fmt.Fprintln(w, "  status [-dir <dir>]")
+	fmt.Fprintln(w, "  status [-dir <dir>] [-json]")
 }
 
 func runDeliveryOpen(args []string, stdout, stderr io.Writer) int {
@@ -625,24 +767,54 @@ func runDeliveryClose(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runDeliveryStatus(args []string, stdout, stderr io.Writer) int {
+func runDeliveryStatus(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("delivery status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	dir := fs.String("dir", ".", "diretório raiz do projeto")
+	asJSON := fs.Bool("json", false, "Exibe o status em formato JSON")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
+	isJSON := *asJSON || agentMode
+
 	d, err := state.Get(*dir)
 	if err != nil || d == nil {
+		if isJSON {
+			enc := json.NewEncoder(stdout)
+			_ = enc.Encode(map[string]any{
+				"active":      false,
+				"expired":     false,
+				"delivery_id": "",
+				"task_code":   "",
+			})
+			return 0
+		}
 		fmt.Fprintln(stdout, "nenhuma delivery ativa")
 		return 0
 	}
 
 	active, actErr := state.IsActive(*dir)
+	expired := errors.Is(actErr, state.ErrExpired)
+	isActive := active && !expired
+
+	if isJSON {
+		res := map[string]any{
+			"active":      isActive,
+			"expired":     expired,
+			"delivery_id": d.DeliveryID,
+			"task_code":   d.TaskCode,
+			"opened_at":   d.OpenedAt,
+			"expires_at":  d.ExpiresAt,
+		}
+		enc := json.NewEncoder(stdout)
+		_ = enc.Encode(res)
+		return 0
+	}
+
 	if !active {
-		if errors.Is(actErr, state.ErrExpired) {
+		if expired {
 			fmt.Fprintf(stdout, "Delivery ativa: %s (EXPIRADA em %s)\n", d.DeliveryID, d.ExpiresAt.Format(time.RFC3339))
 			if d.TaskCode != "" {
 				fmt.Fprintf(stdout, "Task:           %s\n", d.TaskCode)
@@ -662,7 +834,7 @@ func runDeliveryStatus(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runInit(args []string, stdout, stderr io.Writer) int {
+func runInit(args []string, stdin io.Reader, agentMode bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -674,58 +846,83 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&opts.TargetDir, "dir", ".", "Diretório de destino (padrão: diretório atual)")
 	fs.StringVar(&opts.Summary, "summary", "", "Uma frase descritiva sobre o projeto")
 	noGit := fs.Bool("no-git", false, "Não inicializa repositório Git")
+	nonInteractiveFlag := fs.Bool("non-interactive", false, "Desativa prompts interativos")
+	asJSON := fs.Bool("json", false, "Exibe o resultado em formato JSON")
 
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
-	opts.InitGit = !*noGit
-	opts.Stdout = stdout
-	opts.Stderr = stderr
+	isJSON := *asJSON || agentMode
+	nonInteractive := *nonInteractiveFlag || agentMode || !isTTY(stdin)
 
 	// Se executado sem flags interativas e name não foi fornecido
 	if opts.Name == "" {
-		reader := bufio.NewReader(os.Stdin)
+		if nonInteractive {
+			fmt.Fprintln(stderr, "Erro: parâmetro obrigatório -name ausente em modo não-interativo. Exemplo: pipeline-ai init -name meu-app -type desktop -db postgres")
+			if isJSON {
+				_ = json.NewEncoder(stdout).Encode(map[string]any{
+					"ok":    false,
+					"error": "parâmetro obrigatório -name ausente em modo não-interativo",
+					"hint":  "pipeline-ai init -name <nome> -type <desktop|api|cli> -db <postgres|mongo|dynamo> -no-git",
+				})
+			}
+			return 1
+		}
+
+		reader := bufio.NewReader(stdin)
 		fmt.Print("Nome do projeto: ")
 		text, _ := reader.ReadString('\n')
 		opts.Name = strings.TrimSpace(text)
+		if opts.Name == "" {
+			fmt.Fprintln(stderr, "Erro: nome do projeto não pode ser vazio.")
+			return 1
+		}
 	}
 
 	if opts.Type == "" {
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Println("\nEscolha o formato do projeto:")
-		fmt.Println("  1) desktop (Go + Wails v3 + React num binário único)")
-		fmt.Println("  2) api     (Servidor Go API + UI React)")
-		fmt.Println("  3) cli     (Aplicação de linha de comando ou terminal em Go)")
-		fmt.Print("Opção [1/2/3, default: 1]: ")
-		text, _ := reader.ReadString('\n')
-		choice := strings.TrimSpace(text)
-		switch choice {
-		case "2", "api":
-			opts.Type = "api"
-		case "3", "cli", "tui":
-			opts.Type = "cli"
-		default:
+		if nonInteractive {
 			opts.Type = "desktop"
+		} else {
+			reader := bufio.NewReader(stdin)
+			fmt.Println("\nEscolha o formato do projeto:")
+			fmt.Println("  1) desktop (Go + Wails v3 + React num binário único)")
+			fmt.Println("  2) api     (Servidor Go API + UI React)")
+			fmt.Println("  3) cli     (Aplicação de linha de comando ou terminal em Go)")
+			fmt.Print("Opção [1/2/3, default: 1]: ")
+			text, _ := reader.ReadString('\n')
+			choice := strings.TrimSpace(text)
+			switch choice {
+			case "2", "api":
+				opts.Type = "api"
+			case "3", "cli", "tui":
+				opts.Type = "cli"
+			default:
+				opts.Type = "desktop"
+			}
 		}
 	}
 
 	if opts.Database == "" {
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Println("\nEscolha o banco de dados:")
-		fmt.Println("  1) PostgreSQL (Relacional)")
-		fmt.Println("  2) MongoDB    (Documento)")
-		fmt.Println("  3) DynamoDB   (NoSQL Key-Value)")
-		fmt.Print("Opção [1/2/3, default: 1]: ")
-		text, _ := reader.ReadString('\n')
-		choice := strings.TrimSpace(text)
-		switch choice {
-		case "2", "mongo", "mongodb":
-			opts.Database = "MongoDB"
-		case "3", "dynamo", "dynamodb":
-			opts.Database = "DynamoDB"
-		default:
+		if nonInteractive {
 			opts.Database = "PostgreSQL"
+		} else {
+			reader := bufio.NewReader(stdin)
+			fmt.Println("\nEscolha o banco de dados:")
+			fmt.Println("  1) PostgreSQL (Relacional)")
+			fmt.Println("  2) MongoDB    (Documento)")
+			fmt.Println("  3) DynamoDB   (NoSQL Key-Value)")
+			fmt.Print("Opção [1/2/3, default: 1]: ")
+			text, _ := reader.ReadString('\n')
+			choice := strings.TrimSpace(text)
+			switch choice {
+			case "2", "mongo", "mongodb":
+				opts.Database = "MongoDB"
+			case "3", "dynamo", "dynamodb":
+				opts.Database = "DynamoDB"
+			default:
+				opts.Database = "PostgreSQL"
+			}
 		}
 	}
 
@@ -733,10 +930,36 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		opts.Module = opts.Name
 	}
 
-	fmt.Fprintf(stdout, "\nInicializando projeto %q (%s, %s)...\n", opts.Name, opts.Type, opts.Database)
+	opts.InitGit = !*noGit
+	if isJSON {
+		opts.Stdout = io.Discard
+		opts.Stderr = stderr
+	} else {
+		opts.Stdout = stdout
+		opts.Stderr = stderr
+		fmt.Fprintf(stdout, "\nInicializando projeto %q (%s, %s)...\n", opts.Name, opts.Type, opts.Database)
+	}
+
 	if err := scaffold.Scaffold(opts); err != nil {
 		fmt.Fprintf(stderr, "\nERRO ao inicializar projeto: %v\n", err)
+		if isJSON {
+			_ = json.NewEncoder(stdout).Encode(map[string]any{
+				"ok":    false,
+				"error": err.Error(),
+			})
+		}
 		return 1
+	}
+
+	if isJSON {
+		_ = json.NewEncoder(stdout).Encode(map[string]any{
+			"ok":       true,
+			"name":     opts.Name,
+			"type":     opts.Type,
+			"database": opts.Database,
+			"dir":      opts.TargetDir,
+		})
+		return 0
 	}
 
 	fmt.Fprintln(stdout, "\nSucesso! Projeto configurado com o padrão pipeline-ai.")
@@ -744,7 +967,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runMetrics(args []string, stdout, stderr io.Writer) int {
+func runMetrics(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	var subcmd string
 	var flagArgs []string
 
@@ -778,6 +1001,8 @@ func runMetrics(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	isJSON := *asJSON || agentMode
+
 	absDir, err := filepath.Abs(*dir)
 	if err != nil {
 		fmt.Fprintf(stderr, "metrics: diretório inválido: %v\n", err)
@@ -799,7 +1024,7 @@ func runMetrics(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 
-		if *asJSON {
+		if isJSON {
 			enc := json.NewEncoder(stdout)
 			enc.SetIndent("", "  ")
 			if err := enc.Encode(dora); err != nil {
@@ -832,7 +1057,7 @@ func runMetrics(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 
-		if *asJSON {
+		if isJSON {
 			enc := json.NewEncoder(stdout)
 			enc.SetIndent("", "  ")
 			if err := enc.Encode(data); err != nil {
@@ -875,7 +1100,7 @@ func runMetrics(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-func runDashboard(args []string, stdout, stderr io.Writer) int {
+func runDashboard(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("dashboard", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -886,6 +1111,8 @@ func runDashboard(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
+
+	isJSON := *asJSON || agentMode
 
 	absDir, err := filepath.Abs(*dir)
 	if err != nil {
@@ -899,7 +1126,7 @@ func runDashboard(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if *asJSON {
+	if isJSON {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(data); err != nil {
@@ -927,7 +1154,7 @@ func runDashboard(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runPlugin(args []string, stdout, stderr io.Writer) int {
+func runPlugin(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		printPluginUsage(stderr)
 		return 1
@@ -938,9 +1165,9 @@ func runPlugin(args []string, stdout, stderr io.Writer) int {
 
 	switch sub {
 	case "verify":
-		return runPluginVerify(subArgs, stdout, stderr)
+		return runPluginVerify(subArgs, agentMode, stdout, stderr)
 	case "install":
-		return runPluginInstall(subArgs, stdout, stderr)
+		return runPluginInstall(subArgs, agentMode, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "pipeline-ai plugin: subcomando desconhecido %q (use verify ou install)\n", sub)
 		return 1
@@ -951,29 +1178,66 @@ func printPluginUsage(w io.Writer) {
 	fmt.Fprintln(w, "Uso: pipeline-ai plugin <verify|install> [opções]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Subcomandos:")
-	fmt.Fprintln(w, "  verify  [-dir <dir>]")
-	fmt.Fprintln(w, "  install [-src <dir>] [-target <dir>]")
+	fmt.Fprintln(w, "  verify  [-dir <dir>] [-json]")
+	fmt.Fprintln(w, "  install [-src <dir>] [-target <dir>] [-json]")
 }
 
-func runPluginVerify(args []string, stdout, stderr io.Writer) int {
+func resolvePluginDir(path string) string {
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	if !filepath.IsAbs(path) {
+		candidates := []string{
+			filepath.Join("..", path),
+			filepath.Join("..", "..", path),
+		}
+		for _, cand := range candidates {
+			if _, err := os.Stat(cand); err == nil {
+				return cand
+			}
+		}
+	}
+	return path
+}
+
+func runPluginVerify(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("plugin verify", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	dir := fs.String("dir", "plugin", "diretório do bundle do plugin a verificar")
+	asJSON := fs.Bool("json", false, "Exibe o resultado em formato JSON")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
-	if err := plugin.VerifyBundle(*dir); err != nil {
+	isJSON := *asJSON || agentMode
+	targetDir := resolvePluginDir(*dir)
+	if err := plugin.VerifyBundle(targetDir); err != nil {
 		fmt.Fprintf(stderr, "plugin verify: falha na verificação: %v\n", err)
+		if isJSON {
+			_ = json.NewEncoder(stdout).Encode(map[string]any{
+				"ok":    false,
+				"dir":   *dir,
+				"error": err.Error(),
+			})
+		}
 		return 1
+	}
+
+	if isJSON {
+		_ = json.NewEncoder(stdout).Encode(map[string]any{
+			"ok":      true,
+			"dir":     *dir,
+			"message": fmt.Sprintf("Bundle do plugin em %q é válido [OK].", *dir),
+		})
+		return 0
 	}
 
 	fmt.Fprintf(stdout, "Bundle do plugin em %q é válido [OK].\n", *dir)
 	return 0
 }
 
-func runPluginInstall(args []string, stdout, stderr io.Writer) int {
+func runPluginInstall(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("plugin install", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -981,14 +1245,23 @@ func runPluginInstall(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&src, "dir", "plugin", "diretório de origem do bundle do plugin")
 	fs.StringVar(&src, "src", "plugin", "diretório de origem do bundle do plugin")
 	target := fs.String("target", "", "diretório de destino da instalação")
+	asJSON := fs.Bool("json", false, "Exibe o resultado em formato JSON")
 
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
+	isJSON := *asJSON || agentMode
 	targetDir := strings.TrimSpace(*target)
 	if targetDir == "" {
 		fmt.Fprintln(stderr, "plugin install: a flag -target é obrigatória")
+		if isJSON {
+			_ = json.NewEncoder(stdout).Encode(map[string]any{
+				"ok":    false,
+				"dir":   "",
+				"error": "a flag -target é obrigatória",
+			})
+		}
 		return 1
 	}
 
@@ -999,16 +1272,33 @@ func runPluginInstall(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	if err := plugin.InstallToDir(src, targetDir); err != nil {
+	sourceDir := resolvePluginDir(src)
+	if err := plugin.InstallToDir(sourceDir, targetDir); err != nil {
 		fmt.Fprintf(stderr, "plugin install: erro ao instalar plugin: %v\n", err)
+		if isJSON {
+			_ = json.NewEncoder(stdout).Encode(map[string]any{
+				"ok":    false,
+				"dir":   targetDir,
+				"error": err.Error(),
+			})
+		}
 		return 1
+	}
+
+	if isJSON {
+		_ = json.NewEncoder(stdout).Encode(map[string]any{
+			"ok":      true,
+			"dir":     targetDir,
+			"message": fmt.Sprintf("Plugin instalado com sucesso em %q [OK].", targetDir),
+		})
+		return 0
 	}
 
 	fmt.Fprintf(stdout, "Plugin instalado com sucesso em %q [OK].\n", targetDir)
 	return 0
 }
 
-func runDebt(args []string, stdout, stderr io.Writer) int {
+func runDebt(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("debt", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -1019,13 +1309,14 @@ func runDebt(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	isJSON := *jsonFlag || agentMode
 	summary, err := debt.ScanDir(*dirFlag)
 	if err != nil {
 		fmt.Fprintf(stderr, "debt: erro ao escanear diretório %q: %v\n", *dirFlag, err)
 		return 1
 	}
 
-	if *jsonFlag {
+	if isJSON {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(summary); err != nil {
@@ -1047,7 +1338,7 @@ func runDebt(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func runEval(args []string, stdin io.Reader, agentMode bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("eval", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -1068,6 +1359,8 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	isJSON := *jsonFlag || agentMode
+
 	modeExplicit := false
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "mode" {
@@ -1080,7 +1373,7 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		var err error
 		presetMode, presetQuestion, err = semantic.ResolvePreset(*presetFlag)
 		if err != nil {
-			if *jsonFlag {
+			if isJSON {
 				res := map[string]any{"error": err.Error()}
 				data, _ := json.MarshalIndent(res, "", "  ")
 				fmt.Fprintln(stdout, string(data))
@@ -1202,7 +1495,7 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if endpoint == "" || apiKey == "" {
-		if *jsonFlag {
+		if isJSON {
 			res := map[string]any{
 				"configured": false,
 				"message":    "sensor semântico não configurado (JEV_ENDPOINT / JEV_API_KEY ausentes)",
@@ -1282,7 +1575,7 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	if evalErr != nil {
 		sanitizedMsg := redactSecrets(evalErr.Error(), secrets...)
-		if *jsonFlag {
+		if isJSON {
 			res := map[string]any{
 				"error": sanitizedMsg,
 			}
@@ -1294,7 +1587,7 @@ func runEval(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if *jsonFlag {
+	if isJSON {
 		data, err := json.MarshalIndent(resultObj, "", "  ")
 		if err != nil {
 			fmt.Fprintf(stderr, "eval: erro ao serializar saída JSON: %v\n", err)

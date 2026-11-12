@@ -677,3 +677,23 @@ Otimização da ergonomia dual-audience (desenvolvedores humanos e agentes de IA
 3. **Truncamento Seguro UTF-8 e Fuzz Testing:**
    - `BoundOutput` e `BoundTestOutput` aplicam o teto `DefaultMaxOutputBytes = 8192` (8 KB, configurável via `-max-output-bytes` na CLI `sensor`/`run` e `max_output_bytes` nas tools MCP `pipeline_run_sensors`/`pipeline_run_pipeline`) recuando até fronteira de runa (`utf8.RuneStart`), validado por `FuzzBoundTestOutput` com +789 mil execuções.
 
+---
+
+### D-40 — Agent Mode, Detecção de TTY, Hardening Não-Interativo e Cobertura JSON Integral (DEL-038)
+
+Padronização da experiência não-interativa e estruturada para orquestradores e subagentes de IA sem comprometer a ergonomia para desenvolvedores humanos:
+1. **Contexto:**
+   - CLIs modernas voltadas a audiência dupla (humanos e agentes de IA) correm o risco crítico de travar processos de agentes autônomos quando aguardam input interativo em `stdin` sem terminal conectado (TTY), ou forçam agentes a realizar parsing frágil de strings quando determinados subcomandos não oferecem saída estruturada via `-json`.
+2. **Decisão:**
+   - **Agent Mode Global (`-agent` / `-no-agent` e Variáveis de Ambiente):**
+     - Introdução das flags globais `-agent` e `-no-agent` e suporte às variáveis de ambiente explícitas `PIPELINE_AGENT_MODE=1` e `AI_AGENT=1` em `cmd/pipeline-ai/main.go`. Quando ativo, o Agent Mode habilita automaticamente saída JSON estruturada e modo estritamente não-interativo em todos os subcomandos da CLI.
+   - **Detecção de Terminal via `isTTY` (`os.ModeCharDevice`):**
+     - Implementação da função `isTTY` verificando se o descritor de arquivo possui a flag de caractere de dispositivo (`ModeCharDevice`). Quando `stdin` não for um TTY e a CLI não estiver em modo interativo explícito, comportamentos bloqueantes são desarmados.
+   - **Hardening Não-Interativo no Comando `init`:**
+     - Adição das flags `-non-interactive` e `-json` em `pipeline-ai init`. Quando executado em ambiente não-interativo ou com flag `-json`, se o parâmetro obrigatório `-name` estiver ausente, o comando falha imediatamente (exit code 1) emitindo JSON estruturado com chave `"hint"` acionável (explicando a necessidade de `-name <nome>`), em vez de travar esperando leitura de `stdin`. Quando `-name` for informado em modo não-interativo/agent, defaults seguros (`desktop`, `PostgreSQL`) são aplicados automaticamente sem bloquear a execução.
+   - **Cobertura JSON Integral (100% dos Subcomandos):**
+     - Expansão do suporte à flag `-json` em 100% dos subcomandos restantes: `version`, `delivery status`, `module list`, `plugin verify`, `plugin install`, `sync` e `init`.
+3. **Alternativas descartadas:**
+   - Detectar variáveis de ambiente genéricas de IDEs (como `TERM_PROGRAM=vscode`) para ativar JSON automaticamente: descartado pois desenvolvedores humanos usam o terminal integrado do VS Code/Cursor e esperam saída textual legível por padrão, além de quebrar testes de integração da CLI que verificam saída formatada para humanos.
+
+
