@@ -10,22 +10,26 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 
 | Comando | Função |
 |---|---|
-| `pipeline-ai init` | Utilitário de *scaffolding* que inicializa novos projetos completos em 1 comando com templates embutidos. |
+| `pipeline-ai init` | Utilitário de *scaffolding* que inicializa novos projetos completos em 1 comando com templates embutidos, suporte a `-non-interactive` e `-json` (D-40). |
 | `pipeline-ai run` | Pipeline Runner determinístico que executa em lote `doctor` → `sensor` → `validate` com auto-detecção de delivery, *Bounded Output* (`-max-output-bytes`, `-verbose-output`) e telemetria (D-27, D-39). |
-| `pipeline-ai plugin` | Validador e instalador oficial do plugin do Antigravity (`verify`, `install`) (DEL-023). |
+| `pipeline-ai plugin` | Validador e instalador oficial do plugin do Antigravity (`verify`, `install`, `-json`) (DEL-023, D-40). |
 | `pipeline-ai dashboard` | Gera dashboard HTML interativo e responsivo (Generative UI) com métricas DORA, esteira e entregas (DEL-022). |
 | `pipeline-ai metrics` | Motor de telemetria e observabilidade com cálculo determinístico das quatro métricas DORA (`summary`, `list`, `-json`) (DEL-020). |
 | `pipeline-ai handoff` | Parser e validador automatizado de contratos de transição entre skills (`validate`) com salvaguarda de Fuzzing (C12). |
 | `pipeline-ai hook` | Hook `PreToolUse` que impede edição direta em caminhos protegidos fora dos agents/skills autorizados (D-11). |
 | `pipeline-ai validate` | Valida o relatório de delivery antes do commit e abertura de PR, garantindo salvaguarda estrita de Git (D-14). Suporta flag `-json`. |
-| `pipeline-ai sync` | Sincroniza e atualiza skills (`.agents/skills`), regras e hooks em projetos existentes sem tocar em código de negócio. |
-| `pipeline-ai delivery` | Gerencia o ciclo da delivery ativa (`open`, `close`, `status`), com suporte a TTL e governança temporal (D-21). |
+| `pipeline-ai sync` | Sincroniza e atualiza skills (`.agents/skills`), regras e hooks em projetos existentes sem tocar em código de negócio (`-json`) (D-40). |
+| `pipeline-ai delivery` | Gerencia o ciclo da delivery ativa (`open`, `close`, `status`, `-json`), com suporte a TTL e governança temporal (D-21, D-40). |
 | `pipeline-ai sensor` | Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada, *Bounded Output*, *Smart Test Filtering*, marcação de resultados parciais (`truncated`, `omitted_bytes`, `failed_tests`) e salvaguarda contra falsos positivos (`-json`, `-max-output-bytes`, `-verbose-output`) (D-24, D-39). |
-| `pipeline-ai module` | Gerencia módulos opcionais (`list`, `enable`, `disable`) dinamicamente no `.pipeline-ai.json` (D-25). |
+| `pipeline-ai module` | Gerencia módulos opcionais (`list`, `enable`, `disable`, `-json`) dinamicamente no `.pipeline-ai.json` (D-25, D-40). |
 | `pipeline-ai doctor` | Diagnostica a integridade do ambiente local (Go 1.24+, git, gh, pre-push hook e `.pipeline-ai.json`). Suporta `--json` para automações e CI. |
 | `pipeline-ai debt` | Lista e audita o inventário determinístico de atalhos deliberados (`// shortcut: <limite> \| upgrade: <gatilho>`) no código Go (`-dir`, `-json`) (D-38). |
 | `pipeline-ai eval` | Submete avaliação semântica calibrada (System One / Jev) nos modos `noul`, `choice` e `score` ou via `-preset yagni` (D-34, D-35, D-38). |
+| `pipeline-ai version` | Exibe a versão instalada da CLI em formato texto ou estruturado (`-json`) (D-40). |
 | `pipeline-ai mcp` | Servidor MCP nativo (JSON-RPC 2.0 sobre stdio) expondo ferramentas de governança para Antigravity e IDEs. |
+
+> [!TIP]
+> **Dual-Audience CLI & Agent Mode (D-40):** A CLI opera nativamente para humanos e agentes de IA. Ao passar a flag `-agent` ou definir `PIPELINE_AGENT_MODE=1` (ou `AI_AGENT=1`), a CLI ativa automaticamente o modo estritamente não-interativo e saída estruturada JSON em 100% dos subcomandos (`version`, `delivery status`, `module list`, `plugin verify/install`, `sync`, `init`, `run`, `sensor`, `doctor`, `validate`, `handoff`, `debt`, `eval`, `metrics`). Comportamentos bloqueantes em `stdin` são prevenidos via detecção de terminal (`isTTY`).
 
 *(Os binários individuais `pipeline-hook`, `pipeline-validate` e `pipeline-init` permanecem disponíveis para retrocompatibilidade com diretivas `tool` existentes).*
 
@@ -99,12 +103,18 @@ mkdir ~/workspace/meu-novo-app && cd ~/workspace/meu-novo-app
 go run github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@latest init
 ```
 
-O utilitário guia você de forma interativa (ou via flags `-name`, `-type`, `-db`, `-module`, `-dir`) e entrega o projeto pronto:
+O utilitário guia você de forma interativa (ou via flags `-name`, `-type`, `-db`, `-module`, `-dir`, `-non-interactive`, `-json`) e entrega o projeto pronto:
 - `git init` e hook `.githooks/pre-push` instalados (bloqueando pushes diretos na `main`).
 - `go.mod` inicializado com diretivas `tool` apontando para a versão estável do `pipeline-ai`.
 - `.agents/` configurado com `hooks.json`, regras e as 16 skills do padrão.
 - `AGENTS.md` e `GEMINI.md` com placeholders substituídos.
 - Estrutura completa de documentação e relatórios em `docs-ai/`.
+
+Para esteiras de CI e agentes de IA autônomos, utilize o modo não-interativo com saída JSON estruturada:
+
+```bash
+pipeline-ai init -name meu-novo-app -type desktop -db postgres -non-interactive -json
+```
 
 Consulte o [Guia de Criação de Projetos](docs-ai/GUIA-CRIACAO-PROJETOS.md) para detalhes.
 
@@ -233,10 +243,11 @@ go tool pipeline-validate -json docs-ai/deliveries/DEL-001/report.md
 A CLI unificada expande os recursos de governança autônoma e determinística:
 
 ### Ciclo de Delivery (`pipeline-ai delivery`)
-Controla o estado e ciclo temporal das entregas (D-21):
+Controla o estado e ciclo temporal das entregas (D-21, D-40):
 ```bash
 pipeline-ai delivery open DEL-035 TASK-035 "Release v0.11.0" 168h # Abre delivery com TTL de 7 dias
 pipeline-ai delivery status                                       # Exibe status e tempo restante
+pipeline-ai delivery status -json                                 # Saída estruturada em JSON para automações
 pipeline-ai delivery close                                        # Fecha a delivery ativa e registra DORA
 ```
 
@@ -257,11 +268,37 @@ pipeline-ai sensor -verbose-output              # Preserva logs completos de tes
 ```
 
 ### Gestão Dinâmica de Módulos (`pipeline-ai module`)
-Permite inspecionar e alterar módulos opcionais em `.pipeline-ai.json` de forma segura (D-25):
+Permite inspecionar e alterar módulos opcionais em `.pipeline-ai.json` de forma segura (D-25, D-40):
 ```bash
 pipeline-ai module list                # Lista módulos opcionais e status de ativação
+pipeline-ai module list -json          # Lista módulos em formato JSON estruturado
 pipeline-ai module enable release-ops  # Ativa módulo opcional com validação de esquema
 pipeline-ai module disable release-ops # Desativa módulo opcional
+```
+
+### Sincronização de Skills e Hooks (`pipeline-ai sync`)
+Sincroniza e atualiza `.agents/skills`, regras e hooks do Antigravity a partir dos templates embutidos sem tocar em código de negócio (D-40):
+```bash
+pipeline-ai sync        # Atualiza skills e hooks exibindo resumo legível
+pipeline-ai sync -json  # Emite resultado da sincronização em JSON estruturado
+```
+
+### Agent Mode & Detecção de TTY (`-agent` / `PIPELINE_AGENT_MODE=1`)
+A CLI unificada detecta automaticamente terminais interativos (`isTTY`) e padroniza a operação não-interativa estruturada para agentes de IA e esteiras de CI (D-40):
+```bash
+# Execução sob Agent Mode explícito (ativa JSON estruturado e modo não-interativo):
+pipeline-ai -agent version
+pipeline-ai -agent delivery status
+pipeline-ai -agent module list
+pipeline-ai -agent plugin verify -dir plugin
+pipeline-ai -agent sync
+
+# Alternativa via variável de ambiente (ideal para subagentes e orquestradores):
+export PIPELINE_AGENT_MODE=1   # ou AI_AGENT=1
+pipeline-ai version            # Retorna {"name":"pipeline-ai","version":"..."}
+
+# Forçar modo legível humano mesmo em ambiente de agente:
+pipeline-ai module list -no-agent
 ```
 
 ### Avaliação Semântica Calibrada (`pipeline-ai eval`)
@@ -312,14 +349,18 @@ O `pipeline-ai` é distribuído oficialmente como um plugin nativo do Antigravit
 # Instala o plugin oficial na configuração do usuário (~/.gemini/config/plugins/pipeline-ai):
 pipeline-ai plugin install
 
-# Ou especificando origem e destino customizados:
+# Ou especificando origem e destino customizados (com suporte a -json):
 pipeline-ai plugin install -src plugin -target ~/.gemini/config/plugins/pipeline-ai
+pipeline-ai plugin install -target ~/.gemini/config/plugins/pipeline-ai -json
 ```
 
 ### Validação do Bundle:
 ```bash
 # Valida a integridade do manifesto plugin.json e a presença de todas as skills e configs:
 pipeline-ai plugin verify -dir plugin
+
+# Saída estruturada em JSON para automações:
+pipeline-ai plugin verify -dir plugin -json
 ```
 
 ---
@@ -413,6 +454,14 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 - **`pipeline_list_debt`**: Varre o diretório e retorna o inventário JSON de atalhos deliberados (`// shortcut: <limite> | upgrade: <gatilho>`) (`dir`).
 - **`pipeline_eval_semantic`**: Submete uma avaliação semântica calibrada (Jev / System One) nos modos `noul`, `choice` ou `score`, ou via `preset` (`yagni`, `minimalism`, `ponytail`) (`state`, `question`, `preset`, `mode`, `choices`, `max_score`, `threshold`, `endpoint`, `api_key`, `timeout_seconds`).
 - **`pipeline_manage_modules`**: Gerencia módulos opcionais (`action`: list, enable, disable; `module`, `dir`).
+
+---
+
+## Roadmap (Próximas Entregas)
+
+### Gemini 4 Hydrogen Routing & Native Semantic Provider (`DEL-039`)
+- **Thinking Tier Matrix por Skill (`model_routing` em `.pipeline-ai.json` e frontmatter das skills):** roteamento determinístico entre níveis de raciocínio (`gemini-4-hydrogen-low` para skills mecânicas como `docs-update` e `git-delivery`, `gemini-4-hydrogen-medium` para `pm-triage`, `test-writer` e `dev-implementation`, e `gemini-4-hydrogen-high`/`xhigh` para `architecture-guardrails`, `code-reviewer` e `security-review`), maximizando velocidade e preservando cota.
+- **Provider Nativo Gemini Hydrogen em `internal/sensor/semantic`:** suporte ao endpoint `generateContent` com `responseSchema` estrito (`decision`/`selected_option`/`score`, `confidence`, `reasoning`) e `thinkingLevel: "low"` no comando `pipeline-ai eval` e na tool MCP `pipeline_eval_semantic`, usando 100% stdlib `net/http`.
 
 ---
 
