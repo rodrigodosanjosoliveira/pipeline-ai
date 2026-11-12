@@ -663,7 +663,17 @@ Prevenção de complexidade acidental (over-engineering) e rastreamento determin
 3. **Preset Semântico YAGNI no Sensor Jev (`internal/sensor/semantic`):**
    - Função `semantic.ResolvePreset` suportando `-preset yagni` (e aliases `minimalism` e `ponytail`) na CLI `pipeline-ai eval` e no argumento `preset` da tool MCP `pipeline_eval_semantic`.
 
+---
 
+## 14. Dual-Audience CLI Design: Bounded Output e Eficiência de Contexto
 
+### D-39 — Bounded Output, Smart Test Filtering e Marcação de Resultados Parciais no Sensor e Runner (DEL-037)
 
+Otimização da ergonomia dual-audience (desenvolvedores humanos e agentes de IA) nos sensores de qualidade e no runner:
+1. **Motivação Dual-Audience (Humanos e Agentes de IA):**
+   - Em projetos com centenas de testes, `go test -v ./...` produz dezenas de kilobytes de logs `=== RUN` / `--- PASS`, poluindo a janela de contexto dos LLMs e estourando buffers de ferramentas.
+2. **Smart Test Filtering e Metadados de Resultado Parcial (`internal/sensor`):**
+   - `BoundTestOutput` filtra automaticamente blocos de testes aprovados (`--- PASS` / `--- SKIP`) quando `VerboseOutput: false`, preservando integralmente blocos de falha (`--- FAIL`), resumos de pacotes e erros de compilação, além de extrair a lista determinística `failed_tests` e preencher `truncated`, `total_bytes` e `omitted_bytes` em `CheckResult`.
+3. **Truncamento Seguro UTF-8 e Fuzz Testing:**
+   - `BoundOutput` e `BoundTestOutput` aplicam o teto `DefaultMaxOutputBytes = 8192` (8 KB, configurável via `-max-output-bytes` na CLI `sensor`/`run` e `max_output_bytes` nas tools MCP `pipeline_run_sensors`/`pipeline_run_pipeline`) recuando até fronteira de runa (`utf8.RuneStart`), validado por `FuzzBoundTestOutput` com +789 mil execuções.
 

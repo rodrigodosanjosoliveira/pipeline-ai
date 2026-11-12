@@ -161,6 +161,7 @@ func runRun(args []string, stdout, stderr io.Writer) int {
 	report := fs.String("report", "", "caminho do relatório de delivery")
 	noGit := fs.Bool("no-git", false, "pula verificações dependentes do git")
 	baseRef := fs.String("base", "", "referência git para o diff")
+	maxOutputBytes := fs.Int("max-output-bytes", sensor.DefaultMaxOutputBytes, "limite máximo de bytes na saída dos sensores")
 	asJSON := fs.Bool("json", false, "emite os resultados consolidados em JSON")
 
 	if err := fs.Parse(args); err != nil {
@@ -168,11 +169,12 @@ func runRun(args []string, stdout, stderr io.Writer) int {
 	}
 
 	opts := runner.Options{
-		Dir:        *dir,
-		DeliveryID: *delivery,
-		ReportPath: *report,
-		BaseRef:    *baseRef,
-		NoGit:      *noGit,
+		Dir:            *dir,
+		DeliveryID:     *delivery,
+		ReportPath:     *report,
+		BaseRef:        *baseRef,
+		NoGit:          *noGit,
+		MaxOutputBytes: *maxOutputBytes,
 	}
 
 	res, err := runner.Run(opts)
@@ -327,12 +329,17 @@ func runSensor(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 
 	dir := fs.String("dir", ".", "diretório raiz do projeto a ser analisado")
+	maxOutputBytes := fs.Int("max-output-bytes", sensor.DefaultMaxOutputBytes, "limite máximo de bytes na saída de cada sensor")
+	verboseOutput := fs.Bool("verbose-output", false, "preserva logs verbosos de testes que passaram até o limite de bytes")
 	asJSON := fs.Bool("json", false, "emite os resultados estruturados em JSON")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
-	res, err := sensor.Run(*dir)
+	res, err := sensor.RunWithOptions(*dir, sensor.Options{
+		MaxOutputBytes: *maxOutputBytes,
+		VerboseOutput:  *verboseOutput,
+	})
 	if err != nil {
 		fmt.Fprintf(stderr, "sensor: erro na execução: %v\n", err)
 		return 1
@@ -349,7 +356,14 @@ func runSensor(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "Status geral: %s\n", res.Overall)
 		fmt.Fprintf(stdout, "Testes executados: %d\n", res.TestsRun)
 		for _, s := range res.Sensors {
-			fmt.Fprintf(stdout, "- [%s] %s: %s\n", s.Status, s.Name, s.Message)
+			line := fmt.Sprintf("- [%s] %s: %s", s.Status, s.Name, s.Message)
+			if s.Truncated {
+				line += fmt.Sprintf(" (saída parcial: %d bytes omitidos)", s.OmittedBytes)
+			}
+			fmt.Fprintln(stdout, line)
+			if len(s.FailedTests) > 0 {
+				fmt.Fprintf(stdout, "  Testes falhos: %s\n", strings.Join(s.FailedTests, ", "))
+			}
 		}
 	}
 

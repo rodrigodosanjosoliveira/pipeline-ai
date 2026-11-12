@@ -2,7 +2,7 @@
 delivery_id: DEL-036
 task_code: TASK-036
 title: "Ajuste de formatação e legibilidade no post de divulgação do artigo YAGNI para o LinkedIn"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

@@ -1,11 +1,14 @@
 package runner
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
 )
 
@@ -341,5 +344,62 @@ Aprovado sem ressalvas.
 				t.Errorf("validateStep status = %q, esperado %q", validateStep.Status, StatusFail)
 			}
 		})
+	}
+}
+
+func TestRun_PropagatesMaxOutputBytes(t *testing.T) {
+	dir := setupBaseWorkspace(t)
+	setupValidDelivery(t, dir, "DEL-037", "TASK-037")
+
+	var testSrc strings.Builder
+	testSrc.WriteString("package sampleapp\n\nimport \"testing\"\n")
+	for i := 1; i <= 25; i++ {
+		fmt.Fprintf(&testSrc, "\nfunc TestManyPass%02d(t *testing.T) {\n\tif Add(2, 3) != 5 {\n\t\tt.Fatal(\"err\")\n\t}\n}\n", i)
+	}
+	writeFile(t, filepath.Join(dir, "sample_test.go"), testSrc.String())
+
+	opts := Options{
+		Dir:            dir,
+		NoGit:          true,
+		MaxOutputBytes: 128,
+		VerboseOutput:  false,
+	}
+
+	res, err := Run(opts)
+	if err != nil {
+		t.Fatalf("Run retornou erro inesperado: %v", err)
+	}
+	if res == nil {
+		t.Fatal("res retornado é nil")
+	}
+	if !res.OK || res.Overall != StatusPass {
+		t.Fatalf("res.Overall = %q, res.OK = %v, esperado PASS/true", res.Overall, res.OK)
+	}
+
+	sensorStep := findStep(res.Steps, "sensor")
+	if sensorStep == nil {
+		t.Fatal("sensorStep ausente em res.Steps")
+	}
+
+	sensorRes, ok := sensorStep.Details.(*sensor.Result)
+	if !ok || sensorRes == nil {
+		t.Fatalf("sensorStep.Details não é *sensor.Result válido: %T", sensorStep.Details)
+	}
+
+	var testCheck *sensor.CheckResult
+	for i := range sensorRes.Sensors {
+		if sensorRes.Sensors[i].Name == "test" {
+			testCheck = &sensorRes.Sensors[i]
+			break
+		}
+	}
+	if testCheck == nil {
+		t.Fatal("sensor 'test' não encontrado em sensorRes.Sensors")
+	}
+	if !testCheck.Truncated {
+		t.Errorf("testCheck.Truncated = false, esperado true com MaxOutputBytes=128 e VerboseOutput=false")
+	}
+	if testCheck.OmittedBytes <= 0 {
+		t.Errorf("testCheck.OmittedBytes = %d, esperado > 0", testCheck.OmittedBytes)
 	}
 }
