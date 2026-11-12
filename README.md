@@ -11,7 +11,7 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 | Comando | Função |
 |---|---|
 | `pipeline-ai init` | Utilitário de *scaffolding* que inicializa novos projetos completos em 1 comando com templates embutidos. |
-| `pipeline-ai run` | Pipeline Runner determinístico que executa em lote `doctor` → `sensor` → `validate` com auto-detecção de delivery e telemetria (D-27). |
+| `pipeline-ai run` | Pipeline Runner determinístico que executa em lote `doctor` → `sensor` → `validate` com auto-detecção de delivery, *Bounded Output* (`-max-output-bytes`, `-verbose-output`) e telemetria (D-27, D-39). |
 | `pipeline-ai plugin` | Validador e instalador oficial do plugin do Antigravity (`verify`, `install`) (DEL-023). |
 | `pipeline-ai dashboard` | Gera dashboard HTML interativo e responsivo (Generative UI) com métricas DORA, esteira e entregas (DEL-022). |
 | `pipeline-ai metrics` | Motor de telemetria e observabilidade com cálculo determinístico das quatro métricas DORA (`summary`, `list`, `-json`) (DEL-020). |
@@ -20,7 +20,7 @@ A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamen
 | `pipeline-ai validate` | Valida o relatório de delivery antes do commit e abertura de PR, garantindo salvaguarda estrita de Git (D-14). Suporta flag `-json`. |
 | `pipeline-ai sync` | Sincroniza e atualiza skills (`.agents/skills`), regras e hooks em projetos existentes sem tocar em código de negócio. |
 | `pipeline-ai delivery` | Gerencia o ciclo da delivery ativa (`open`, `close`, `status`), com suporte a TTL e governança temporal (D-21). |
-| `pipeline-ai sensor` | Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada e salvaguarda contra falsos positivos (suporta `-json`) (D-24). |
+| `pipeline-ai sensor` | Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada, *Bounded Output*, *Smart Test Filtering*, marcação de resultados parciais (`truncated`, `omitted_bytes`, `failed_tests`) e salvaguarda contra falsos positivos (`-json`, `-max-output-bytes`, `-verbose-output`) (D-24, D-39). |
 | `pipeline-ai module` | Gerencia módulos opcionais (`list`, `enable`, `disable`) dinamicamente no `.pipeline-ai.json` (D-25). |
 | `pipeline-ai doctor` | Diagnostica a integridade do ambiente local (Go 1.24+, git, gh, pre-push hook e `.pipeline-ai.json`). Suporta `--json` para automações e CI. |
 | `pipeline-ai debt` | Lista e audita o inventário determinístico de atalhos deliberados (`// shortcut: <limite> \| upgrade: <gatilho>`) no código Go (`-dir`, `-json`) (D-38). |
@@ -248,10 +248,12 @@ pipeline-ai debt -dir . -json   # Emite o inventário estruturado em JSON
 ```
 
 ### Sensores de Qualidade (`pipeline-ai sensor`)
-Executa a validação de formato, vet e testes com proteção contra falsos positivos e saída estruturada (D-24):
+Executa a validação de formato, vet e testes com proteção contra falsos positivos, *Smart Test Filtering* (suprimindo blocos `--- PASS` / `--- SKIP` por padrão), *Bounded Output* com truncamento seguro UTF-8 (padrão 8 KB) e metadados explícitos de resultados parciais (`truncated`, `total_bytes`, `omitted_bytes`, `failed_tests`) (D-24, D-39):
 ```bash
-pipeline-ai sensor          # Execução padrão em formato legível
-pipeline-ai sensor -json    # Saída estruturada em JSON para integrações
+pipeline-ai sensor                              # Execução padrão com Smart Test Filtering e teto de 8 KB
+pipeline-ai sensor -json                        # Saída estruturada em JSON com failed_tests e metadados de truncamento
+pipeline-ai sensor -max-output-bytes 16384      # Customiza teto máximo de bytes por saída (0 = ilimitado)
+pipeline-ai sensor -verbose-output              # Preserva logs completos de testes aprovados (--- PASS)
 ```
 
 ### Gestão Dinâmica de Módulos (`pipeline-ai module`)
@@ -297,7 +299,7 @@ O Runner executa automaticamente a cascata em 3 estágios:
 2. **`Sensor`:** Executa a toolchain (`gofmt`, `go vet`, `go test ./...`, injeção automática de ambiente sem CGO para projetos desktop).
 3. **`Validate`:** Localiza a delivery ativa (ou via flag `-delivery` / `-report`) e audita o `report.md` contra o `git diff` real.
 
-Suporta a flag `-json` para emissão do payload estruturado com duração e status de cada estágio.
+Suporta a flag `-json` para emissão do payload estruturado com duração e status de cada estágio, além de `-max-output-bytes` e `-verbose-output` para controle de *Bounded Output* e *Smart Test Filtering* nos sensores (D-39).
 
 ---
 
@@ -400,14 +402,14 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 ### Ferramentas MCP (Tools)
 - **`pipeline_doctor`**: Executa diagnóstico completo de ambiente e configuração (`dir`).
 - **`pipeline_validate`**: Valida relatórios de entrega (`report_path`, `no_git`, `base_ref`) e salvaguardas de Git.
-- **`pipeline_run_pipeline`**: Executa a esteira determinística completa em lote (`doctor` → `sensor` → `validate`) com telemetria automática (`delivery_id`, `report_path`, `dir`).
+- **`pipeline_run_pipeline`**: Executa a esteira determinística completa em lote (`doctor` → `sensor` → `validate`) com telemetria automática e suporte a *Bounded Output* (`delivery_id`, `report_path`, `dir`, `max_output_bytes`, `verbose_output`).
 - **`pipeline_get_dashboard_html`**: Gera o dashboard HTML interativo, autocontido e responsivo com métricas DORA, esteira e histórico (`dir`).
 - **`pipeline_get_metrics`**: Retorna as métricas DORA e o histórico de telemetria dos agentes em formato JSON (`dir`, `window_days`).
 - **`pipeline_validate_handoff`**: Valida sintaxe e completude de blocos de Handoff Contract (`contract`, `file`).
 - **`pipeline_scaffold_delivery`**: Cria o esqueleto da próxima entrega (`title`, `type`, `task_code`), gera `report.md` com seções obrigatórias e registra no `INDEX.md`.
 - **`pipeline_sync_skills`**: Sincroniza e atualiza `.agents/skills` e regras a partir dos templates embutidos (`dir`).
 - **`pipeline_close_delivery`**: Encerra a delivery ativa no repositório.
-- **`pipeline_run_sensors`**: Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada e salvaguarda contra falsos positivos (`dir`).
+- **`pipeline_run_sensors`**: Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada, *Smart Test Filtering*, *Bounded Output* (`truncated`, `omitted_bytes`, `failed_tests`) e salvaguarda contra falsos positivos (`dir`, `max_output_bytes`, `verbose_output`).
 - **`pipeline_list_debt`**: Varre o diretório e retorna o inventário JSON de atalhos deliberados (`// shortcut: <limite> | upgrade: <gatilho>`) (`dir`).
 - **`pipeline_eval_semantic`**: Submete uma avaliação semântica calibrada (Jev / System One) nos modos `noul`, `choice` ou `score`, ou via `preset` (`yagni`, `minimalism`, `ponytail`) (`state`, `question`, `preset`, `mode`, `choices`, `max_score`, `threshold`, `endpoint`, `api_key`, `timeout_seconds`).
 - **`pipeline_manage_modules`**: Gerencia módulos opcionais (`action`: list, enable, disable; `module`, `dir`).

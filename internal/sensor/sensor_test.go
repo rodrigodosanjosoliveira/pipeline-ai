@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func writeFile(t *testing.T, path, content string) {
@@ -317,4 +319,289 @@ exit 0
 			}
 		})
 	}
+}
+
+func TestBoundOutput(t *testing.T) {
+	tests := []struct {
+		name             string
+		raw              string
+		maxBytes         int
+		wantTruncated    bool
+		wantTotalBytes   int
+		wantOmittedMin   int
+		wantContains     string
+		checkValidUTF8   bool
+		expectUnmodified bool
+	}{
+		{
+			name:             "texto menor que maxBytes nao trunca",
+			raw:              "linha 1\nlinha 2\nlinha 3",
+			maxBytes:         256,
+			wantTruncated:    false,
+			wantTotalBytes:   len("linha 1\nlinha 2\nlinha 3"),
+			wantOmittedMin:   0,
+			expectUnmodified: true,
+			checkValidUTF8:   true,
+		},
+		{
+			name:           "texto maior que maxBytes trunca e reporta metadados",
+			raw:            strings.Repeat("linha de log extensa para teste de truncamento\n", 40),
+			maxBytes:       120,
+			wantTruncated:  true,
+			wantTotalBytes: len(strings.Repeat("linha de log extensa para teste de truncamento\n", 40)),
+			wantOmittedMin: 1,
+			checkValidUTF8: true,
+		},
+		{
+			name:           "preserva UTF-8 valido quando corte cai no meio de caractere multibyte",
+			raw:            strings.Repeat("ação coração 🚀 ", 30),
+			maxBytes:       55, // cai em fronteira arbitrária com caracteres de 2 e 4 bytes ("ç", "ã", "🚀")
+			wantTruncated:  true,
+			wantTotalBytes: len(strings.Repeat("ação coração 🚀 ", 30)),
+			wantOmittedMin: 1,
+			checkValidUTF8: true,
+		},
+		{
+			name:             "maxBytes zero ou negativo usa DefaultMaxOutputBytes",
+			raw:              "curto",
+			maxBytes:         0,
+			wantTruncated:    false,
+			wantTotalBytes:   5,
+			wantOmittedMin:   0,
+			expectUnmodified: true,
+			checkValidUTF8:   true,
+		},
+	}
+
+	if DefaultMaxOutputBytes != 8192 {
+		t.Errorf("DefaultMaxOutputBytes = %d, esperado 8192", DefaultMaxOutputBytes)
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bounded, truncated, totalBytes, omittedBytes := BoundOutput(tt.raw, tt.maxBytes)
+			if truncated != tt.wantTruncated {
+				t.Errorf("truncated = %v, esperado %v", truncated, tt.wantTruncated)
+			}
+			if totalBytes != tt.wantTotalBytes {
+				t.Errorf("totalBytes = %d, esperado %d", totalBytes, tt.wantTotalBytes)
+			}
+			if tt.wantTruncated {
+				if omittedBytes < tt.wantOmittedMin {
+					t.Errorf("omittedBytes = %d, esperado >= %d", omittedBytes, tt.wantOmittedMin)
+				}
+			} else if omittedBytes != 0 {
+				t.Errorf("omittedBytes = %d, esperado 0 quando não truncado", omittedBytes)
+			}
+			if tt.expectUnmodified && bounded != tt.raw {
+				t.Errorf("bounded = %q, esperado %q", bounded, tt.raw)
+			}
+			if tt.checkValidUTF8 && !utf8.ValidString(bounded) {
+				t.Errorf("bounded contém UTF-8 inválido: %q", bounded)
+			}
+		})
+	}
+}
+
+func TestBoundTestOutput(t *testing.T) {
+	// Constrói saída com 50 testes que passam
+	var passBuilder strings.Builder
+	for i := 1; i <= 50; i++ {
+		fmt.Fprintf(&passBuilder, "=== RUN   TestCase%02d\n", i)
+		fmt.Fprintf(&passBuilder, "--- PASS: TestCase%02d (0.00s)\n", i)
+	}
+	passBuilder.WriteString("PASS\n")
+	passBuilder.WriteString("ok  \tpkg\t0.1s\n")
+	fiftyPassingRaw := passBuilder.String()
+
+	// Constrói saída mista com vários PASS e 2 FAIL (TestAlpha e TestBeta)
+	var mixedBuilder strings.Builder
+	for i := 1; i <= 10; i++ {
+		fmt.Fprintf(&mixedBuilder, "=== RUN   TestPass%02d\n", i)
+		fmt.Fprintf(&mixedBuilder, "--- PASS: TestPass%02d (0.00s)\n", i)
+	}
+	mixedBuilder.WriteString("=== RUN   TestAlpha\n")
+	mixedBuilder.WriteString("    alpha_test.go:15: erro detalhado em TestAlpha\n")
+	mixedBuilder.WriteString("--- FAIL: TestAlpha (0.01s)\n")
+	for i := 11; i <= 20; i++ {
+		fmt.Fprintf(&mixedBuilder, "=== RUN   TestPass%02d\n", i)
+		fmt.Fprintf(&mixedBuilder, "--- PASS: TestPass%02d (0.00s)\n", i)
+	}
+	mixedBuilder.WriteString("=== RUN   TestBeta\n")
+	mixedBuilder.WriteString("    beta_test.go:42: erro detalhado em TestBeta\n")
+	mixedBuilder.WriteString("--- FAIL: TestBeta (0.02s)\n")
+	mixedBuilder.WriteString("FAIL\n")
+	mixedBuilder.WriteString("FAIL\tpkg\t0.15s\n")
+	mixedRaw := mixedBuilder.String()
+
+	tests := []struct {
+		name               string
+		raw                string
+		maxBytes           int
+		verbose            bool
+		wantFailedTests    []string
+		wantTruncated      bool
+		wantContains       []string
+		wantNotContains    []string
+		wantMaxBoundedSize int
+	}{
+		{
+			name:            "50 testes passando com verbose=false filtra RUN e PASS e preserva resumo ok",
+			raw:             fiftyPassingRaw,
+			maxBytes:        8192,
+			verbose:         false,
+			wantFailedTests: nil,
+			wantTruncated:   true,
+			wantContains:    []string{"ok  \tpkg\t0.1s"},
+			wantNotContains: []string{"=== RUN   TestCase01", "--- PASS: TestCase01"},
+		},
+		{
+			name:            "saida mista com verbose=false preserva blocos de falha TestAlpha e TestBeta e omite PASS",
+			raw:             mixedRaw,
+			maxBytes:        8192,
+			verbose:         false,
+			wantFailedTests: []string{"TestAlpha", "TestBeta"},
+			wantTruncated:   true,
+			wantContains: []string{
+				"--- FAIL: TestAlpha",
+				"alpha_test.go:15: erro detalhado em TestAlpha",
+				"--- FAIL: TestBeta",
+				"beta_test.go:42: erro detalhado em TestBeta",
+				"FAIL\tpkg\t0.15s",
+			},
+			wantNotContains: []string{
+				"--- PASS: TestPass01",
+				"--- PASS: TestPass15",
+			},
+		},
+		{
+			name:            "verbose=true preserva linhas PASS ate o limite de maxBytes",
+			raw:             fiftyPassingRaw,
+			maxBytes:        300,
+			verbose:         true,
+			wantFailedTests: nil,
+			wantTruncated:   true,
+			wantContains:    []string{"--- PASS: TestCase01"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bounded, failedTests, truncated, totalBytes, omittedBytes := BoundTestOutput(tt.raw, tt.maxBytes, tt.verbose)
+
+			if !utf8.ValidString(bounded) {
+				t.Errorf("bounded não é UTF-8 válido")
+			}
+			if totalBytes != len(tt.raw) {
+				t.Errorf("totalBytes = %d, esperado %d", totalBytes, len(tt.raw))
+			}
+			if truncated != tt.wantTruncated {
+				t.Errorf("truncated = %v, esperado %v", truncated, tt.wantTruncated)
+			}
+			if tt.wantTruncated && omittedBytes <= 0 {
+				t.Errorf("omittedBytes = %d, esperado > 0 quando truncated=true", omittedBytes)
+			}
+			if len(tt.wantFailedTests) == 0 {
+				if len(failedTests) != 0 {
+					t.Errorf("failedTests = %v, esperado vazio", failedTests)
+				}
+			} else if !reflect.DeepEqual(failedTests, tt.wantFailedTests) {
+				t.Errorf("failedTests = %v, esperado %v", failedTests, tt.wantFailedTests)
+			}
+
+			for _, sub := range tt.wantContains {
+				if !strings.Contains(bounded, sub) {
+					t.Errorf("bounded não contém %q; saída:\n%s", sub, bounded)
+				}
+			}
+			for _, notSub := range tt.wantNotContains {
+				if strings.Contains(bounded, notSub) {
+					t.Errorf("bounded não deveria conter %q; saída:\n%s", notSub, bounded)
+				}
+			}
+		})
+	}
+}
+
+func TestRunWithOptions_BoundedAndFailedTests(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile(t, filepath.Join(dir, "go.mod"), "module boundedtestmod\n\ngo 1.24\n")
+	writeFile(t, filepath.Join(dir, "svc.go"), "package svc\n\nfunc Value() int {\n\treturn 42\n}\n")
+
+	var testSrc strings.Builder
+	testSrc.WriteString("package svc\n\nimport (\n\t\"strings\"\n\t\"testing\"\n)\n\n")
+	for i := 1; i <= 15; i++ {
+		fmt.Fprintf(&testSrc, "func TestPass%02d(t *testing.T) {\n\tif Value() != 42 {\n\t\tt.Fatal(\"err\")\n\t}\n}\n\n", i)
+	}
+	testSrc.WriteString("func TestBrokenHeavy(t *testing.T) {\n")
+	testSrc.WriteString("\tt.Log(strings.Repeat(\"detalhe extenso de falha 🚀 \", 40))\n")
+	testSrc.WriteString("\tt.Fatal(\"falha crítica em TestBrokenHeavy\")\n")
+	testSrc.WriteString("}\n")
+
+	writeFile(t, filepath.Join(dir, "svc_test.go"), testSrc.String())
+
+	res, err := RunWithOptions(dir, Options{
+		MaxOutputBytes: 256,
+		VerboseOutput:  false,
+	})
+	if err != nil {
+		t.Fatalf("RunWithOptions retornou erro inesperado: %v", err)
+	}
+	if res == nil {
+		t.Fatal("res retornado é nil")
+	}
+	if res.Overall != StatusFail || res.OK {
+		t.Errorf("res.Overall = %q, res.OK = %v, esperado FAIL/false", res.Overall, res.OK)
+	}
+	if res.TestsRun != 16 {
+		t.Errorf("res.TestsRun = %d, esperado 16", res.TestsRun)
+	}
+
+	var testSensor *CheckResult
+	for i := range res.Sensors {
+		if res.Sensors[i].Name == "test" {
+			testSensor = &res.Sensors[i]
+			break
+		}
+	}
+	if testSensor == nil {
+		t.Fatal("sensor 'test' não encontrado em res.Sensors")
+	}
+	if !testSensor.Truncated {
+		t.Errorf("testSensor.Truncated = false, esperado true")
+	}
+	if testSensor.TotalBytes <= 256 {
+		t.Errorf("testSensor.TotalBytes = %d, esperado > 256", testSensor.TotalBytes)
+	}
+	if testSensor.OmittedBytes <= 0 {
+		t.Errorf("testSensor.OmittedBytes = %d, esperado > 0", testSensor.OmittedBytes)
+	}
+	if !reflect.DeepEqual(testSensor.FailedTests, []string{"TestBrokenHeavy"}) {
+		t.Errorf("testSensor.FailedTests = %v, esperado [\"TestBrokenHeavy\"]", testSensor.FailedTests)
+	}
+	if !utf8.ValidString(testSensor.Output) {
+		t.Errorf("testSensor.Output não é UTF-8 válido")
+	}
+}
+
+func FuzzBoundTestOutput(f *testing.F) {
+	f.Add("=== RUN   TestA\n--- PASS: TestA (0.00s)\nPASS\nok\tpkg\t0.01s\n", 128, false)
+	f.Add("=== RUN   TestFail\n    a_test.go:10: boom 🚀 çã\n--- FAIL: TestFail (0.01s)\nFAIL\n", 64, false)
+	f.Add(strings.Repeat("linha com utf8 çãõé 🚀🔥\n", 50), 100, true)
+	f.Add("", 0, false)
+	f.Add("texto curto", -10, true)
+
+	f.Fuzz(func(t *testing.T, raw string, maxBytes int, verbose bool) {
+		bounded, _, truncated, totalBytes, omittedBytes := BoundTestOutput(raw, maxBytes, verbose)
+		if utf8.ValidString(raw) && !utf8.ValidString(bounded) {
+			t.Errorf("BoundTestOutput produziu UTF-8 inválido para entrada UTF-8 válida (maxBytes=%d, verbose=%v)", maxBytes, verbose)
+		}
+		if totalBytes != len(raw) {
+			t.Errorf("totalBytes = %d, len(raw) = %d", totalBytes, len(raw))
+		}
+		if !truncated && omittedBytes != 0 {
+			t.Errorf("truncated=false mas omittedBytes=%d", omittedBytes)
+		}
+	})
 }

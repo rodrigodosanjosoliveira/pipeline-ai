@@ -470,6 +470,42 @@ func TestCLISensorJSON(t *testing.T) {
 	if res["ok"] != true {
 		t.Errorf("res[\"ok\"] = %v, quer true", res["ok"])
 	}
+
+	t.Run("flags -max-output-bytes e -verbose-output", func(t *testing.T) {
+		var out, errOut bytes.Buffer
+		code := run([]string{"sensor", "-dir", tmpDir, "-max-output-bytes", "32", "-verbose-output", "-json"}, &out, &errOut)
+		if code != 0 {
+			t.Fatalf("sensor com -max-output-bytes e -verbose-output falhou com exitCode = %d, stderr: %s", code, errOut.String())
+		}
+
+		var parsed struct {
+			Overall string `json:"overall"`
+			OK      bool   `json:"ok"`
+			Sensors []struct {
+				Name         string `json:"name"`
+				Truncated    bool   `json:"truncated"`
+				TotalBytes   int    `json:"total_bytes"`
+				OmittedBytes int    `json:"omitted_bytes"`
+			} `json:"sensors"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v (raw: %s)", err, out.String())
+		}
+		if !parsed.OK || parsed.Overall != "PASS" {
+			t.Errorf("parsed.Overall = %q, parsed.OK = %v, quer PASS/true", parsed.Overall, parsed.OK)
+		}
+
+		foundTruncated := false
+		for _, s := range parsed.Sensors {
+			if s.Name == "test" && s.Truncated && s.OmittedBytes > 0 {
+				foundTruncated = true
+				break
+			}
+		}
+		if !foundTruncated {
+			t.Errorf("esperava sensor 'test' truncado com -max-output-bytes 32; obtido: %+v", parsed.Sensors)
+		}
+	})
 }
 
 func TestCLIModuleCommands(t *testing.T) {
@@ -724,6 +760,14 @@ Aprovado sem ressalvas.
 		}
 		if parsed.DeliveryID != "DEL-017" {
 			t.Errorf("DeliveryID = %q, esperado %q", parsed.DeliveryID, "DEL-017")
+		}
+	})
+
+	t.Run("flag -max-output-bytes no run", func(t *testing.T) {
+		var out, errOut bytes.Buffer
+		code := run([]string{"run", "-dir", tmpDir, "-delivery", "DEL-017", "-no-git", "-max-output-bytes", "256", "-json"}, &out, &errOut)
+		if code != 0 {
+			t.Fatalf("run com -max-output-bytes retornou exitCode = %d, esperado 0. stderr: %s", code, errOut.String())
 		}
 	})
 }

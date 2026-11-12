@@ -47,11 +47,13 @@ type Result struct {
 
 // Options configura a execução do runner.
 type Options struct {
-	Dir        string `json:"dir"`
-	DeliveryID string `json:"delivery_id,omitempty"`
-	ReportPath string `json:"report_path,omitempty"`
-	BaseRef    string `json:"base_ref,omitempty"`
-	NoGit      bool   `json:"no_git"`
+	Dir            string `json:"dir"`
+	DeliveryID     string `json:"delivery_id,omitempty"`
+	ReportPath     string `json:"report_path,omitempty"`
+	BaseRef        string `json:"base_ref,omitempty"`
+	NoGit          bool   `json:"no_git"`
+	MaxOutputBytes int    `json:"max_output_bytes,omitempty"`
+	VerboseOutput  bool   `json:"verbose_output,omitempty"`
 }
 
 // Run executa os gates integrados do pipeline.
@@ -131,7 +133,10 @@ func Run(opts Options) (*Result, error) {
 
 	// 2. sensor
 	sensorStart := time.Now()
-	sensorRes, err := sensor.Run(absRoot)
+	sensorRes, err := sensor.RunWithOptions(absRoot, sensor.Options{
+		MaxOutputBytes: opts.MaxOutputBytes,
+		VerboseOutput:  opts.VerboseOutput,
+	})
 	sensorDur := time.Since(sensorStart)
 	sensorStep := StepResult{
 		Name:    "sensor",

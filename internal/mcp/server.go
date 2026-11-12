@@ -333,6 +333,10 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 						"type":        "string",
 						"description": "Diretório raiz do projeto a ser analisado (padrão: raiz atual)",
 					},
+					"max_output_bytes": map[string]any{
+						"type":        "integer",
+						"description": "Limite máximo de bytes da saída por sensor (padrão: 8192)",
+					},
 				},
 			},
 		},
@@ -384,6 +388,10 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 					"base_ref": map[string]any{
 						"type":        "string",
 						"description": "Referência git base para validação de diff",
+					},
+					"max_output_bytes": map[string]any{
+						"type":        "integer",
+						"description": "Limite máximo de bytes da saída dos sensores (padrão: 8192)",
 					},
 				},
 			},
@@ -687,7 +695,12 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			}
 		}
 
-		res, err := sensor.Run(targetDir)
+		maxBytes := 0
+		if v, ok := params.Arguments["max_output_bytes"].(float64); ok && v > 0 {
+			maxBytes = int(v)
+		}
+
+		res, err := sensor.RunWithOptions(targetDir, sensor.Options{MaxOutputBytes: maxBytes})
 		if err != nil {
 			s.sendResult(out, req.ID, ToolResult{
 				Content: []ToolContent{
@@ -918,12 +931,18 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			baseRef, _ = params.Arguments["baseRef"].(string)
 		}
 
+		maxBytes := 0
+		if v, ok := params.Arguments["max_output_bytes"].(float64); ok && v > 0 {
+			maxBytes = int(v)
+		}
+
 		opts := runner.Options{
-			Dir:        targetDir,
-			DeliveryID: strings.TrimSpace(deliveryID),
-			ReportPath: strings.TrimSpace(reportPath),
-			BaseRef:    strings.TrimSpace(baseRef),
-			NoGit:      noGit,
+			Dir:            targetDir,
+			DeliveryID:     strings.TrimSpace(deliveryID),
+			ReportPath:     strings.TrimSpace(reportPath),
+			BaseRef:        strings.TrimSpace(baseRef),
+			NoGit:          noGit,
+			MaxOutputBytes: maxBytes,
 		}
 
 		res, err := runner.Run(opts)

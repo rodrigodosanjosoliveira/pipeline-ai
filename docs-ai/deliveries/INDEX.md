@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-036 | TASK-036 | Ajuste de formatação e legibilidade no post de divulgação do artigo YAGNI para o LinkedIn | docs | 2026-11-10 | draft |
+| DEL-037 | TASK-037 | Bounded Output, Smart Test Filtering e marcação de resultados parciais no sensor e runner (CLI e MCP) | feat | 2026-11-12 | draft |
+| DEL-036 | TASK-036 | Ajuste de formatação e legibilidade no post de divulgação do artigo YAGNI para o LinkedIn | docs | 2026-11-10 | merged |
 | DEL-035 | TASK-035 | Release v0.11.0: Consolidação da Governança Anti-Overengineering, Debt Ledger, DORA auto-MTTR e 5º artigo técnico | chore | 2026-11-09 | merged |
 | DEL-034 | TASK-034 | Governança Anti-Overengineering: Decision Ladder, Debt Ledger (internal/debt) e preset semântico YAGNI | feat | 2026-11-09 | merged |
 | DEL-033 | TASK-033 | Integração automática de EventGate (runner), delivery close e MTTR inferido no cálculo das 4 métricas DORA | feat | 2026-11-06 | merged |

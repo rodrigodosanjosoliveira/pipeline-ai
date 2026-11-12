@@ -547,6 +547,14 @@ func TestMCPToolsRunSensors(t *testing.T) {
 		tool, ok := raw.(map[string]any)
 		if ok && tool["name"] == "pipeline_run_sensors" {
 			hasSensors = true
+			schema, ok := tool["inputSchema"].(map[string]any)
+			if !ok {
+				t.Fatalf("inputSchema inválido para pipeline_run_sensors")
+			}
+			props, ok := schema["properties"].(map[string]any)
+			if !ok || props["max_output_bytes"] == nil {
+				t.Errorf("inputSchema de pipeline_run_sensors deve expor 'max_output_bytes'")
+			}
 			break
 		}
 	}
@@ -554,8 +562,8 @@ func TestMCPToolsRunSensors(t *testing.T) {
 		t.Errorf("ferramenta 'pipeline_run_sensors' não encontrada em tools/list")
 	}
 
-	// 2. Invoca pipeline_run_sensors via tools/call
-	reqCall := `{"jsonrpc":"2.0","id":111,"method":"tools/call","params":{"name":"pipeline_run_sensors","arguments":{"dir":"."}}}`
+	// 2. Invoca pipeline_run_sensors via tools/call (com max_output_bytes)
+	reqCall := `{"jsonrpc":"2.0","id":111,"method":"tools/call","params":{"name":"pipeline_run_sensors","arguments":{"dir":".","max_output_bytes":64}}}`
 	resCall := runRPC(t, s, reqCall)
 	resultCall, ok := resCall["result"].(map[string]any)
 	if !ok {
@@ -781,6 +789,14 @@ func TestMCPToolsRunPipeline(t *testing.T) {
 				if desc == "" {
 					t.Errorf("ferramenta pipeline_run_pipeline sem descrição")
 				}
+				schema, ok := tool["inputSchema"].(map[string]any)
+				if !ok {
+					t.Fatalf("inputSchema inválido para pipeline_run_pipeline")
+				}
+				props, ok := schema["properties"].(map[string]any)
+				if !ok || props["max_output_bytes"] == nil {
+					t.Errorf("inputSchema de pipeline_run_pipeline deve expor 'max_output_bytes'")
+				}
 				break
 			}
 		}
@@ -791,7 +807,7 @@ func TestMCPToolsRunPipeline(t *testing.T) {
 
 	// 2. tools/call executa pipeline_run_pipeline retornando JSON estruturado
 	t.Run("tools/call pipeline_run_pipeline", func(t *testing.T) {
-		callReq := fmt.Sprintf(`{"jsonrpc":"2.0","id":101,"method":"tools/call","params":{"name":"pipeline_run_pipeline","arguments":{"dir":%q,"no_git":true}}}`, tmpDir)
+		callReq := fmt.Sprintf(`{"jsonrpc":"2.0","id":101,"method":"tools/call","params":{"name":"pipeline_run_pipeline","arguments":{"dir":%q,"no_git":true,"max_output_bytes":128}}}`, tmpDir)
 		res := runRPC(t, s, callReq)
 
 		result, ok := res["result"].(map[string]any)
