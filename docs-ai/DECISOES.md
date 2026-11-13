@@ -696,4 +696,26 @@ Padronização da experiência não-interativa e estruturada para orquestradores
 3. **Alternativas descartadas:**
    - Detectar variáveis de ambiente genéricas de IDEs (como `TERM_PROGRAM=vscode`) para ativar JSON automaticamente: descartado pois desenvolvedores humanos usam o terminal integrado do VS Code/Cursor e esperam saída textual legível por padrão, além de quebrar testes de integração da CLI que verificam saída formatada para humanos.
 
+---
+
+## 15. Orquestração Multi-Tier e Provider Semântico Nativo Gemini (v0.12.0)
+
+### D-41 — Thinking Tier Matrix (`model_routing`) e Provider Nativo Gemini Hydrogen no Sensor Semântico (DEL-039)
+
+1. **Contexto:**
+   - Orquestrar todas as skills da esteira com um único tier de raciocínio desperdiça cota e latência em etapas mecânicas (`docs-update`, `git-delivery`), enquanto depender exclusivamente de um endpoint proprietário externo (`JEV_ENDPOINT`) para `pipeline-ai eval` impede o uso direto de modelos nativos com `responseSchema` e `thinkingConfig`.
+
+2. **Decisão:**
+   - **Thinking Tier Matrix (`model_routing` em `.pipeline-ai.json` e MCP `pipeline://catalog`):**
+     - Adicionar `model_routing` em `config.Config` (`.pipeline-ai.json`) com `DefaultModelRouting()` e `ResolveSkillModel(skill)` distribuindo as skills entre `gemini-4-hydrogen-low` (mecânicas: `docs-update`, `git-delivery`, `release-ops`), `gemini-4-hydrogen-medium` (execução/triagem: `pm-triage`, `test-writer`, `dev-implementation`, `data-model`, `context-loader`, `qa-validation`) e `gemini-4-hydrogen-high` (revisão/arquitetura/segurança: `architecture-guardrails`, `code-reviewer`, `migration-reviewer`, `query-performance`, `security-review`, `supply-chain-review`, `agent-auditor`).
+     - Expor o mapeamento determinístico de roteamento por skill no recurso MCP `pipeline://catalog`.
+   - **Provider Nativo `"gemini"` em `internal/sensor/semantic`:**
+     - Implementar o provider nativo `"gemini"` em `internal/sensor/semantic` (100% Go stdlib `net/http`) usando `generateContent` com `responseMimeType: "application/json"`, `responseSchema` estrito por modo (`noul`, `choice`, `score`), `thinkingConfig.thinkingLevel` (padrão `"low"`) e autenticação exclusiva via header `x-goog-api-key` (nunca na URL), preservando SEC-01, SEC-02 e SEC-03.
+     - Suporte na CLI `pipeline-ai eval` às flags `-provider gemini`, `-model gemini-4-hydrogen-low`, `-thinking-level low` e variável `GEMINI_API_KEY`.
+     - Suporte na tool MCP `pipeline_eval_semantic` aos parâmetros `provider`, `model` e `thinking_level`.
+
+3. **Alternativas descartadas:**
+   - Adicionar SDK oficial externo (`google.golang.org/genai`) ao `go.mod`: descartado pela invariante de zero dependências externas na CLI, mantendo `net/http` puro da stdlib.
+   - Passar a API key como query parameter `?key=` na URL: descartado pelo risco de vazamento em erros `net/url` e logs.
+
 

@@ -188,10 +188,12 @@ func (s *Server) handleResourcesRead(req *Request, out io.Writer) {
 		var text strings.Builder
 		text.WriteString("# Catálogo de Skills Nativas (.agents/skills)\n\n")
 		skillsDir := filepath.Join(s.RootDir, ".agents", "skills")
+		cfg, _ := config.Load(s.RootDir)
 		if entries, err := os.ReadDir(skillsDir); err == nil {
 			for _, e := range entries {
 				if e.IsDir() {
-					text.WriteString(fmt.Sprintf("- **%s**\n", e.Name()))
+					model := cfg.ResolveSkillModel(e.Name())
+					text.WriteString(fmt.Sprintf("- **%s** (model: %s)\n", e.Name(), model))
 				}
 			}
 		}
@@ -488,6 +490,20 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 					"api_key": map[string]any{
 						"type":        "string",
 						"description": "Chave de autenticação da API semântica (opcional)",
+					},
+					"provider": map[string]any{
+						"type":        "string",
+						"description": "Provider semântico ('jev' ou 'gemini', padrão inferido ou 'jev')",
+						"enum":        []string{"jev", "gemini"},
+					},
+					"model": map[string]any{
+						"type":        "string",
+						"description": "Modelo para avaliação semântica quando provider='gemini' (padrão gemini-4-hydrogen-low)",
+					},
+					"thinking_level": map[string]any{
+						"type":        "string",
+						"description": "Nível de thinking para gemini ('low', 'medium', 'high', padrão 'low')",
+						"enum":        []string{"low", "medium", "high"},
 					},
 				},
 				"required": []string{"state"},
@@ -1313,13 +1329,40 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			return
 		}
 
+		rawProvider, _ := params.Arguments["provider"].(string)
+		rawModel, _ := params.Arguments["model"].(string)
+		rawThinkingLevel, _ := params.Arguments["thinking_level"].(string)
+
+		provider := strings.ToLower(strings.TrimSpace(rawProvider))
+		if provider == "" {
+			provider = strings.ToLower(strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_PROVIDER")))
+		}
+
+		model := strings.TrimSpace(rawModel)
+		if model == "" && (provider == semantic.ProviderGemini || strings.Contains(strings.TrimSpace(fmt.Sprint(params.Arguments["endpoint"])), "generativelanguage.googleapis.com")) {
+			model = semantic.DefaultGeminiModel
+		}
+
+		thinkingLevel := strings.ToLower(strings.TrimSpace(rawThinkingLevel))
+		if thinkingLevel == "" && (provider == semantic.ProviderGemini || strings.Contains(strings.TrimSpace(fmt.Sprint(params.Arguments["endpoint"])), "generativelanguage.googleapis.com")) {
+			thinkingLevel = semantic.DefaultGeminiThinkingLevel
+		}
+
 		var endpoint string
 		if rawEndpoint, ok := params.Arguments["endpoint"].(string); ok && strings.TrimSpace(rawEndpoint) != "" {
 			endpoint = strings.TrimSpace(rawEndpoint)
 		} else {
 			endpoint = strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_ENDPOINT"))
 			if endpoint == "" {
-				endpoint = strings.TrimSpace(os.Getenv("JEV_ENDPOINT"))
+				if provider == semantic.ProviderGemini {
+					gemModel := model
+					if gemModel == "" {
+						gemModel = semantic.DefaultGeminiModel
+					}
+					endpoint = fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", gemModel)
+				} else {
+					endpoint = strings.TrimSpace(os.Getenv("JEV_ENDPOINT"))
+				}
 			}
 		}
 
@@ -1329,7 +1372,17 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 		} else {
 			apiKey = strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_API_KEY"))
 			if apiKey == "" {
-				apiKey = strings.TrimSpace(os.Getenv("JEV_API_KEY"))
+				if provider == semantic.ProviderGemini || strings.Contains(endpoint, "generativelanguage.googleapis.com") {
+					apiKey = strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+					if apiKey == "" {
+						apiKey = strings.TrimSpace(os.Getenv("JEV_API_KEY"))
+					}
+				} else {
+					apiKey = strings.TrimSpace(os.Getenv("JEV_API_KEY"))
+					if apiKey == "" {
+						apiKey = strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+					}
+				}
 			}
 		}
 
@@ -1350,10 +1403,13 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 		defer cancel()
 
 		client := semantic.NewClient(semantic.ClientConfig{
-			Endpoint:     endpoint,
-			APIKey:       apiKey,
-			Timeout:      15 * time.Second,
-			MaxBodyBytes: 10 * 1024 * 1024,
+			Endpoint:      endpoint,
+			APIKey:        apiKey,
+			Timeout:       15 * time.Second,
+			MaxBodyBytes:  10 * 1024 * 1024,
+			Provider:      provider,
+			Model:         model,
+			ThinkingLevel: thinkingLevel,
 		})
 
 		evalReq := semantic.EvalRequest{
@@ -1403,7 +1459,7 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 
 		_ = metrics.RecordSemanticEval(s.RootDir, activeDelID, mode, time.Since(start), err == nil, conf)
 
-		secrets := []string{apiKey, os.Getenv("JEV_API_KEY"), os.Getenv("PIPELINE_SEMANTIC_API_KEY")}
+		secrets := []string{apiKey, os.Getenv("JEV_API_KEY"), os.Getenv("PIPELINE_SEMANTIC_API_KEY"), os.Getenv("GEMINI_API_KEY")}
 
 		if err != nil {
 			sanitized := redactSecrets(err.Error(), secrets...)

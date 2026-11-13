@@ -2,7 +2,7 @@
 delivery_id: DEL-038
 task_code: TASK-038
 title: "Agent Mode, detecção de TTY, hardening não-interativo e cobertura JSON integral na CLI"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false
