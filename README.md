@@ -302,24 +302,28 @@ pipeline-ai module list -no-agent
 ```
 
 ### Avaliação Semântica Calibrada (`pipeline-ai eval`)
-Submete uma avaliação semântica calibrada (System One / Jev) nos modos binário (`noul`), múltipla escolha (`choice`) ou pontuação contínua (`score`) (D-34, D-35):
+Submete uma avaliação semântica calibrada (System One / Jev ou nativo Gemini) nos modos binário (`noul`), múltipla escolha (`choice`) ou pontuação contínua (`score`) (D-34, D-35, D-41):
 ```bash
-# Avaliação binária (default -mode noul) a partir de string direta:
+# Avaliação binária (default -mode noul) com provider nativo Gemini Hydrogen (Thinking Tier low):
+export GEMINI_API_KEY="AIzaSy..."
+pipeline-ai eval -provider gemini -model gemini-4-hydrogen-low -thinking-level low -state "func foo() {}" -question "o código está completo?" -threshold 0.8
+
+# Avaliação binária a partir de string direta (provider default jev):
 pipeline-ai eval -state "func foo() {}" -question "o código está completo?" -threshold 0.8
 
-# Avaliação de múltipla escolha (-mode choice) para roteamento ou classificação:
-pipeline-ai eval -mode choice -state "erro SQL syntax" -question "qual skill acionar?" -choices "data-model,migration-reviewer,dev-implementation"
+# Avaliação de múltipla escolha (-mode choice) com Gemini para roteamento ou classificação:
+pipeline-ai eval -provider gemini -mode choice -state "erro SQL syntax" -question "qual skill acionar?" -choices "data-model,migration-reviewer,dev-implementation"
 
 # Avaliação de pontuação contínua (-mode score) com escala customizada:
 pipeline-ai eval -mode score -state main.go -question "qualidade do tratamento de erros" -max-score 10 -threshold 0.7
 
-# Avaliação lendo do stdin com saída estruturada em JSON:
-cat main.go | pipeline-ai eval -question "o pacote é main?" -json
+# Avaliação lendo do stdin com saída estruturada em JSON via provider Gemini:
+cat main.go | pipeline-ai eval -provider gemini -question "o pacote é main?" -json
 
 # Auditoria anti-overengineering usando o preset semântico calibrado YAGNI:
 git diff | pipeline-ai eval -preset yagni -threshold 0.8
 ```
-Protegido por salvaguardas mandatórias: anti-hallucination em escolhas (SEC-01), bounds e calibração normalizada em scores (SEC-02), redação de tokens (`[REDACTED]`), limite de 512KB no estado e timeout estrito (SEC-03).
+Protegido por salvaguardas mandatórias: autenticação segura via header `x-goog-api-key` (SEC-01), anti-hallucination em escolhas (SEC-01), bounds e calibração normalizada em scores (SEC-02), redação de tokens (`[REDACTED]`), limite de 512KB no estado e timeout estrito (SEC-03).
 
 ---
 
@@ -437,7 +441,7 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 ### Recursos MCP (Resources)
 - **`pipeline://invariants`**: Fornece os invariantes de arquitetura e governança do projeto.
 - **`pipeline://active-delivery`**: Retorna o status da entrega ativa e tabela do `INDEX.md`.
-- **`pipeline://catalog`**: Lista de skills nativas e módulos disponíveis.
+- **`pipeline://catalog`**: Lista de skills nativas, módulos disponíveis e mapeamento de roteamento de modelos por skill (`model_routing`) (D-41).
 - **`pipeline://delivery/active`**: Metadados, status e expiração da delivery atualmente ativa em JSON (D-21).
 
 ### Ferramentas MCP (Tools)
@@ -452,16 +456,20 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 - **`pipeline_close_delivery`**: Encerra a delivery ativa no repositório.
 - **`pipeline_run_sensors`**: Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada, *Smart Test Filtering*, *Bounded Output* (`truncated`, `omitted_bytes`, `failed_tests`) e salvaguarda contra falsos positivos (`dir`, `max_output_bytes`, `verbose_output`).
 - **`pipeline_list_debt`**: Varre o diretório e retorna o inventário JSON de atalhos deliberados (`// shortcut: <limite> | upgrade: <gatilho>`) (`dir`).
-- **`pipeline_eval_semantic`**: Submete uma avaliação semântica calibrada (Jev / System One) nos modos `noul`, `choice` ou `score`, ou via `preset` (`yagni`, `minimalism`, `ponytail`) (`state`, `question`, `preset`, `mode`, `choices`, `max_score`, `threshold`, `endpoint`, `api_key`, `timeout_seconds`).
+- **`pipeline_eval_semantic`**: Submete uma avaliação semântica calibrada (Jev ou nativo Gemini) nos modos `noul`, `choice` ou `score`, ou via `preset` (`yagni`, `minimalism`, `ponytail`) (`state`, `question`, `preset`, `mode`, `choices`, `max_score`, `threshold`, `provider`, `model`, `thinking_level`, `endpoint`, `api_key`, `timeout_seconds`) (D-34, D-35, D-41).
 - **`pipeline_manage_modules`**: Gerencia módulos opcionais (`action`: list, enable, disable; `module`, `dir`).
 
 ---
 
 ## Roadmap (Próximas Entregas)
 
-### Gemini 4 Hydrogen Routing & Native Semantic Provider (`DEL-039`)
-- **Thinking Tier Matrix por Skill (`model_routing` em `.pipeline-ai.json` e frontmatter das skills):** roteamento determinístico entre níveis de raciocínio (`gemini-4-hydrogen-low` para skills mecânicas como `docs-update` e `git-delivery`, `gemini-4-hydrogen-medium` para `pm-triage`, `test-writer` e `dev-implementation`, e `gemini-4-hydrogen-high`/`xhigh` para `architecture-guardrails`, `code-reviewer` e `security-review`), maximizando velocidade e preservando cota.
-- **Provider Nativo Gemini Hydrogen em `internal/sensor/semantic`:** suporte ao endpoint `generateContent` com `responseSchema` estrito (`decision`/`selected_option`/`score`, `confidence`, `reasoning`) e `thinkingLevel: "low"` no comando `pipeline-ai eval` e na tool MCP `pipeline_eval_semantic`, usando 100% stdlib `net/http`.
+### Discovery & Schema Introspection (`--schema`) (`DEL-040`)
+- **Introspecção de Esquemas em Tempo de Execução:** Suporte à flag global `--schema` e subcomando `pipeline-ai schema` para expor esquemas JSON Schema de entrada e saída de todos os subcomandos, facilitando a autodescoberta dinâmica por agentes de IA e clientes MCP.
+- **Validação Estrutural Pré-Voo:** Verificação declarativa de payloads antes da execução da esteira.
+
+### Helpful Errors com Hints Acionáveis & Guided Recovery (`DEL-041`)
+- **Mensagens de Erro Orientadas a Ação:** Padronização de mensagens de erro estruturadas na CLI e MCP contendo diagnóstico determinístico (`cause`), contexto de falha e sugestão direta de recuperação (`hint` e `fix_command`).
+- **Sugestão Automática de Correções:** Dicas de comandos de autocorreção quando arquivos ou parâmetros obrigatórios estiverem ausentes.
 
 ---
 

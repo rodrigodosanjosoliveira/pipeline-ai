@@ -2,7 +2,9 @@ package semantic_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -970,5 +972,317 @@ func TestEvalScore(t *testing.T) {
 		if strings.Contains(err.Error(), secretKey) {
 			t.Fatalf("SEC-03 violation: EvalScore error leaked secret APIKey: %v", err)
 		}
+	})
+}
+
+func TestGeminiProvider_EvalModesAndSecurity(t *testing.T) {
+	apiKey := "gem-secret-123"
+
+	t.Run("Headers e payload estruturado para REST Gemini generateContent", func(t *testing.T) {
+		var capturedReq *http.Request
+		var capturedBody []byte
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedReq = r
+			bodyBytes, _ := io.ReadAll(r.Body)
+			capturedBody = bodyBytes
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"decision\":true,\"confidence\":0.92,\"reason\":\"ok\"}"}]}}]}`))
+		}))
+		defer srv.Close()
+
+		client := semantic.NewClient(semantic.ClientConfig{
+			Provider:      semantic.ProviderGemini,
+			Endpoint:      srv.URL,
+			APIKey:        apiKey,
+			Model:         semantic.DefaultGeminiModel,
+			ThinkingLevel: semantic.DefaultGeminiThinkingLevel,
+			Timeout:       2 * time.Second,
+		})
+
+		ctx := context.Background()
+		_, err := client.EvalNoul(ctx, semantic.EvalRequest{
+			State:     "func test() {}",
+			Question:  "isValid?",
+			Threshold: 0.8,
+		})
+		if err != nil {
+			t.Fatalf("EvalNoul retornou erro inesperado: %v", err)
+		}
+
+		if capturedReq.Method != http.MethodPost {
+			t.Errorf("Método HTTP = %q, esperado %q", capturedReq.Method, http.MethodPost)
+		}
+		if capturedReq.Header.Get("x-goog-api-key") != apiKey {
+			t.Errorf("Header x-goog-api-key = %q, esperado %q", capturedReq.Header.Get("x-goog-api-key"), apiKey)
+		}
+		if authHeader := capturedReq.Header.Get("Authorization"); authHeader != "" {
+			t.Errorf("Header Authorization não deve estar presente no provider Gemini, obteve %q", authHeader)
+		}
+		if strings.Contains(capturedReq.URL.RawQuery, "key=") {
+			t.Errorf("Query params na URL não devem conter 'key=', obteve %q", capturedReq.URL.RawQuery)
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(capturedBody, &payload); err != nil {
+			t.Fatalf("Body enviado não é JSON válido: %v", err)
+		}
+
+		if _, ok := payload["contents"]; !ok {
+			t.Errorf("Payload enviado não contém campo 'contents': %s", string(capturedBody))
+		}
+
+		genCfg, ok := payload["generationConfig"].(map[string]any)
+		if !ok {
+			t.Fatalf("Payload enviado não contém 'generationConfig': %s", string(capturedBody))
+		}
+
+		if genCfg["responseMimeType"] != "application/json" {
+			t.Errorf("generationConfig.responseMimeType = %v, esperado 'application/json'", genCfg["responseMimeType"])
+		}
+		if _, ok := genCfg["responseSchema"]; !ok {
+			t.Errorf("generationConfig.responseSchema ausente no payload: %v", genCfg)
+		}
+
+		thinkingCfg, ok := genCfg["thinkingConfig"].(map[string]any)
+		if !ok {
+			t.Fatalf("generationConfig.thinkingConfig ausente no payload: %v", genCfg)
+		}
+		if thinkingCfg["thinkingLevel"] != "low" {
+			t.Errorf("thinkingConfig.thinkingLevel = %v, esperado 'low'", thinkingCfg["thinkingLevel"])
+		}
+	})
+
+	t.Run("EvalNoul com decodificação de campos", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"decision\":true,\"confidence\":0.92,\"reason\":\"ok\"}"}]}}]}`))
+		}))
+		defer srv.Close()
+
+		client := semantic.NewClient(semantic.ClientConfig{
+			Provider:      semantic.ProviderGemini,
+			Endpoint:      srv.URL,
+			APIKey:        apiKey,
+			Model:         semantic.DefaultGeminiModel,
+			ThinkingLevel: semantic.DefaultGeminiThinkingLevel,
+			Timeout:       2 * time.Second,
+		})
+
+		dec, err := client.EvalNoul(context.Background(), semantic.EvalRequest{
+			State:     "active",
+			Question:  "ok?",
+			Threshold: 0.8,
+		})
+		if err != nil {
+			t.Fatalf("EvalNoul retornou erro: %v", err)
+		}
+		if !dec.Decision {
+			t.Errorf("Decision = %v, quer true", dec.Decision)
+		}
+		if dec.Confidence != 0.92 {
+			t.Errorf("Confidence = %v, quer 0.92", dec.Confidence)
+		}
+		if dec.Reason != "ok" {
+			t.Errorf("Reason = %q, quer 'ok'", dec.Reason)
+		}
+	})
+
+	t.Run("EvalChoice com sucesso e rejeição SEC-01 de opção alucinada", func(t *testing.T) {
+		var respText string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"candidates":[{"content":{"parts":[{"text":%q}]}}]}`, respText)))
+		}))
+		defer srv.Close()
+
+		client := semantic.NewClient(semantic.ClientConfig{
+			Provider:      semantic.ProviderGemini,
+			Endpoint:      srv.URL,
+			APIKey:        apiKey,
+			Model:         semantic.DefaultGeminiModel,
+			ThinkingLevel: semantic.DefaultGeminiThinkingLevel,
+			Timeout:       2 * time.Second,
+		})
+
+		// 1. Sucesso com opção válida
+		respText = `{"selected":"feat","confidence":0.95,"options":{"feat":0.95,"fix":0.05},"reason":"feature detectada"}`
+		dec, err := client.EvalChoice(context.Background(), semantic.EvalRequest{
+			State:     "add new function",
+			Question:  "type?",
+			Threshold: 0.8,
+			Choices:   []string{"feat", "fix"},
+		})
+		if err != nil {
+			t.Fatalf("EvalChoice retornou erro inesperado: %v", err)
+		}
+		if dec.Selected != "feat" {
+			t.Errorf("Selected = %q, quer 'feat'", dec.Selected)
+		}
+
+		// 2. Opção alucinada fora de Choices rejeitada com ErrInvalidChoice (SEC-01)
+		respText = `{"selected":"refactor","confidence":0.98,"options":{"refactor":0.98},"reason":"refactor detectado"}`
+		_, err = client.EvalChoice(context.Background(), semantic.EvalRequest{
+			State:     "add new function",
+			Question:  "type?",
+			Threshold: 0.8,
+			Choices:   []string{"feat", "fix"},
+		})
+		if err == nil {
+			t.Fatal("esperava erro ao retornar opção alucinada fora de choices, obteve nil")
+		}
+		if !errors.Is(err, semantic.ErrInvalidChoice) {
+			t.Errorf("esperava ErrInvalidChoice, obteve: %v", err)
+		}
+	})
+
+	t.Run("EvalScore com sucesso e rejeição SEC-02 de score fora dos limites", func(t *testing.T) {
+		var respText string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"candidates":[{"content":{"parts":[{"text":%q}]}}]}`, respText)))
+		}))
+		defer srv.Close()
+
+		client := semantic.NewClient(semantic.ClientConfig{
+			Provider:      semantic.ProviderGemini,
+			Endpoint:      srv.URL,
+			APIKey:        apiKey,
+			Model:         semantic.DefaultGeminiModel,
+			ThinkingLevel: semantic.DefaultGeminiThinkingLevel,
+			Timeout:       2 * time.Second,
+		})
+
+		// 1. Sucesso com score válido
+		respText = `{"score":8.5,"max_score":10.0,"reason":"boa qualidade"}`
+		dec, err := client.EvalScore(context.Background(), semantic.EvalRequest{
+			State:     "clean code",
+			Question:  "score?",
+			Threshold: 0.8,
+			MaxScore:  10.0,
+		})
+		if err != nil {
+			t.Fatalf("EvalScore retornou erro: %v", err)
+		}
+		if dec.Score != 8.5 || dec.MaxScore != 10.0 {
+			t.Errorf("Score/MaxScore = %v/%v, quer 8.5/10.0", dec.Score, dec.MaxScore)
+		}
+
+		// 2. Score fora dos limites (maior que MaxScore) rejeitado com ErrInvalidScore (SEC-02)
+		respText = `{"score":15.0,"max_score":10.0,"reason":"score estourado"}`
+		_, err = client.EvalScore(context.Background(), semantic.EvalRequest{
+			State:     "code",
+			Question:  "score?",
+			Threshold: 0.8,
+			MaxScore:  10.0,
+		})
+		if err == nil {
+			t.Fatal("esperava erro com score > max_score, obteve nil")
+		}
+		if !errors.Is(err, semantic.ErrInvalidScore) {
+			t.Errorf("esperava ErrInvalidScore, obteve: %v", err)
+		}
+
+		// 3. Score negativo rejeitado com ErrInvalidScore (SEC-02)
+		respText = `{"score":-2.0,"max_score":10.0,"reason":"score negativo"}`
+		_, err = client.EvalScore(context.Background(), semantic.EvalRequest{
+			State:     "code",
+			Question:  "score?",
+			Threshold: 0.8,
+			MaxScore:  10.0,
+		})
+		if err == nil {
+			t.Fatal("esperava erro com score negativo, obteve nil")
+		}
+		if !errors.Is(err, semantic.ErrInvalidScore) {
+			t.Errorf("esperava ErrInvalidScore, obteve: %v", err)
+		}
+	})
+
+	t.Run("SEC-03: Redação de apiKey em erro e MaxBodyBytes", func(t *testing.T) {
+		// Redação de erro HTTP contendo APIKey
+		srvErr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("internal error leaking " + apiKey))
+		}))
+		defer srvErr.Close()
+
+		clientErr := semantic.NewClient(semantic.ClientConfig{
+			Provider: semantic.ProviderGemini,
+			Endpoint: srvErr.URL,
+			APIKey:   apiKey,
+			Timeout:  2 * time.Second,
+		})
+
+		_, err := clientErr.EvalNoul(context.Background(), semantic.EvalRequest{
+			State:     "test",
+			Question:  "ok?",
+			Threshold: 0.8,
+		})
+		if err == nil {
+			t.Fatal("esperava erro do servidor com status 500")
+		}
+		if strings.Contains(err.Error(), apiKey) {
+			t.Fatalf("SEC-03 violação: erro expôs APIKey secreta: %v", err)
+		}
+
+		// MaxBodyBytes excedido retorna ErrResponseTooLarge
+		srvLarge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"` + strings.Repeat("A", 1000) + `"}]}}]}`))
+		}))
+		defer srvLarge.Close()
+
+		clientLarge := semantic.NewClient(semantic.ClientConfig{
+			Provider:     semantic.ProviderGemini,
+			Endpoint:     srvLarge.URL,
+			APIKey:       apiKey,
+			MaxBodyBytes: 100,
+			Timeout:      2 * time.Second,
+		})
+
+		_, err = clientLarge.EvalNoul(context.Background(), semantic.EvalRequest{
+			State:     "test",
+			Question:  "ok?",
+			Threshold: 0.8,
+		})
+		if err == nil {
+			t.Fatal("esperava ErrResponseTooLarge, obteve nil")
+		}
+		if !errors.Is(err, semantic.ErrResponseTooLarge) {
+			t.Errorf("esperava ErrResponseTooLarge, obteve: %v", err)
+		}
+	})
+
+	t.Run("ParseGeminiResponse extrai candidates e rejeita payloads invalidos", func(t *testing.T) {
+		t.Run("ParseGeminiResponse válido", func(t *testing.T) {
+			validJSON := []byte(`{"candidates":[{"content":{"parts":[{"text":"{\"decision\":true}"}]}}]}`)
+			partText, err := semantic.ParseGeminiResponse(validJSON)
+			if err != nil {
+				t.Fatalf("ParseGeminiResponse retornou erro inesperado: %v", err)
+			}
+			if string(partText) != `{"decision":true}` {
+				t.Errorf("ParseGeminiResponse extraiu %q, quer %q", string(partText), `{"decision":true}`)
+			}
+		})
+
+		t.Run("ParseGeminiResponse com JSON inválido ou candidates vazio", func(t *testing.T) {
+			invalidInputs := [][]byte{
+				[]byte(`invalid json`),
+				[]byte(`{}`),
+				[]byte(`{"candidates":[]}`),
+				[]byte(`{"candidates":[{"content":{"parts":[]}}]}`),
+			}
+			for _, in := range invalidInputs {
+				if _, err := semantic.ParseGeminiResponse(in); err == nil {
+					t.Errorf("ParseGeminiResponse(%q) esperava erro, obteve nil", string(in))
+				}
+			}
+		})
 	})
 }

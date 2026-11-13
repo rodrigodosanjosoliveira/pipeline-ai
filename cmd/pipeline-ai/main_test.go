@@ -2008,3 +2008,101 @@ func TestCLIInitNonInteractiveHardening(t *testing.T) {
 		}
 	})
 }
+
+func TestCLIEvalGeminiProvider(t *testing.T) {
+	apiKey := "gem-cli-secret-999"
+
+	t.Run("eval com provider gemini, api key via GEMINI_API_KEY e thinkingLevel low", func(t *testing.T) {
+		t.Setenv("GEMINI_API_KEY", apiKey)
+
+		var capturedReq *http.Request
+		var capturedBody []byte
+
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedReq = r
+			bodyBytes, _ := io.ReadAll(r.Body)
+			capturedBody = bodyBytes
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"decision\":true,\"confidence\":0.94,\"reason\":\"CLI gemini ok\"}"}]}}]}`))
+		}))
+		defer mockServer.Close()
+
+		var stdout, stderr bytes.Buffer
+		args := []string{
+			"eval",
+			"-provider", "gemini",
+			"-endpoint", mockServer.URL,
+			"-state", "func a(){}",
+			"-question", "ok?",
+			"-json",
+		}
+
+		exitCode := run(args, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("run(eval -provider gemini) falhou: exitCode=%d, stderr:\n%s", exitCode, stderr.String())
+		}
+
+		if capturedReq.Header.Get("x-goog-api-key") != apiKey {
+			t.Errorf("Header x-goog-api-key = %q, esperado %q", capturedReq.Header.Get("x-goog-api-key"), apiKey)
+		}
+		if auth := capturedReq.Header.Get("Authorization"); auth != "" {
+			t.Errorf("Header Authorization não deve ser enviado no provider gemini, obteve %q", auth)
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(capturedBody, &payload); err != nil {
+			t.Fatalf("Body enviado ao mock não é JSON: %v, raw: %s", err, string(capturedBody))
+		}
+		genCfg, ok := payload["generationConfig"].(map[string]any)
+		if !ok {
+			t.Fatalf("generationConfig ausente no payload: %s", string(capturedBody))
+		}
+		thinkingCfg, ok := genCfg["thinkingConfig"].(map[string]any)
+		if !ok || thinkingCfg["thinkingLevel"] != "low" {
+			t.Errorf("thinkingConfig.thinkingLevel esperado 'low', obteve: %v", thinkingCfg)
+		}
+
+		var res struct {
+			Decision   bool    `json:"decision"`
+			Confidence float64 `json:"confidence"`
+			Reason     string  `json:"reason"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v, out: %s", err, stdout.String())
+		}
+		if !res.Decision {
+			t.Errorf("esperava decision=true, obteve false")
+		}
+	})
+
+	t.Run("eval seguranca: erro do provider gemini nao expoe GEMINI_API_KEY", func(t *testing.T) {
+		t.Setenv("GEMINI_API_KEY", apiKey)
+
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("gemini upstream failure containing " + apiKey))
+		}))
+		defer mockServer.Close()
+
+		var stdout, stderr bytes.Buffer
+		args := []string{
+			"eval",
+			"-provider", "gemini",
+			"-endpoint", mockServer.URL,
+			"-state", "func a(){}",
+			"-question", "ok?",
+			"-json",
+		}
+
+		exitCode := run(args, &stdout, &stderr)
+		if exitCode == 0 {
+			t.Errorf("esperava exitCode != 0 para servidor retornando 500")
+		}
+
+		combined := stdout.String() + stderr.String()
+		if strings.Contains(combined, apiKey) {
+			t.Fatalf("SEC-03 violação: GEMINI_API_KEY refletida na saída de erro do CLI:\n%s", combined)
+		}
+	})
+}

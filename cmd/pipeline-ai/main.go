@@ -1354,6 +1354,9 @@ func runEval(args []string, stdin io.Reader, agentMode bool, stdout, stderr io.W
 	endpointFlag := fs.String("endpoint", "", "endpoint HTTP do sensor semântico (Jev)")
 	apiKeyFlag := fs.String("api-key", "", "chave de API do sensor semântico")
 	timeoutFlag := fs.Duration("timeout", 10*time.Second, "tempo limite para a requisição de avaliação")
+	providerFlag := fs.String("provider", "", "provider semântico: 'jev' ou 'gemini'")
+	modelFlag := fs.String("model", "", "modelo para avaliação semântica (default gemini-4-hydrogen-low quando gemini)")
+	thinkingLevelFlag := fs.String("thinking-level", "", "nível de thinking para gemini: low, medium, high (default low)")
 
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -1478,12 +1481,45 @@ func runEval(args []string, stdin io.Reader, agentMode bool, stdout, stderr io.W
 		return 1
 	}
 
+	provider := strings.ToLower(strings.TrimSpace(*providerFlag))
+	if provider == "" {
+		provider = strings.ToLower(strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_PROVIDER")))
+	}
+
+	model := strings.TrimSpace(*modelFlag)
+	if model == "" && (provider == semantic.ProviderGemini || strings.Contains(*endpointFlag, "generativelanguage.googleapis.com")) {
+		model = semantic.DefaultGeminiModel
+	}
+
+	thinkingLevel := strings.ToLower(strings.TrimSpace(*thinkingLevelFlag))
+	if thinkingLevel == "" && (provider == semantic.ProviderGemini || strings.Contains(*endpointFlag, "generativelanguage.googleapis.com")) {
+		thinkingLevel = semantic.DefaultGeminiThinkingLevel
+	}
+
 	endpoint := strings.TrimSpace(*endpointFlag)
 	if endpoint == "" {
 		endpoint = strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_ENDPOINT"))
 	}
 	if endpoint == "" {
-		endpoint = strings.TrimSpace(os.Getenv("JEV_ENDPOINT"))
+		if provider == semantic.ProviderGemini {
+			gemModel := model
+			if gemModel == "" {
+				gemModel = semantic.DefaultGeminiModel
+			}
+			endpoint = fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", gemModel)
+		} else {
+			endpoint = strings.TrimSpace(os.Getenv("JEV_ENDPOINT"))
+		}
+	}
+	if endpoint == "" && provider == "" && strings.TrimSpace(os.Getenv("GEMINI_API_KEY")) != "" {
+		provider = semantic.ProviderGemini
+		if model == "" {
+			model = semantic.DefaultGeminiModel
+		}
+		if thinkingLevel == "" {
+			thinkingLevel = semantic.DefaultGeminiThinkingLevel
+		}
+		endpoint = fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", model)
 	}
 
 	apiKey := strings.TrimSpace(*apiKeyFlag)
@@ -1491,19 +1527,37 @@ func runEval(args []string, stdin io.Reader, agentMode bool, stdout, stderr io.W
 		apiKey = strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_API_KEY"))
 	}
 	if apiKey == "" {
-		apiKey = strings.TrimSpace(os.Getenv("JEV_API_KEY"))
+		if provider == semantic.ProviderGemini || strings.Contains(endpoint, "generativelanguage.googleapis.com") {
+			apiKey = strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+			if apiKey == "" {
+				apiKey = strings.TrimSpace(os.Getenv("JEV_API_KEY"))
+			}
+		} else {
+			apiKey = strings.TrimSpace(os.Getenv("JEV_API_KEY"))
+			if apiKey == "" {
+				apiKey = strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+			}
+		}
 	}
 
 	if endpoint == "" || apiKey == "" {
 		if isJSON {
+			msg := "sensor semântico não configurado (JEV_ENDPOINT / JEV_API_KEY ausentes)"
+			if provider == semantic.ProviderGemini {
+				msg = "sensor semântico não configurado (GEMINI_API_KEY ausente)"
+			}
 			res := map[string]any{
 				"configured": false,
-				"message":    "sensor semântico não configurado (JEV_ENDPOINT / JEV_API_KEY ausentes)",
+				"message":    msg,
 			}
 			data, _ := json.MarshalIndent(res, "", "  ")
 			fmt.Fprintln(stdout, string(data))
 		} else {
-			fmt.Fprintln(stderr, "eval: sensor semântico não configurado (JEV_ENDPOINT e JEV_API_KEY ausentes)")
+			if provider == semantic.ProviderGemini {
+				fmt.Fprintln(stderr, "eval: sensor semântico não configurado (GEMINI_API_KEY ausente)")
+			} else {
+				fmt.Fprintln(stderr, "eval: sensor semântico não configurado (JEV_ENDPOINT e JEV_API_KEY ausentes)")
+			}
 		}
 		return 1
 	}
@@ -1517,10 +1571,13 @@ func runEval(args []string, stdin io.Reader, agentMode bool, stdout, stderr io.W
 	defer cancel()
 
 	client := semantic.NewClient(semantic.ClientConfig{
-		Endpoint:     endpoint,
-		APIKey:       apiKey,
-		Timeout:      timeout,
-		MaxBodyBytes: 10 * 1024 * 1024,
+		Endpoint:      endpoint,
+		APIKey:        apiKey,
+		Timeout:       timeout,
+		MaxBodyBytes:  10 * 1024 * 1024,
+		Provider:      provider,
+		Model:         model,
+		ThinkingLevel: thinkingLevel,
 	})
 
 	req := semantic.EvalRequest{
@@ -1571,7 +1628,7 @@ func runEval(args []string, stdin io.Reader, agentMode bool, stdout, stderr io.W
 
 	_ = metrics.RecordSemanticEval(*dirFlag, activeDelID, mode, time.Since(start), evalErr == nil, conf)
 
-	secrets := []string{apiKey, os.Getenv("JEV_API_KEY"), os.Getenv("PIPELINE_SEMANTIC_API_KEY")}
+	secrets := []string{apiKey, os.Getenv("JEV_API_KEY"), os.Getenv("PIPELINE_SEMANTIC_API_KEY"), os.Getenv("GEMINI_API_KEY")}
 
 	if evalErr != nil {
 		sanitizedMsg := redactSecrets(evalErr.Error(), secrets...)

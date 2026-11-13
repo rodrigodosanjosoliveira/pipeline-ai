@@ -5,6 +5,20 @@ import (
 	"time"
 )
 
+const (
+	// ProviderJev identifica o sensor semântico System One (Jev).
+	ProviderJev = "jev"
+
+	// ProviderGemini identifica o sensor semântico via Google Gemini API nativa.
+	ProviderGemini = "gemini"
+
+	// DefaultGeminiModel é o modelo padrão para avaliações semânticas.
+	DefaultGeminiModel = "gemini-4-hydrogen-low"
+
+	// DefaultGeminiThinkingLevel é o nível de raciocínio padrão (low).
+	DefaultGeminiThinkingLevel = "low"
+)
+
 var (
 	// ErrInvalidRequest indica que os parâmetros da requisição são inválidos.
 	ErrInvalidRequest = errors.New("invalid request: state and question must not be empty, threshold must be between 0.0 and 1.0")
@@ -65,8 +79,11 @@ type EvalRequest struct {
 
 // ClientConfig armazena as configurações de conexão e restrições de segurança do cliente semântico.
 type ClientConfig struct {
-	Endpoint     string
-	APIKey       string
-	Timeout      time.Duration
-	MaxBodyBytes int64
+	Endpoint      string
+	APIKey        string
+	Timeout       time.Duration
+	MaxBodyBytes  int64
+	Provider      string
+	Model         string
+	ThinkingLevel string
 }

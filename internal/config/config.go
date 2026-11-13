@@ -76,6 +76,9 @@ type Config struct {
 	// RequireRollback indica se a política de rollback é mandatória em deliveries (C16).
 	RequireRollback *bool `json:"require_rollback,omitempty"`
 
+	// ModelRouting mapeia skill -> modelo recomendado.
+	ModelRouting map[string]string `json:"model_routing,omitempty"`
+
 	// root é a raiz do projeto, preenchida no carregamento.
 	root string
 }
@@ -178,6 +181,11 @@ func (c *Config) validate() error {
 	if c.TaskCodePattern != "" {
 		if _, err := regexp.Compile(c.TaskCodePattern); err != nil {
 			return fmt.Errorf("task_code_pattern %q inválido: %w", c.TaskCodePattern, err)
+		}
+	}
+	for k, v := range c.ModelRouting {
+		if strings.TrimSpace(k) == "" || strings.TrimSpace(v) == "" {
+			return errors.New("model_routing não pode conter chaves ou valores vazios")
 		}
 	}
 	return nil
@@ -420,4 +428,43 @@ func matchesAny(rel string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// DefaultModelRouting retorna uma cópia do mapeamento padrão de skills para modelos Gemini recomendados.
+func DefaultModelRouting() map[string]string {
+	return map[string]string{
+		"docs-update":             "gemini-4-hydrogen-low",
+		"git-delivery":            "gemini-4-hydrogen-low",
+		"context-loader":          "gemini-4-hydrogen-low",
+		"pm-triage":               "gemini-4-hydrogen-medium",
+		"test-writer":             "gemini-4-hydrogen-medium",
+		"dev-implementation":      "gemini-4-hydrogen-medium",
+		"qa-validation":           "gemini-4-hydrogen-medium",
+		"release-ops":             "gemini-4-hydrogen-medium",
+		"architecture-guardrails": "gemini-4-hydrogen-high",
+		"code-reviewer":           "gemini-4-hydrogen-high",
+		"security-review":         "gemini-4-hydrogen-high",
+		"supply-chain-review":     "gemini-4-hydrogen-high",
+		"migration-reviewer":      "gemini-4-hydrogen-high",
+		"query-performance":       "gemini-4-hydrogen-high",
+		"data-model":              "gemini-4-hydrogen-high",
+		"agent-auditor":           "gemini-4-hydrogen-high",
+	}
+}
+
+// ResolveSkillModel retorna o modelo configurado para a skill informada.
+// Caso a skill não esteja no ModelRouting configurado, usa o DefaultModelRouting.
+// Se ainda assim não encontrar, retorna "gemini-4-hydrogen-medium".
+func (c *Config) ResolveSkillModel(skill string) string {
+	trimmed := strings.TrimSpace(skill)
+	if c != nil && c.ModelRouting != nil {
+		if m, ok := c.ModelRouting[trimmed]; ok && strings.TrimSpace(m) != "" {
+			return strings.TrimSpace(m)
+		}
+	}
+	defaults := DefaultModelRouting()
+	if m, ok := defaults[trimmed]; ok && strings.TrimSpace(m) != "" {
+		return strings.TrimSpace(m)
+	}
+	return "gemini-4-hydrogen-medium"
 }

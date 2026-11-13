@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-038 | TASK-038 | Agent Mode, detecção de TTY, hardening não-interativo e cobertura JSON integral | feat | 2026-11-12 | draft |
+| DEL-039 | TASK-039 | Thinking Tier Matrix (model_routing) e Provider Nativo Gemini Hydrogen no Sensor Semântico | feat | 2026-11-13 | draft |
+| DEL-038 | TASK-038 | Agent Mode, detecção de TTY, hardening não-interativo e cobertura JSON integral | feat | 2026-11-12 | merged |
 | DEL-037 | TASK-037 | Bounded Output, Smart Test Filtering e marcação de resultados parciais no sensor e runner (CLI e MCP) | feat | 2026-11-12 | merged |
 | DEL-036 | TASK-036 | Ajuste de formatação e legibilidade no post de divulgação do artigo YAGNI para o LinkedIn | docs | 2026-11-10 | merged |
 | DEL-035 | TASK-035 | Release v0.11.0: Consolidação da Governança Anti-Overengineering, Debt Ledger, DORA auto-MTTR e 5º artigo técnico | chore | 2026-11-09 | merged |

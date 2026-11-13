@@ -1071,3 +1071,138 @@ func FuzzModuleManagement(f *testing.F) {
 		_ = cfg.DisableModule(mod)
 	})
 }
+
+func TestModelRoutingAndResolveSkillModel(t *testing.T) {
+	t.Run("DefaultModelRouting retorna matriz de tiers esperada", func(t *testing.T) {
+		got := DefaultModelRouting()
+		expected := map[string]string{
+			"docs-update":             "gemini-4-hydrogen-low",
+			"git-delivery":            "gemini-4-hydrogen-low",
+			"pm-triage":               "gemini-4-hydrogen-medium",
+			"dev-implementation":      "gemini-4-hydrogen-medium",
+			"architecture-guardrails": "gemini-4-hydrogen-high",
+			"code-reviewer":           "gemini-4-hydrogen-high",
+			"security-review":         "gemini-4-hydrogen-high",
+		}
+		for skill, wantModel := range expected {
+			if got[skill] != wantModel {
+				t.Errorf("DefaultModelRouting[%q] = %q, quer %q", skill, got[skill], wantModel)
+			}
+		}
+	})
+
+	t.Run("ResolveSkillModel com config nil ou sem ModelRouting", func(t *testing.T) {
+		var nilCfg *Config
+		if got := nilCfg.ResolveSkillModel("docs-update"); got != "gemini-4-hydrogen-low" {
+			t.Errorf("nilCfg.ResolveSkillModel(docs-update) = %q, quer %q", got, "gemini-4-hydrogen-low")
+		}
+		if got := nilCfg.ResolveSkillModel("architecture-guardrails"); got != "gemini-4-hydrogen-high" {
+			t.Errorf("nilCfg.ResolveSkillModel(architecture-guardrails) = %q, quer %q", got, "gemini-4-hydrogen-high")
+		}
+		if got := nilCfg.ResolveSkillModel("skill-desconhecida"); got != "gemini-4-hydrogen-medium" {
+			t.Errorf("nilCfg.ResolveSkillModel(skill-desconhecida) = %q, quer %q (fallback padrão)", got, "gemini-4-hydrogen-medium")
+		}
+
+		emptyCfg := &Config{}
+		if got := emptyCfg.ResolveSkillModel("pm-triage"); got != "gemini-4-hydrogen-medium" {
+			t.Errorf("emptyCfg.ResolveSkillModel(pm-triage) = %q, quer %q", got, "gemini-4-hydrogen-medium")
+		}
+		if got := emptyCfg.ResolveSkillModel("desconhecida"); got != "gemini-4-hydrogen-medium" {
+			t.Errorf("emptyCfg.ResolveSkillModel(desconhecida) = %q, quer %q", got, "gemini-4-hydrogen-medium")
+		}
+	})
+
+	t.Run("ResolveSkillModel com sobrescrita via .pipeline-ai.json", func(t *testing.T) {
+		dir := t.TempDir()
+		body := `{
+			"version": 1,
+			"project_type": "desktop",
+			"protected_paths": ["internal/"],
+			"model_routing": {
+				"code-reviewer": "gemini-4-hydrogen-xhigh"
+			}
+		}`
+		writeConfig(t, dir, body)
+		cfg, err := Load(dir)
+		if err != nil {
+			t.Fatalf("Load falhou: %v", err)
+		}
+
+		if got := cfg.ResolveSkillModel("code-reviewer"); got != "gemini-4-hydrogen-xhigh" {
+			t.Errorf("cfg.ResolveSkillModel(code-reviewer) = %q, quer %q (sobrescrito)", got, "gemini-4-hydrogen-xhigh")
+		}
+		// Os demais devem permanecer os defaults da matriz
+		if got := cfg.ResolveSkillModel("docs-update"); got != "gemini-4-hydrogen-low" {
+			t.Errorf("cfg.ResolveSkillModel(docs-update) = %q, quer %q", got, "gemini-4-hydrogen-low")
+		}
+		if got := cfg.ResolveSkillModel("security-review"); got != "gemini-4-hydrogen-high" {
+			t.Errorf("cfg.ResolveSkillModel(security-review) = %q, quer %q", got, "gemini-4-hydrogen-high")
+		}
+		if got := cfg.ResolveSkillModel("skill-inexistente"); got != "gemini-4-hydrogen-medium" {
+			t.Errorf("cfg.ResolveSkillModel(skill-inexistente) = %q, quer %q", got, "gemini-4-hydrogen-medium")
+		}
+	})
+
+	t.Run("Load rejeita model_routing com chave ou valor vazio", func(t *testing.T) {
+		tests := []struct {
+			name string
+			body string
+		}{
+			{
+				name: "chave vazia",
+				body: `{
+					"version": 1,
+					"project_type": "desktop",
+					"protected_paths": ["internal/"],
+					"model_routing": {
+						"": "gemini-4-hydrogen-low"
+					}
+				}`,
+			},
+			{
+				name: "chave apenas espaços",
+				body: `{
+					"version": 1,
+					"project_type": "desktop",
+					"protected_paths": ["internal/"],
+					"model_routing": {
+						"   ": "gemini-4-hydrogen-low"
+					}
+				}`,
+			},
+			{
+				name: "valor vazio",
+				body: `{
+					"version": 1,
+					"project_type": "desktop",
+					"protected_paths": ["internal/"],
+					"model_routing": {
+						"docs-update": ""
+					}
+				}`,
+			},
+			{
+				name: "valor apenas espaços",
+				body: `{
+					"version": 1,
+					"project_type": "desktop",
+					"protected_paths": ["internal/"],
+					"model_routing": {
+						"docs-update": "   "
+					}
+				}`,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				dir := t.TempDir()
+				writeConfig(t, dir, tt.body)
+				_, err := Load(dir)
+				if err == nil {
+					t.Errorf("Load deveria rejeitar %s, mas retornou sucesso", tt.name)
+				}
+			})
+		}
+	})
+}

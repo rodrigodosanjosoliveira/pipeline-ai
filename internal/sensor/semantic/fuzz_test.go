@@ -52,3 +52,21 @@ func FuzzParseScoreResponse(f *testing.F) {
 		_, _ = semantic.ParseScoreResponse(data)
 	})
 }
+
+// FuzzParseGeminiResponse testa a robustez da extração do payload do Gemini contra entradas malformadas ou randômicas.
+func FuzzParseGeminiResponse(f *testing.F) {
+	f.Add([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"decision\":true,\"confidence\":0.92,\"reason\":\"ok\"}"}]}}]}`))
+	f.Add([]byte(`{"candidates":[]}`))
+	f.Add([]byte(`{}`))
+	f.Add([]byte(`{"candidates":[{"content":{"parts":[]}}]}`))
+	f.Add([]byte(`{"candidates":[{"content":{"parts":[{"text":""}]}}]}`))
+	f.Add([]byte(`invalid json string`))
+	f.Add([]byte(``))
+	f.Add([]byte(`{"candidates":null}`))
+	f.Add([]byte(`{"candidates":[{"content":null}]}`))
+	f.Add([]byte(`{"candidates":[{"content":{"parts":[{"text":null}]}}]}`))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _ = semantic.ParseGeminiResponse(data)
+	})
+}

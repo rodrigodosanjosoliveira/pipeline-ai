@@ -1515,3 +1515,97 @@ type Cache struct{}
 		}
 	})
 }
+
+func TestMCPGeminiProviderAndCatalogRouting(t *testing.T) {
+	t.Run("pipeline_eval_semantic com provider gemini", func(t *testing.T) {
+		apiKey := "mcp-gem-secret"
+		var capturedReq *http.Request
+		var capturedBody []byte
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedReq = r
+			bodyBytes, _ := io.ReadAll(r.Body)
+			capturedBody = bodyBytes
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"decision\":true,\"confidence\":0.93,\"reason\":\"mcp gemini ok\"}"}]}}]}`))
+		}))
+		defer srv.Close()
+
+		s := NewServer("../..")
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      100,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_eval_semantic",
+				"arguments": map[string]any{
+					"provider":       "gemini",
+					"model":          "gemini-4-hydrogen-low",
+					"thinking_level": "low",
+					"endpoint":       srv.URL,
+					"api_key":        apiKey,
+					"state":          "const a = 1;",
+					"question":       "is safe?",
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		res := runRPC(t, s, string(reqBytes))
+
+		result, ok := res["result"].(map[string]any)
+		if !ok || result["isError"] == true {
+			t.Fatalf("pipeline_eval_semantic retornou erro: %v", res)
+		}
+
+		if capturedReq.Header.Get("x-goog-api-key") != apiKey {
+			t.Errorf("Header x-goog-api-key = %q, esperado %q", capturedReq.Header.Get("x-goog-api-key"), apiKey)
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(capturedBody, &payload); err != nil {
+			t.Fatalf("Body enviado ao mock não é JSON: %v", err)
+		}
+		genCfg, ok := payload["generationConfig"].(map[string]any)
+		if !ok {
+			t.Fatalf("generationConfig ausente: %v", payload)
+		}
+		thinkingCfg, ok := genCfg["thinkingConfig"].(map[string]any)
+		if !ok || thinkingCfg["thinkingLevel"] != "low" {
+			t.Errorf("thinkingLevel esperado 'low', obteve: %v", thinkingCfg)
+		}
+
+		content, _ := result["content"].([]any)
+		if len(content) == 0 {
+			t.Fatalf("content vazio")
+		}
+		first, _ := content[0].(map[string]any)
+		text, _ := first["text"].(string)
+		if !strings.Contains(text, "true") && !strings.Contains(text, "0.93") {
+			t.Errorf("resultado não contém decisão/confiança esperada: %s", text)
+		}
+	})
+
+	t.Run("resources/read em pipeline://catalog inclui informacao de model routing", func(t *testing.T) {
+		s := NewServer("../..")
+		req := `{"jsonrpc":"2.0","id":101,"method":"resources/read","params":{"uri":"pipeline://catalog"}}`
+		res := runRPC(t, s, req)
+
+		result, ok := res["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente no resources/read: %v", res)
+		}
+		contents, ok := result["contents"].([]any)
+		if !ok || len(contents) == 0 {
+			t.Fatalf("contents vazio no resources/read: %v", result)
+		}
+		first, ok := contents[0].(map[string]any)
+		if !ok {
+			t.Fatalf("formato de content inválido: %v", contents)
+		}
+		text, _ := first["text"].(string)
+		if !strings.Contains(text, "gemini-4-hydrogen-") {
+			t.Errorf("catálogo de skills não inclui informação de model routing (esperado 'gemini-4-hydrogen-'):\n%s", text)
+		}
+	})
+}
