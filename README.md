@@ -301,6 +301,19 @@ pipeline-ai version            # Retorna {"name":"pipeline-ai","version":"..."}
 pipeline-ai module list -no-agent
 ```
 
+### Introspecção e Discovery (`pipeline-ai schema` / `--schema`)
+A CLI expõe um catálogo declarativo de introspecção em JSON (`global_flags`, `env_vars`, `commands`, `flags` com tipo, default, required, enum e `output_schema`) sem efeitos colaterais (D-42):
+```bash
+# Retorna o schema completo da CLI (todos os comandos, flags globais e variáveis de ambiente):
+pipeline-ai schema
+pipeline-ai --schema
+pipeline-ai -schema
+
+# Retorna o schema específico de um subcomando (ex.: eval, init, run):
+pipeline-ai schema eval
+pipeline-ai eval --schema
+```
+
 ### Avaliação Semântica Calibrada (`pipeline-ai eval`)
 Submete uma avaliação semântica calibrada (System One / Jev ou nativo Gemini) nos modos binário (`noul`), múltipla escolha (`choice`) ou pontuação contínua (`score`) (D-34, D-35, D-41):
 ```bash
@@ -462,10 +475,6 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 ---
 
 ## Roadmap (Próximas Entregas)
-
-### Discovery & Schema Introspection (`--schema`) (`DEL-040`)
-- **Introspecção de Esquemas em Tempo de Execução:** Suporte à flag global `--schema` e subcomando `pipeline-ai schema` para expor esquemas JSON Schema de entrada e saída de todos os subcomandos, facilitando a autodescoberta dinâmica por agentes de IA e clientes MCP.
-- **Validação Estrutural Pré-Voo:** Verificação declarativa de payloads antes da execução da esteira.
 
 ### Helpful Errors com Hints Acionáveis & Guided Recovery (`DEL-041`)
 - **Mensagens de Erro Orientadas a Ação:** Padronização de mensagens de erro estruturadas na CLI e MCP contendo diagnóstico determinístico (`cause`), contexto de falha e sugestão direta de recuperação (`hint` e `fix_command`).

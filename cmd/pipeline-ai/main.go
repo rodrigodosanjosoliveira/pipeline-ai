@@ -111,6 +111,22 @@ func extractAgentMode(args []string) (bool, []string) {
 	return false, filtered
 }
 
+func extractSchemaFlag(args []string) (bool, []string) {
+	schemaMode := false
+	var filtered []string
+
+	for _, arg := range args {
+		switch arg {
+		case "-schema", "--schema":
+			schemaMode = true
+		default:
+			filtered = append(filtered, arg)
+		}
+	}
+
+	return schemaMode, filtered
+}
+
 func runVersion(args []string, agentMode bool, stdout io.Writer) int {
 	asJSON := false
 	for _, a := range args {
@@ -138,6 +154,10 @@ func runVersion(args []string, agentMode bool, stdout io.Writer) int {
 
 func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	agentMode, args := extractAgentMode(args)
+	schemaMode, args := extractSchemaFlag(args)
+	if schemaMode {
+		return runSchema(args, stdout, stderr)
+	}
 
 	if len(args) == 0 {
 		printUsage(stdout)
@@ -203,6 +223,9 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 	case "debt":
 		return runDebt(cmdArgs, agentMode, stdout, stderr)
 
+	case "schema":
+		return runSchema(cmdArgs, stdout, stderr)
+
 	default:
 		fmt.Fprintf(stderr, "pipeline-ai: comando desconhecido: %q\nExecute 'pipeline-ai help' para ver a lista de comandos.\n", cmd)
 		return 1
@@ -216,6 +239,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Flags globais:")
 	fmt.Fprintln(w, "  -agent, --agent          Ativa modo agente (saída estruturada em JSON, desativa prompts interativos)")
 	fmt.Fprintln(w, "  -no-agent, --no-agent    Força modo humano interativo (ignora variáveis de ambiente)")
+	fmt.Fprintln(w, "  -schema, --schema        Emite o schema JSON da CLI ou do comando sem efeitos colaterais")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Comandos disponíveis:")
 	fmt.Fprintln(w, "  init       Inicializa um novo projeto com o padrão pipeline-ai (suporta -non-interactive, -json)")
@@ -234,6 +258,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  eval       Submete uma avaliação semântica calibrada (System One / Jev)")
 	fmt.Fprintln(w, "  debt       Lista atalhos deliberados (// shortcut:) com limites e gatilhos de evolução")
 	fmt.Fprintln(w, "  plugin     Gerencia o bundle e instalação do plugin Antigravity (verify, install [-json])")
+	fmt.Fprintln(w, "  schema     Emite o schema JSON de introspecção da CLI ou de um comando [comando]")
 	fmt.Fprintln(w, "  version    Exibe a versão do pipeline-ai (-json)")
 	fmt.Fprintln(w, "  help       Exibe esta mensagem de ajuda")
 	fmt.Fprintln(w)

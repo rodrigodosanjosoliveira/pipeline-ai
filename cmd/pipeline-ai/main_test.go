@@ -2106,3 +2106,274 @@ func TestCLIEvalGeminiProvider(t *testing.T) {
 		}
 	})
 }
+
+func TestCLISchemaIntrospection(t *testing.T) {
+	extractNames := func(t *testing.T, raw json.RawMessage) []string {
+		t.Helper()
+		if len(raw) == 0 || string(raw) == "null" {
+			return nil
+		}
+		var strList []string
+		if err := json.Unmarshal(raw, &strList); err == nil {
+			return strList
+		}
+		var objList []struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(raw, &objList); err == nil {
+			names := make([]string, 0, len(objList))
+			for _, item := range objList {
+				names = append(names, item.Name)
+			}
+			return names
+		}
+		var objMap map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &objMap); err == nil {
+			names := make([]string, 0, len(objMap))
+			for k := range objMap {
+				names = append(names, k)
+			}
+			return names
+		}
+		t.Fatalf("formato JSON inesperado para lista de itens: %s", string(raw))
+		return nil
+	}
+
+	assertContainsAll := func(t *testing.T, label string, got []string, want []string) {
+		t.Helper()
+		seen := make(map[string]bool, len(got))
+		for _, g := range got {
+			seen[g] = true
+			seen[strings.TrimLeft(g, "-")] = true
+		}
+		for _, w := range want {
+			if !seen[w] && !seen[strings.TrimLeft(w, "-")] {
+				t.Errorf("%s não contém %q; obtidos: %v", label, w, got)
+			}
+		}
+	}
+
+	t.Run("extractSchemaFlag", func(t *testing.T) {
+		tests := []struct {
+			name         string
+			args         []string
+			wantMode     bool
+			wantFiltered []string
+		}{
+			{
+				name:         "sem flag schema",
+				args:         []string{"eval", "-json"},
+				wantMode:     false,
+				wantFiltered: []string{"eval", "-json"},
+			},
+			{
+				name:         "apenas -schema",
+				args:         []string{"-schema"},
+				wantMode:     true,
+				wantFiltered: nil,
+			},
+			{
+				name:         "comando com --schema",
+				args:         []string{"eval", "--schema", "-json"},
+				wantMode:     true,
+				wantFiltered: []string{"eval", "-json"},
+			},
+			{
+				name:         "multiplas flags schema",
+				args:         []string{"-schema", "init", "--schema"},
+				wantMode:     true,
+				wantFiltered: []string{"init"},
+			},
+			{
+				name:         "args vazio",
+				args:         nil,
+				wantMode:     false,
+				wantFiltered: nil,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				gotMode, gotFiltered := extractSchemaFlag(tt.args)
+				if gotMode != tt.wantMode {
+					t.Errorf("extractSchemaFlag(%v) mode = %v, esperado %v", tt.args, gotMode, tt.wantMode)
+				}
+				if len(gotFiltered) != len(tt.wantFiltered) {
+					t.Fatalf("extractSchemaFlag(%v) filtered = %v, esperado %v", tt.args, gotFiltered, tt.wantFiltered)
+				}
+				for i := range tt.wantFiltered {
+					if gotFiltered[i] != tt.wantFiltered[i] {
+						t.Errorf("filtered[%d] = %q, esperado %q", i, gotFiltered[i], tt.wantFiltered[i])
+					}
+				}
+			})
+		}
+	})
+
+	expectedCommands := []string{
+		"init", "doctor", "validate", "handoff", "run", "sync",
+		"delivery", "module", "sensor", "metrics", "dashboard",
+		"mcp", "plugin", "eval", "debt", "version", "schema",
+	}
+
+	rootInvocations := []struct {
+		name string
+		args []string
+	}{
+		{name: "pipeline-ai schema", args: []string{"schema"}},
+		{name: "pipeline-ai --schema", args: []string{"--schema"}},
+		{name: "pipeline-ai -schema", args: []string{"-schema"}},
+	}
+
+	for _, inv := range rootInvocations {
+		t.Run(inv.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			exitCode := run(inv.args, &stdout, &stderr)
+			if exitCode != 0 {
+				t.Fatalf("run(%v) exitCode = %d, esperado 0; stderr:\n%s", inv.args, exitCode, stderr.String())
+			}
+
+			var root struct {
+				Name        string          `json:"name"`
+				Version     string          `json:"version"`
+				GlobalFlags json.RawMessage `json:"global_flags"`
+				EnvVars     json.RawMessage `json:"env_vars"`
+				Commands    json.RawMessage `json:"commands"`
+			}
+			if err := json.Unmarshal(stdout.Bytes(), &root); err != nil {
+				t.Fatalf("stdout não é JSON válido: %v\nsaída:\n%s", err, stdout.String())
+			}
+
+			if root.Name != "pipeline-ai" {
+				t.Errorf("name = %q, esperado %q", root.Name, "pipeline-ai")
+			}
+			if root.Version != version {
+				t.Errorf("version = %q, esperado %q", root.Version, version)
+			}
+
+			globalFlags := extractNames(t, root.GlobalFlags)
+			if len(globalFlags) < 3 {
+				t.Errorf("global_flags len = %d, esperado >= 3 (%v)", len(globalFlags), globalFlags)
+			}
+			assertContainsAll(t, "global_flags", globalFlags, []string{"-agent", "-no-agent", "-schema"})
+
+			envVars := extractNames(t, root.EnvVars)
+			if len(envVars) < 3 {
+				t.Errorf("env_vars len = %d, esperado >= 3 (%v)", len(envVars), envVars)
+			}
+			assertContainsAll(t, "env_vars", envVars, []string{"PIPELINE_AGENT_MODE", "AI_AGENT", "GEMINI_API_KEY"})
+
+			cmds := extractNames(t, root.Commands)
+			if len(cmds) < len(expectedCommands) {
+				t.Errorf("commands len = %d, esperado >= %d", len(cmds), len(expectedCommands))
+			}
+			assertContainsAll(t, "commands", cmds, expectedCommands)
+		})
+	}
+
+	t.Run("eval --schema e schema eval", func(t *testing.T) {
+		for _, args := range [][]string{{"eval", "--schema"}, {"schema", "eval"}} {
+			var stdout, stderr bytes.Buffer
+			exitCode := run(args, &stdout, &stderr)
+			if exitCode != 0 {
+				t.Fatalf("run(%v) exitCode = %d, esperado 0; stderr:\n%s", args, exitCode, stderr.String())
+			}
+
+			var cmd struct {
+				Name         string          `json:"name"`
+				SupportsJSON bool            `json:"supports_json"`
+				Flags        json.RawMessage `json:"flags"`
+			}
+			if err := json.Unmarshal(stdout.Bytes(), &cmd); err != nil {
+				t.Fatalf("run(%v) stdout não é JSON válido: %v\n%s", args, err, stdout.String())
+			}
+			if cmd.Name != "eval" {
+				t.Errorf("run(%v) name = %q, esperado %q", args, cmd.Name, "eval")
+			}
+			if !cmd.SupportsJSON {
+				t.Errorf("run(%v) supports_json = false, esperado true", args)
+			}
+			flags := extractNames(t, cmd.Flags)
+			assertContainsAll(t, "eval.flags", flags, []string{
+				"state", "question", "preset", "mode", "provider", "model", "thinking-level", "json",
+			})
+		}
+	})
+
+	t.Run("init --schema nao executa efeitos colaterais", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var stdout, stderr bytes.Buffer
+		args := []string{"init", "--schema", "-dir", tmpDir}
+		exitCode := runWithStdin(args, strings.NewReader(""), &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("runWithStdin(%v) exitCode = %d, esperado 0; stderr:\n%s", args, exitCode, stderr.String())
+		}
+
+		var cmd struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &cmd); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v\n%s", err, stdout.String())
+		}
+		if cmd.Name != "init" {
+			t.Errorf("name = %q, esperado %q", cmd.Name, "init")
+		}
+
+		cfgPath := filepath.Join(tmpDir, ".pipeline-ai.json")
+		if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
+			t.Fatalf("init --schema não deve criar %s", cfgPath)
+		}
+	})
+
+	t.Run("sensor --schema", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"sensor", "--schema"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Fatalf("run(sensor --schema) exitCode = %d, esperado 0; stderr:\n%s", exitCode, stderr.String())
+		}
+
+		var cmd struct {
+			Name  string          `json:"name"`
+			Flags json.RawMessage `json:"flags"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &cmd); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v\n%s", err, stdout.String())
+		}
+		if cmd.Name != "sensor" {
+			t.Errorf("name = %q, esperado %q", cmd.Name, "sensor")
+		}
+		flags := extractNames(t, cmd.Flags)
+		assertContainsAll(t, "sensor.flags", flags, []string{"max-output-bytes", "verbose-output"})
+	})
+
+	t.Run("pipeline-ai schema comando-inexistente", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"schema", "comando-inexistente"}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Errorf("exitCode = %d, esperado 1", exitCode)
+		}
+
+		combined := strings.TrimSpace(stdout.String())
+		if combined == "" {
+			combined = strings.TrimSpace(stderr.String())
+		}
+
+		var errResp struct {
+			OK    bool   `json:"ok"`
+			Error string `json:"error"`
+			Hint  string `json:"hint"`
+		}
+		if err := json.Unmarshal([]byte(combined), &errResp); err != nil {
+			t.Fatalf("saída de erro não é JSON válido: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+		}
+		if errResp.OK {
+			t.Errorf("esperava ok=false, obteve ok=true")
+		}
+		if strings.TrimSpace(errResp.Error) == "" {
+			t.Errorf("esperava error não vazio")
+		}
+		if !strings.Contains(errResp.Hint, "pipeline-ai schema") {
+			t.Errorf("hint = %q, esperado conter %q", errResp.Hint, "pipeline-ai schema")
+		}
+	})
+}
