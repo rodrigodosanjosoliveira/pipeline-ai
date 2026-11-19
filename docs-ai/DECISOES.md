@@ -718,4 +718,20 @@ Padronização da experiência não-interativa e estruturada para orquestradores
    - Adicionar SDK oficial externo (`google.golang.org/genai`) ao `go.mod`: descartado pela invariante de zero dependências externas na CLI, mantendo `net/http` puro da stdlib.
    - Passar a API key como query parameter `?key=` na URL: descartado pelo risco de vazamento em erros `net/url` e logs.
 
+---
+
+## 16. Discovery e Introspecção de Schema em Tempo de Execução
+
+### D-42 — Catálogo Declarativo e Introspecção via `schema` / `--schema` (DEL-040)
+
+1. **Contexto:**
+   - Agentes de IA que invocam CLIs desconhecidas ou atualizadas frequentemente desperdiçam turnos fazendo tentativa e erro com `--help` em texto livre.
+
+2. **Decisão:**
+   - Expor um catálogo declarativo em Go puro (`cmd/pipeline-ai/schema.go`) acessível via subcomando `pipeline-ai schema [comando]` ou flag global `-schema` / `--schema` (interceptada antes da execução para garantir zero efeitos colaterais), retornando JSON com `global_flags`, `env_vars`, `commands`, `flags` (tipo, default, required, enum) e `output_schema`.
+
+3. **Alternativas descartadas:**
+   - Gerar schemas por reflexão em runtime de `flag.FlagSet` espalhados: descartado por omitir enums, variáveis de ambiente e `output_schema` de retorno JSON.
+
+
 

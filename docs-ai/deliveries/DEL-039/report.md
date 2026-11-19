@@ -2,7 +2,7 @@
 delivery_id: DEL-039
 task_code: TASK-039
 title: "Thinking Tier Matrix (model_routing) e Provider Nativo Gemini Hydrogen no Sensor Semântico"
-status: draft
+status: merged
 require_security: true
 require_migration: false
 require_performance: false
