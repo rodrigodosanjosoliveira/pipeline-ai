@@ -227,9 +227,120 @@ func runWithStdin(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 		return runSchema(cmdArgs, stdout, stderr)
 
 	default:
-		fmt.Fprintf(stderr, "pipeline-ai: comando desconhecido: %q\nExecute 'pipeline-ai help' para ver a lista de comandos.\n", cmd)
-		return 1
+		sug := suggestCommand(cmd)
+		errMsg := fmt.Sprintf("pipeline-ai: comando desconhecido: %q", cmd)
+		cause := "O subcomando informado não corresponde a nenhum comando registrado na CLI."
+		hint := "Execute 'pipeline-ai schema' ou 'pipeline-ai help' para listar os comandos disponíveis."
+		fixCmd := "pipeline-ai schema"
+		if sug != "" {
+			hint = fmt.Sprintf("Você quis dizer '%s'? Execute 'pipeline-ai schema' para listar comandos.", sug)
+			fixCmd = fmt.Sprintf("pipeline-ai %s", sug)
+		}
+		return writeCLIError(stdout, stderr, agentMode, errMsg, cause, hint, fixCmd)
 	}
+}
+
+var knownCommands = []string{
+	"init", "doctor", "validate", "handoff", "run", "sync",
+	"delivery", "module", "sensor", "metrics", "dashboard", "mcp",
+	"plugin", "eval", "debt", "schema", "version", "help",
+}
+
+func suggestCommand(input string) string {
+	norm := strings.ToLower(strings.TrimSpace(input))
+	if norm == "" {
+		return ""
+	}
+
+	bestCmd := ""
+	bestDist := -1
+	for _, cmd := range knownCommands {
+		dist := levenshteinDistance(norm, cmd)
+		maxDist := 2
+		if len(cmd) >= 7 || len(norm) >= 7 {
+			maxDist = 3
+		}
+		if len(norm) >= 3 && strings.HasPrefix(cmd, norm) && dist > maxDist {
+			dist = maxDist
+		}
+		if dist <= maxDist && (bestDist == -1 || dist < bestDist) {
+			bestDist = dist
+			bestCmd = cmd
+		}
+	}
+	return bestCmd
+}
+
+func levenshteinDistance(a, b string) int {
+	ra := []rune(a)
+	rb := []rune(b)
+	la, lb := len(ra), len(rb)
+	if la == 0 {
+		return lb
+	}
+	if lb == 0 {
+		return la
+	}
+
+	prev := make([]int, lb+1)
+	curr := make([]int, lb+1)
+	for j := 0; j <= lb; j++ {
+		prev[j] = j
+	}
+	for i := 1; i <= la; i++ {
+		curr[0] = i
+		for j := 1; j <= lb; j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+			del := prev[j] + 1
+			ins := curr[j-1] + 1
+			sub := prev[j-1] + cost
+			m := del
+			if ins < m {
+				m = ins
+			}
+			if sub < m {
+				m = sub
+			}
+			curr[j] = m
+		}
+		prev, curr = curr, prev
+	}
+	return prev[lb]
+}
+
+func writeCLIError(stdout, stderr io.Writer, asJSON bool, errMsg, cause, hint, fixCmd string) int {
+	if errMsg != "" {
+		fmt.Fprintln(stderr, errMsg)
+	}
+	if cause != "" {
+		fmt.Fprintf(stderr, "Causa: %s\n", cause)
+	}
+	if hint != "" {
+		fmt.Fprintf(stderr, "Dica: %s\n", hint)
+	}
+	if fixCmd != "" {
+		fmt.Fprintf(stderr, "Comando sugerido: %s\n", fixCmd)
+	}
+	if asJSON {
+		payload := struct {
+			OK         bool   `json:"ok"`
+			Error      string `json:"error"`
+			Cause      string `json:"cause,omitempty"`
+			Hint       string `json:"hint,omitempty"`
+			FixCommand string `json:"fix_command,omitempty"`
+		}{
+			OK:         false,
+			Error:      errMsg,
+			Cause:      cause,
+			Hint:       hint,
+			FixCommand: fixCmd,
+		}
+		_ = json.NewEncoder(stdout).Encode(payload)
+	}
+	return 1
 }
 
 func printUsage(w io.Writer) {
@@ -335,8 +446,15 @@ func runValidate(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	}
 
 	if fs.NArg() != 1 {
-		fmt.Fprintf(stderr, "uso: pipeline-ai validate [flags] <caminho-do-relatorio.md>\n")
-		return validate.ExitBadUsage
+		return writeCLIError(
+			stdout,
+			stderr,
+			*asJSON || agentMode,
+			"relatório de delivery não informado e nenhuma delivery ativa encontrada",
+			"O comando validate exige o caminho do relatório .md ou uma delivery ativa no diretório atual.",
+			"Informe o caminho do relatório como argumento ou abra uma delivery antes de validar.",
+			"pipeline-ai delivery open DEL-001 -task TASK-001",
+		)
 	}
 
 	if *asJSON || agentMode {
@@ -884,15 +1002,15 @@ func runInit(args []string, stdin io.Reader, agentMode bool, stdout, stderr io.W
 	// Se executado sem flags interativas e name não foi fornecido
 	if opts.Name == "" {
 		if nonInteractive {
-			fmt.Fprintln(stderr, "Erro: parâmetro obrigatório -name ausente em modo não-interativo. Exemplo: pipeline-ai init -name meu-app -type desktop -db postgres")
-			if isJSON {
-				_ = json.NewEncoder(stdout).Encode(map[string]any{
-					"ok":    false,
-					"error": "parâmetro obrigatório -name ausente em modo não-interativo",
-					"hint":  "pipeline-ai init -name <nome> -type <desktop|api|cli> -db <postgres|mongo|dynamo> -no-git",
-				})
-			}
-			return 1
+			return writeCLIError(
+				stdout,
+				stderr,
+				isJSON,
+				"parâmetro obrigatório -name ausente em modo não-interativo",
+				"Sem a flag -name em modo não-interativo (ou sem TTY), não é possível solicitar o nome do projeto.",
+				"Informe -name <nome> ao executar init não-interativo (ex: -name meu-app).",
+				"pipeline-ai init -name meu-app -type desktop -db postgres -no-git",
+			)
 		}
 
 		reader := bufio.NewReader(stdin)
@@ -1566,23 +1684,40 @@ func runEval(args []string, stdin io.Reader, agentMode bool, stdout, stderr io.W
 	}
 
 	if endpoint == "" || apiKey == "" {
+		errMsg := "sensor semântico não configurado (GEMINI_API_KEY ou JEV_ENDPOINT/JEV_API_KEY ausentes)"
+		cause := "Nenhuma credencial ou endpoint de provedor semântico foi encontrado nas flags ou variáveis de ambiente."
+		hint := "Configure GEMINI_API_KEY (para Gemini) ou JEV_ENDPOINT e JEV_API_KEY (para Jev)."
+		fixCmd := "export GEMINI_API_KEY=seu-token  # ou: export JEV_ENDPOINT=https://... JEV_API_KEY=seu-token"
+		if provider == semantic.ProviderGemini {
+			errMsg = "sensor semântico não configurado (GEMINI_API_KEY ausente)"
+			cause = "O provedor Gemini foi selecionado, mas GEMINI_API_KEY não está definida."
+			hint = "Defina a variável de ambiente GEMINI_API_KEY ou passe -api-key."
+			fixCmd = "export GEMINI_API_KEY=seu-token"
+		}
+		fmt.Fprintln(stderr, errMsg)
+		fmt.Fprintf(stderr, "Causa: %s\n", cause)
+		fmt.Fprintf(stderr, "Dica: %s\n", hint)
+		fmt.Fprintf(stderr, "Comando sugerido: %s\n", fixCmd)
 		if isJSON {
-			msg := "sensor semântico não configurado (JEV_ENDPOINT / JEV_API_KEY ausentes)"
-			if provider == semantic.ProviderGemini {
-				msg = "sensor semântico não configurado (GEMINI_API_KEY ausente)"
-			}
-			res := map[string]any{
-				"configured": false,
-				"message":    msg,
+			res := struct {
+				OK         bool   `json:"ok"`
+				Configured bool   `json:"configured"`
+				Message    string `json:"message"`
+				Error      string `json:"error"`
+				Cause      string `json:"cause,omitempty"`
+				Hint       string `json:"hint,omitempty"`
+				FixCommand string `json:"fix_command,omitempty"`
+			}{
+				OK:         false,
+				Configured: false,
+				Message:    errMsg,
+				Error:      errMsg,
+				Cause:      cause,
+				Hint:       hint,
+				FixCommand: fixCmd,
 			}
 			data, _ := json.MarshalIndent(res, "", "  ")
 			fmt.Fprintln(stdout, string(data))
-		} else {
-			if provider == semantic.ProviderGemini {
-				fmt.Fprintln(stderr, "eval: sensor semântico não configurado (GEMINI_API_KEY ausente)")
-			} else {
-				fmt.Fprintln(stderr, "eval: sensor semântico não configurado (JEV_ENDPOINT e JEV_API_KEY ausentes)")
-			}
 		}
 		return 1
 	}

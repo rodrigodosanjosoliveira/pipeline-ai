@@ -2377,3 +2377,179 @@ func TestCLISchemaIntrospection(t *testing.T) {
 		}
 	})
 }
+
+func TestCLIHelpfulErrorsAndGuidedRecovery(t *testing.T) {
+	t.Run("suggestCommand", func(t *testing.T) {
+		tests := []struct {
+			name  string
+			input string
+			want  string
+		}{
+			{name: "sensro sugere sensor", input: "sensro", want: "sensor"},
+			{name: "sensr sugere sensor", input: "sensr", want: "sensor"},
+			{name: "valdiate sugere validate", input: "valdiate", want: "validate"},
+			{name: "validte sugere validate", input: "validte", want: "validate"},
+			{name: "comando muito distante retorna vazio", input: "zzzzunknown", want: ""},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if got := suggestCommand(tt.input); got != tt.want {
+					t.Errorf("suggestCommand(%q) = %q, esperado %q", tt.input, got, tt.want)
+				}
+			})
+		}
+	})
+
+	t.Run("comando desconhecido em modo texto sugere comando proximo", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"sensr"}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Errorf("exitCode = %d, esperado 1", exitCode)
+		}
+		if !strings.Contains(stderr.String(), "sensor") {
+			t.Errorf("stderr = %q, esperado conter sugestão %q", stderr.String(), "sensor")
+		}
+	})
+
+	t.Run("comando desconhecido em modo -agent emite JSON estruturado", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"-agent", "sensr"}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Errorf("exitCode = %d, esperado 1", exitCode)
+		}
+
+		var errResp struct {
+			OK         bool   `json:"ok"`
+			Error      string `json:"error"`
+			Cause      string `json:"cause"`
+			Hint       string `json:"hint"`
+			FixCommand string `json:"fix_command"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &errResp); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+		}
+		if errResp.OK {
+			t.Errorf("ok = true, esperado false")
+		}
+		if strings.TrimSpace(errResp.Error) == "" {
+			t.Errorf("error vazio")
+		}
+		if strings.TrimSpace(errResp.Cause) == "" {
+			t.Errorf("cause vazio")
+		}
+		if !strings.Contains(errResp.Hint, "sensor") {
+			t.Errorf("hint = %q, esperado mencionar %q", errResp.Hint, "sensor")
+		}
+		if strings.TrimSpace(errResp.FixCommand) == "" {
+			t.Errorf("fix_command vazio")
+		}
+	})
+
+	t.Run("init sem -name em modo nao-interativo com -json", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var stdout, stderr bytes.Buffer
+		exitCode := runWithStdin([]string{"init", "-non-interactive", "-json", "-dir", tmpDir}, strings.NewReader(""), &stdout, &stderr)
+		if exitCode != 1 {
+			t.Errorf("exitCode = %d, esperado 1", exitCode)
+		}
+
+		var errResp struct {
+			OK         bool   `json:"ok"`
+			Error      string `json:"error"`
+			Cause      string `json:"cause"`
+			Hint       string `json:"hint"`
+			FixCommand string `json:"fix_command"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &errResp); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+		}
+		if errResp.OK {
+			t.Errorf("ok = true, esperado false")
+		}
+		if strings.TrimSpace(errResp.Error) == "" {
+			t.Errorf("error vazio")
+		}
+		if strings.TrimSpace(errResp.Cause) == "" {
+			t.Errorf("cause vazio")
+		}
+		if strings.TrimSpace(errResp.Hint) == "" {
+			t.Errorf("hint vazio")
+		}
+		if !strings.Contains(errResp.FixCommand, "pipeline-ai init -name") {
+			t.Errorf("fix_command = %q, esperado conter %q", errResp.FixCommand, "pipeline-ai init -name")
+		}
+	})
+
+	t.Run("validate sem -report em diretorio sem delivery ativa", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		t.Chdir(tmpDir)
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"validate", "-json"}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Errorf("exitCode = %d, esperado 1", exitCode)
+		}
+
+		var errResp struct {
+			OK         bool   `json:"ok"`
+			Error      string `json:"error"`
+			Cause      string `json:"cause"`
+			Hint       string `json:"hint"`
+			FixCommand string `json:"fix_command"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &errResp); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+		}
+		if errResp.OK {
+			t.Errorf("ok = true, esperado false")
+		}
+		if strings.TrimSpace(errResp.Error) == "" {
+			t.Errorf("error vazio")
+		}
+		if strings.TrimSpace(errResp.Cause) == "" {
+			t.Errorf("cause vazio")
+		}
+		if strings.TrimSpace(errResp.Hint) == "" {
+			t.Errorf("hint vazio")
+		}
+		if !strings.Contains(errResp.FixCommand, "pipeline-ai delivery open") {
+			t.Errorf("fix_command = %q, esperado conter %q", errResp.FixCommand, "pipeline-ai delivery open")
+		}
+	})
+
+	t.Run("eval sem credenciais com -json", func(t *testing.T) {
+		t.Setenv("GEMINI_API_KEY", "")
+		t.Setenv("JEV_ENDPOINT", "")
+		t.Setenv("JEV_API_KEY", "")
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run([]string{"eval", "-state", "const x = 1", "-question", "is valid?", "-json"}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Errorf("exitCode = %d, esperado 1", exitCode)
+		}
+
+		var errResp struct {
+			OK         bool   `json:"ok"`
+			Error      string `json:"error"`
+			Cause      string `json:"cause"`
+			Hint       string `json:"hint"`
+			FixCommand string `json:"fix_command"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &errResp); err != nil {
+			t.Fatalf("stdout não é JSON válido: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+		}
+		if errResp.OK {
+			t.Errorf("ok = true, esperado false")
+		}
+		if strings.TrimSpace(errResp.Error) == "" {
+			t.Errorf("error vazio")
+		}
+		if !strings.Contains(errResp.Hint, "GEMINI_API_KEY") && !strings.Contains(errResp.Hint, "JEV_ENDPOINT") {
+			t.Errorf("hint = %q, esperado orientar sobre GEMINI_API_KEY ou JEV_ENDPOINT", errResp.Hint)
+		}
+		if !strings.Contains(errResp.FixCommand, "GEMINI_API_KEY") && !strings.Contains(errResp.FixCommand, "JEV_ENDPOINT") {
+			t.Errorf("fix_command = %q, esperado orientar sobre GEMINI_API_KEY ou JEV_ENDPOINT", errResp.FixCommand)
+		}
+	})
+}

@@ -1609,3 +1609,89 @@ func TestMCPGeminiProviderAndCatalogRouting(t *testing.T) {
 		}
 	})
 }
+
+func TestMCPHelpfulErrors(t *testing.T) {
+	t.Run("pipeline_eval_semantic sem state retorna erro estruturado", func(t *testing.T) {
+		s := NewServer("../..")
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      200,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_eval_semantic",
+				"arguments": map[string]any{
+					"question": "is safe?",
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		res := runRPC(t, s, string(reqBytes))
+
+		result, ok := res["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente: %v", res)
+		}
+		if result["isError"] != true {
+			t.Errorf("isError = %v, esperado true", result["isError"])
+		}
+		content, _ := result["content"].([]any)
+		if len(content) == 0 {
+			t.Fatalf("content vazio")
+		}
+		first, _ := content[0].(map[string]any)
+		text, _ := first["text"].(string)
+
+		if !strings.HasPrefix(text, "ERRO:") {
+			t.Errorf("texto do erro deve começar com 'ERRO:', obteve:\n%s", text)
+		}
+		for _, want := range []string{"Causa:", "Dica:", "Comando sugerido:"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("texto do erro deve conter %q, obteve:\n%s", want, text)
+			}
+		}
+	})
+
+	t.Run("pipeline_manage_modules com module invalido orienta action list", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfgPath := filepath.Join(tmpDir, ".pipeline-ai.json")
+		if err := os.WriteFile(cfgPath, []byte(`{"project_name":"test","project_type":"cli","protected_paths":["cmd/"],"editor_agents":["dev-implementation"]}`), 0o644); err != nil {
+			t.Fatalf("erro ao criar .pipeline-ai.json de teste: %v", err)
+		}
+		s := NewServer(tmpDir)
+		callPayload := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      201,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": "pipeline_manage_modules",
+				"arguments": map[string]any{
+					"action": "enable",
+					"module": "invalido",
+				},
+			},
+		}
+		reqBytes, _ := json.Marshal(callPayload)
+		res := runRPC(t, s, string(reqBytes))
+
+		result, ok := res["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente: %v", res)
+		}
+		if result["isError"] != true {
+			t.Errorf("isError = %v, esperado true", result["isError"])
+		}
+		content, _ := result["content"].([]any)
+		if len(content) == 0 {
+			t.Fatalf("content vazio")
+		}
+		first, _ := content[0].(map[string]any)
+		text, _ := first["text"].(string)
+
+		if !strings.Contains(text, "Dica:") {
+			t.Errorf("texto do erro deve conter 'Dica:', obteve:\n%s", text)
+		}
+		if !strings.Contains(text, "list") {
+			t.Errorf("texto do erro deve orientar action 'list', obteve:\n%s", text)
+		}
+	})
+}
