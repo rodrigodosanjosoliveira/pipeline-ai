@@ -2,27 +2,29 @@ Modelo Único vs Thinking Tier Routing (Gemini 4 Hydrogen)
 
 Quando um orquestrador usa 𝗦𝗶𝗻𝗴𝗹𝗲-𝗠𝗼𝗱𝗲𝗹 𝗢𝗿𝗰𝗵𝗲𝘀𝘁𝗿𝗮𝘁𝗶𝗼𝗻, toda tarefa paga o mesmo preço. Atualizar documentação ou abrir um PR consome a mesma cota e latência de uma auditoria de segurança.
 
-Com 𝗧𝗵𝗶𝗻𝗸𝗶𝗻𝗴 𝗧𝗶𝗲𝗿 𝗥𝗼𝘂𝘁𝗶𝗻𝗴 no 𝗽𝗶𝗽𝗲𝗹𝗶𝗻𝗲-𝗮𝗶, cada skill recebe o nível exato de raciocínio do 𝗚𝗲𝗺𝗶𝗻𝗶 𝟰 𝗛𝘆𝗱𝗿𝗼𝗴𝗲𝗻. A matriz `model_routing` distribui o esforço entre `low`, `medium` e `high` de forma determinística.
+Com 𝗧𝗵𝗶𝗻𝗸𝗶𝗻𝗴 𝗧𝗶𝗲𝗿 𝗥𝗼𝘂𝘁𝗶𝗻𝗴 no 𝗽𝗶𝗽𝗲𝗹𝗶𝗻𝗲-𝗮𝗶, cada skill recebe o nível exato de raciocínio do 𝗚𝗲𝗺𝗶𝗻𝗶 𝟰 𝗛𝘆𝗱𝗿𝗼𝗴𝗲𝗻. A matriz model_routing distribui o esforço entre low, medium e high de forma determinística.
 
 Qual a diferença na prática?
 
-Em foco de execução, etapas mecânicas (`docs-update`, `git-delivery`) rodam em 𝗛𝘆𝗱𝗿𝗼𝗴𝗲𝗻 𝗟𝗼𝘄, triagem e código em `medium`, e revisão arquitetural ou segurança escalam para `high`.
+Em foco de execução, etapas mecânicas (docs-update, git-delivery) rodam em 𝗛𝘆𝗱𝗿𝗼𝗴𝗲𝗻 𝗟𝗼𝘄, triagem e código em medium, e revisão arquitetural ou segurança escalam para high.
 
-Em controle de raciocínio, o 𝗦𝗲𝗻𝘀𝗼𝗿 𝗦𝗲𝗺𝗮̂𝗻𝘁𝗶𝗰𝗼 em Go puro (`net/http`) envia `thinkingLevel` e `responseSchema` diretamente para `generateContent`. Sem SDKs externos no `go.mod` e com autenticação segura via `x-goog-api-key`.
+Em controle de raciocínio, o Sensor Semântico em 𝗚𝗼 𝗽𝘂𝗿𝗼 (net/http) envia thinkingLevel e responseSchema diretamente para generateContent. Sem SDKs externos no go.mod e com autenticação segura via header x-goog-api-key.
 
-Em observabilidade, o recurso MCP `pipeline://routing` expõe a matriz resolvida, o Runner executa `-semantic-gate` em modo advisory e a telemetria DORA rastreia `ByProvider` e `ByModel`.
+Em observabilidade, o recurso MCP de roteamento expõe a matriz resolvida em JSON, o Runner executa -semantic-gate em modo advisory e a telemetria DORA rastreia ByProvider e ByModel.
 
 Use 𝗛𝘆𝗱𝗿𝗼𝗴𝗲𝗻 𝗟𝗼𝘄 quando a tarefa exige velocidade, baixo custo e validação estrutural previsível em sub-segundos.
 
 Escale para 𝗛𝘆𝗱𝗿𝗼𝗴𝗲𝗻 𝗠𝗲𝗱𝗶𝘂𝗺 ou 𝗛𝗶𝗴𝗵 quando a decisão envolve guardrails arquiteturais, revisão de código, queries ou superfície de segurança.
 
-Com o Dual-Audience CLI Design, humanos e agentes compartilham os mesmos contratos JSON sem desperdício de cota. Como você separa tarefas mecânicas de decisões críticas nos seus agentes?
+Com o Dual-Audience CLI Design, humanos e agentes compartilham os mesmos contratos JSON sem desperdício de cota.
+
+Como você separa tarefas mecânicas de decisões críticas nos seus agentes?
 
 ——
 
-👋 PS: Publiquei o 6º artigo técnico detalhando a arquitetura completa do 𝗚𝗲𝗺𝗶𝗻𝗶 𝟰 𝗛𝘆𝗱𝗿𝗼𝗴𝗲𝗻 no 𝗽𝗶𝗽𝗲𝗹𝗶𝗻𝗲-𝗮𝗶 (v0.12.0 + DEL-043). Confira o código open-source (MIT) no GitHub: https://github.com/rodrigodosanjosoliveira/pipeline-ai
+👋 PS: Publiquei o 6º artigo técnico detalhando a arquitetura completa do 𝗚𝗲𝗺𝗶𝗻𝗶 𝟰 𝗛𝘆𝗱𝗿𝗼𝗴𝗲𝗻 no 𝗽𝗶𝗽𝗲𝗹𝗶𝗻𝗲-𝗮𝗶 (v0.12.0 + DEL-043). Confira o código open-source (MIT) no GitHub → https://github.com/rodrigodosanjosoliveira/pipeline-ai
 
 ——
 
-♻️ Se este conteúdo ajudou, compartilhe com sua rede.
+♻️ Repita/compartilhe este post se ele ajudou você.
 ➕ Siga para mais arquitetura prática de agentes em Go.
