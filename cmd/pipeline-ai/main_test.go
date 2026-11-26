@@ -37,7 +37,7 @@ func TestCLIRouting(t *testing.T) {
 			name:       "comando version",
 			args:       []string{"version"},
 			wantExit:   0,
-			wantStdout: "pipeline-ai v0.11.0",
+			wantStdout: "pipeline-ai v0.12.0",
 		},
 		{
 			name:       "comando desconhecido",

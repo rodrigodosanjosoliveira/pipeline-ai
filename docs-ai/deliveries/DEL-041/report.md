@@ -2,7 +2,7 @@
 delivery_id: DEL-041
 task_code: TASK-041
 title: "Helpful Errors com Hints Acionáveis & Guided Recovery (cause, hint, fix_command)"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

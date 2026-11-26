@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-041 | TASK-041 | Helpful Errors com Hints Acionáveis & Guided Recovery | feat | 2026-11-19 | draft |
+| DEL-042 | TASK-042 | Release v0.12.0: Consolidação do Dual-Audience CLI Design, Gemini 4 Hydrogen e Helpful Errors | chore | 2026-11-26 | draft |
+| DEL-041 | TASK-041 | Helpful Errors com Hints Acionáveis & Guided Recovery | feat | 2026-11-19 | merged |
 | DEL-040 | TASK-040 | Discovery e Introspecção de Schema em Tempo de Execução (schema / --schema) | feat | 2026-11-14 | merged |
 | DEL-039 | TASK-039 | Thinking Tier Matrix (model_routing) e Provider Nativo Gemini Hydrogen no Sensor Semântico | feat | 2026-11-13 | merged |
 | DEL-038 | TASK-038 | Agent Mode, detecção de TTY, hardening não-interativo e cobertura JSON integral | feat | 2026-11-12 | merged |
