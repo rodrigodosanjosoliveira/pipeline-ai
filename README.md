@@ -89,7 +89,7 @@ flowchart LR
 - Compilado e testado com **100% de sucesso em Go 1.24+** (stdlib pura, compatível com detector de concorrência `-race`).
 - Integrado nativamente ao ecossistema **Antigravity** via `.agents/hooks.json`, regras e **16 skills modulares**.
 - Automação via **`Taskfile.yml`** e workflow completo no **GitHub Actions** (`.github/workflows/ci.yml`).
-- Versão estável atual: **`v0.11.0`**.
+- Versão estável atual: **`v0.12.0`**.
 
 ---
 
@@ -125,10 +125,10 @@ Consulte o [Guia de Criação de Projetos](docs-ai/GUIA-CRIACAO-PROJETOS.md) par
 Requer Go 1.24 ou superior (a diretiva `tool` no `go.mod` é obrigatória):
 
 ```bash
-go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@v0.11.0
+go get -tool github.com/rodrigodosanjosoliveira/pipeline-ai/cmd/pipeline-ai@v0.12.0
 ```
 
-*(Os comandos legados `cmd/pipeline-hook@v0.11.0` e `cmd/pipeline-validate@v0.11.0` também permanecem disponíveis).*
+*(Os comandos legados `cmd/pipeline-hook@v0.12.0` e `cmd/pipeline-validate@v0.12.0` também permanecem disponíveis).*
 
 *(Se o repositório for privado, configure `go env -w GOPRIVATE="github.com/rodrigodosanjosoliveira/*"` e autentique o Git via SSH)*.
 
@@ -238,7 +238,7 @@ go tool pipeline-validate -json docs-ai/deliveries/DEL-001/report.md
 
 ---
 
-## Gestão de Entregas, Sensores e Módulos (v0.6.0 – v0.11.0)
+## Gestão de Entregas, Sensores e Módulos (v0.6.0 – v0.12.0)
 
 A CLI unificada expande os recursos de governança autônoma e determinística:
 
