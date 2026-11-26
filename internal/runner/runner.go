@@ -3,6 +3,7 @@ package runner
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/doctor"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/metrics"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor"
+	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/sensor/semantic"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/state"
 	"github.com/rodrigodosanjosoliveira/pipeline-ai/internal/validate"
 )
@@ -47,13 +49,18 @@ type Result struct {
 
 // Options configura a execução do runner.
 type Options struct {
-	Dir            string `json:"dir"`
-	DeliveryID     string `json:"delivery_id,omitempty"`
-	ReportPath     string `json:"report_path,omitempty"`
-	BaseRef        string `json:"base_ref,omitempty"`
-	NoGit          bool   `json:"no_git"`
-	MaxOutputBytes int    `json:"max_output_bytes,omitempty"`
-	VerboseOutput  bool   `json:"verbose_output,omitempty"`
+	Dir              string `json:"dir"`
+	DeliveryID       string `json:"delivery_id,omitempty"`
+	ReportPath       string `json:"report_path,omitempty"`
+	BaseRef          string `json:"base_ref,omitempty"`
+	NoGit            bool   `json:"no_git"`
+	MaxOutputBytes   int    `json:"max_output_bytes,omitempty"`
+	VerboseOutput    bool   `json:"verbose_output,omitempty"`
+	SemanticGate     bool   `json:"semantic_gate,omitempty"`
+	SemanticProvider string `json:"semantic_provider,omitempty"`
+	SemanticModel    string `json:"semantic_model,omitempty"`
+	SemanticEndpoint string `json:"semantic_endpoint,omitempty"`
+	SemanticAPIKey   string `json:"-"`
 }
 
 // Run executa os gates integrados do pipeline.
@@ -212,6 +219,15 @@ func Run(opts Options) (*Result, error) {
 	steps = append(steps, validateStep)
 	_ = metrics.RecordStageDuration(absRoot, deliveryID, "validate", valDur, validateStep.Status == StatusPass)
 
+	// 4. semantic (gate opcional advisory)
+	if opts.SemanticGate {
+		semStart := time.Now()
+		semStep := runSemanticGate(absRoot, deliveryID, reportPath, opts)
+		semDur := time.Since(semStart)
+		steps = append(steps, semStep)
+		_ = metrics.RecordStageDuration(absRoot, deliveryID, "semantic", semDur, semStep.Status == StatusPass || semStep.Status == StatusSkip)
+	}
+
 	allOK := true
 	for _, s := range steps {
 		if s.Status == StatusFail {
@@ -247,4 +263,147 @@ func Run(opts Options) (*Result, error) {
 	}
 
 	return res, nil
+}
+
+func runSemanticGate(absRoot, deliveryID, reportPath string, opts Options) StepResult {
+	step := StepResult{Name: "semantic"}
+
+	provider := strings.ToLower(strings.TrimSpace(opts.SemanticProvider))
+	if provider == "" {
+		provider = strings.ToLower(strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_PROVIDER")))
+	}
+
+	model := strings.TrimSpace(opts.SemanticModel)
+	endpoint := strings.TrimSpace(opts.SemanticEndpoint)
+	if endpoint == "" {
+		endpoint = strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_ENDPOINT"))
+	}
+
+	if model == "" && (provider == semantic.ProviderGemini || strings.Contains(endpoint, "generativelanguage.googleapis.com")) {
+		model = semantic.DefaultGeminiModel
+	}
+
+	if endpoint == "" {
+		if provider == semantic.ProviderGemini {
+			gemModel := model
+			if gemModel == "" {
+				gemModel = semantic.DefaultGeminiModel
+			}
+			endpoint = fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", gemModel)
+		} else {
+			endpoint = strings.TrimSpace(os.Getenv("JEV_ENDPOINT"))
+		}
+	}
+
+	apiKey := strings.TrimSpace(opts.SemanticAPIKey)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("PIPELINE_SEMANTIC_API_KEY"))
+	}
+	if apiKey == "" {
+		if provider == semantic.ProviderGemini || strings.Contains(endpoint, "generativelanguage.googleapis.com") {
+			apiKey = strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+			if apiKey == "" {
+				apiKey = strings.TrimSpace(os.Getenv("JEV_API_KEY"))
+			}
+		} else {
+			apiKey = strings.TrimSpace(os.Getenv("JEV_API_KEY"))
+			if apiKey == "" {
+				apiKey = strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+			}
+		}
+	}
+
+	if apiKey == "" || (provider != semantic.ProviderGemini && endpoint == "") || endpoint == "" {
+		step.Status = StatusSkip
+		step.Message = "gate semântico ignorado (credenciais ausentes)"
+		return step
+	}
+
+	_, question, err := semantic.ResolvePreset("yagni")
+	if err != nil {
+		question = "A mudança proposta respeita o princípio YAGNI e evita complexidade desnecessária?"
+	}
+
+	evalState := ""
+	if reportPath != "" {
+		if raw, err := os.ReadFile(reportPath); err == nil {
+			evalState = strings.TrimSpace(string(raw))
+		}
+	}
+	if evalState == "" {
+		if deliveryID != "" {
+			evalState = "delivery " + deliveryID
+		} else {
+			evalState = "delivery"
+		}
+	}
+
+	thinkingLevel := ""
+	if provider == semantic.ProviderGemini || strings.Contains(endpoint, "generativelanguage.googleapis.com") {
+		thinkingLevel = semantic.DefaultGeminiThinkingLevel
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	client := semantic.NewClient(semantic.ClientConfig{
+		Endpoint:      endpoint,
+		APIKey:        apiKey,
+		Timeout:       15 * time.Second,
+		MaxBodyBytes:  10 * 1024 * 1024,
+		Provider:      provider,
+		Model:         model,
+		ThinkingLevel: thinkingLevel,
+	})
+
+	start := time.Now()
+	dec, evalErr := client.EvalNoul(ctx, semantic.EvalRequest{
+		Mode:      "noul",
+		State:     evalState,
+		Question:  question,
+		Threshold: 0.7,
+	})
+
+	var conf float64
+	if dec != nil {
+		conf = dec.Confidence
+	}
+	_ = metrics.RecordSemanticEvalWithProvider(absRoot, deliveryID, "noul", provider, model, time.Since(start), evalErr == nil, conf)
+
+	if evalErr != nil {
+		secrets := []string{
+			apiKey,
+			os.Getenv("GEMINI_API_KEY"),
+			os.Getenv("PIPELINE_SEMANTIC_API_KEY"),
+			os.Getenv("JEV_API_KEY"),
+		}
+		sanitized := redactSecrets(evalErr.Error(), secrets...)
+		step.Status = StatusWarn
+		step.Message = fmt.Sprintf("gate semântico indisponível (advisory): %s", sanitized)
+		return step
+	}
+
+	if dec != nil && dec.Decision {
+		step.Status = StatusPass
+		step.Message = fmt.Sprintf("gate semântico aprovado (confiança %.2f)", dec.Confidence)
+		return step
+	}
+
+	reason := "sem justificativa"
+	if dec != nil && strings.TrimSpace(dec.Reason) != "" {
+		reason = strings.TrimSpace(dec.Reason)
+	}
+	step.Status = StatusWarn
+	step.Message = fmt.Sprintf("gate semântico em alerta (YAGNI): %s", reason)
+	return step
+}
+
+func redactSecrets(msg string, secrets ...string) string {
+	out := msg
+	for _, s := range secrets {
+		if s != "" {
+			out = strings.ReplaceAll(out, s, "[REDACTED]")
+		}
+	}
+	return out
 }

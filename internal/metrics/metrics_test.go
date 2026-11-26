@@ -3,6 +3,7 @@ package metrics
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -862,5 +863,51 @@ func TestRecordDeliveryClose(t *testing.T) {
 	}
 	if dora.LeadTimeForChanges != 45*time.Minute {
 		t.Errorf("dora.LeadTimeForChanges = %v, esperado 45m", dora.LeadTimeForChanges)
+	}
+}
+
+func TestRecordSemanticEvalWithProviderAndDORA(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("GEMINI_API_KEY", "AIza-secret-gemini-key")
+	t.Setenv("JEV_API_KEY", "jev-secret-api-key")
+
+	if err := RecordSemanticEvalWithProvider(dir, "DEL-043", "noul", "gemini", "gemini-4-hydrogen-low", 120*time.Millisecond, true, 0.95); err != nil {
+		t.Fatalf("RecordSemanticEvalWithProvider (gemini) falhou: %v", err)
+	}
+	if err := RecordSemanticEvalWithProvider(dir, "DEL-043", "choice", "jev", "jev-v1", 80*time.Millisecond, false, 0.70); err != nil {
+		t.Fatalf("RecordSemanticEvalWithProvider (jev) falhou: %v", err)
+	}
+
+	dora, err := CalculateDORAWithOptions(dir, DORAOptions{})
+	if err != nil {
+		t.Fatalf("CalculateDORAWithOptions falhou: %v", err)
+	}
+
+	if dora.Semantic.TotalEvaluations != 2 {
+		t.Errorf("dora.Semantic.TotalEvaluations = %d, esperado 2", dora.Semantic.TotalEvaluations)
+	}
+	if dora.Semantic.ByProvider["gemini"] != 1 {
+		t.Errorf("dora.Semantic.ByProvider[\"gemini\"] = %d, esperado 1", dora.Semantic.ByProvider["gemini"])
+	}
+	if dora.Semantic.ByProvider["jev"] != 1 {
+		t.Errorf("dora.Semantic.ByProvider[\"jev\"] = %d, esperado 1", dora.Semantic.ByProvider["jev"])
+	}
+	if dora.Semantic.ByModel["gemini-4-hydrogen-low"] != 1 {
+		t.Errorf("dora.Semantic.ByModel[\"gemini-4-hydrogen-low\"] = %d, esperado 1", dora.Semantic.ByModel["gemini-4-hydrogen-low"])
+	}
+	if dora.Semantic.ByModel["jev-v1"] != 1 {
+		t.Errorf("dora.Semantic.ByModel[\"jev-v1\"] = %d, esperado 1", dora.Semantic.ByModel["jev-v1"])
+	}
+
+	// SEC-03: nenhuma API key pode ser persistida em .pipeline-state/metrics.json
+	rawBytes, err := os.ReadFile(filepath.Join(dir, DirName, FileName))
+	if err != nil {
+		t.Fatalf("erro ao ler metrics.json: %v", err)
+	}
+	raw := string(rawBytes)
+	for _, forbidden := range []string{"AIza-secret-gemini-key", "jev-secret-api-key", "api_key"} {
+		if strings.Contains(raw, forbidden) {
+			t.Errorf("metrics.json não deve conter %q (SEC-03)", forbidden)
+		}
 	}
 }

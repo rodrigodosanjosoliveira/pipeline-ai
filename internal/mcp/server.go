@@ -133,6 +133,12 @@ func (s *Server) handleResourcesList(req *Request, out io.Writer) {
 			Description: "Metadados e expiração da delivery atualmente ativa",
 			MimeType:    "application/json",
 		},
+		{
+			URI:         "pipeline://routing",
+			Name:        "Roteamento de Modelos por Skill",
+			Description: "Mapeamento de skills para modelos Gemini recomendados",
+			MimeType:    "application/json",
+		},
 	}
 	s.sendResult(out, req.ID, map[string]any{"resources": resources})
 }
@@ -235,6 +241,33 @@ func (s *Server) handleResourcesRead(req *Request, out io.Writer) {
 					URI:      params.URI,
 					MimeType: "application/json",
 					Text:     text,
+				},
+			},
+		})
+
+	case "pipeline://routing":
+		skills := config.DefaultModelRouting()
+		if cfg, err := config.Load(s.RootDir); err == nil && cfg != nil {
+			for k, v := range cfg.ModelRouting {
+				if trimmed := strings.TrimSpace(v); trimmed != "" {
+					skills[k] = trimmed
+				}
+			}
+		}
+		payload := struct {
+			DefaultModel string            `json:"default_model"`
+			Skills       map[string]string `json:"skills"`
+		}{
+			DefaultModel: "gemini-4-hydrogen-medium",
+			Skills:       skills,
+		}
+		data, _ := json.MarshalIndent(payload, "", "  ")
+		s.sendResult(out, req.ID, ReadResourceResult{
+			Contents: []ResourceContent{
+				{
+					URI:      params.URI,
+					MimeType: "application/json",
+					Text:     string(data),
 				},
 			},
 		})
@@ -394,6 +427,10 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 					"max_output_bytes": map[string]any{
 						"type":        "integer",
 						"description": "Limite máximo de bytes da saída dos sensores (padrão: 8192)",
+					},
+					"semantic_gate": map[string]any{
+						"type":        "boolean",
+						"description": "Executa gate semântico opcional (YAGNI) após validação",
 					},
 				},
 			},
@@ -947,6 +984,13 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			maxBytes = int(v)
 		}
 
+		semanticGate := false
+		if v, ok := params.Arguments["semantic_gate"].(bool); ok {
+			semanticGate = v
+		} else if v, ok := params.Arguments["semanticGate"].(bool); ok {
+			semanticGate = v
+		}
+
 		opts := runner.Options{
 			Dir:            targetDir,
 			DeliveryID:     strings.TrimSpace(deliveryID),
@@ -954,6 +998,7 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			BaseRef:        strings.TrimSpace(baseRef),
 			NoGit:          noGit,
 			MaxOutputBytes: maxBytes,
+			SemanticGate:   semanticGate,
 		}
 
 		res, err := runner.Run(opts)
@@ -1451,7 +1496,7 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			}
 		}
 
-		_ = metrics.RecordSemanticEval(s.RootDir, activeDelID, mode, time.Since(start), err == nil, conf)
+		_ = metrics.RecordSemanticEvalWithProvider(s.RootDir, activeDelID, mode, provider, model, time.Since(start), err == nil, conf)
 
 		secrets := []string{apiKey, os.Getenv("JEV_API_KEY"), os.Getenv("PIPELINE_SEMANTIC_API_KEY"), os.Getenv("GEMINI_API_KEY")}
 

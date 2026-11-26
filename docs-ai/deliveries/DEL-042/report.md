@@ -2,7 +2,7 @@
 delivery_id: DEL-042
 task_code: TASK-042
 title: "Release v0.12.0: Consolidação do Dual-Audience CLI Design, Gemini 4 Hydrogen e Helpful Errors"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

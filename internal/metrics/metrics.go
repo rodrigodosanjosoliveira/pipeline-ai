@@ -93,6 +93,8 @@ type SemanticSummary struct {
 	AverageConfidence float64        `json:"average_confidence"` // Confiança média (0.0 a 1.0)
 	AverageDuration   time.Duration  `json:"average_duration"`
 	ByMode            map[string]int `json:"by_mode"` // Contagem por modo ("noul", "choice", "score")
+	ByProvider        map[string]int `json:"by_provider,omitempty"`
+	ByModel           map[string]int `json:"by_model,omitempty"`
 }
 
 // DORAMetrics consolida as quatro métricas-chave DORA.
@@ -322,6 +324,21 @@ func RecordStageDuration(rootDir string, deliveryID, stage string, duration time
 
 // RecordSemanticEval registra um evento de telemetria de avaliação semântica (System One / Jev).
 func RecordSemanticEval(rootDir, deliveryID, mode string, duration time.Duration, success bool, confidence float64) error {
+	return RecordSemanticEvalWithProvider(rootDir, deliveryID, mode, "", "", duration, success, confidence)
+}
+
+// RecordSemanticEvalWithProvider registra um evento de telemetria de avaliação semântica com provider e model (sem credenciais).
+func RecordSemanticEvalWithProvider(rootDir, deliveryID, mode, provider, model string, duration time.Duration, success bool, confidence float64) error {
+	meta := map[string]string{
+		"mode":       strings.TrimSpace(mode),
+		"confidence": fmt.Sprintf("%.2f", confidence),
+	}
+	if p := strings.TrimSpace(provider); p != "" {
+		meta["provider"] = p
+	}
+	if m := strings.TrimSpace(model); m != "" {
+		meta["model"] = m
+	}
 	return RecordEvent(rootDir, Event{
 		Type:       EventSemanticEval,
 		DeliveryID: strings.TrimSpace(deliveryID),
@@ -329,10 +346,7 @@ func RecordSemanticEval(rootDir, deliveryID, mode string, duration time.Duration
 		Duration:   duration,
 		Success:    success,
 		Stage:      strings.TrimSpace(mode),
-		Metadata: map[string]string{
-			"mode":       strings.TrimSpace(mode),
-			"confidence": fmt.Sprintf("%.2f", confidence),
-		},
+		Metadata:   meta,
 	})
 }
 
@@ -629,6 +643,8 @@ func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
 	var semanticRejected int
 	var totalSemanticDur time.Duration
 	var totalConfidence float64
+	var byProvider map[string]int
+	var byModel map[string]int
 
 	for _, e := range data.Events {
 		if e.Type != EventSemanticEval {
@@ -651,6 +667,18 @@ func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
 				if c, err := strconv.ParseFloat(strings.TrimSpace(rawConf), 64); err == nil && !math.IsNaN(c) && !math.IsInf(c, 0) && c >= 0.0 && c <= 1.0 {
 					totalConfidence += c
 				}
+			}
+			if p := strings.TrimSpace(e.Metadata["provider"]); p != "" {
+				if byProvider == nil {
+					byProvider = make(map[string]int)
+				}
+				byProvider[p]++
+			}
+			if m := strings.TrimSpace(e.Metadata["model"]); m != "" {
+				if byModel == nil {
+					byModel = make(map[string]int)
+				}
+				byModel[m]++
 			}
 		}
 		var mode string
@@ -675,6 +703,22 @@ func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
 		avgSemanticDur = time.Duration(int64(totalSemanticDur) / int64(semanticTotal))
 	}
 
+	semSummary := SemanticSummary{
+		TotalEvaluations:  semanticTotal,
+		ApprovedTotal:     semanticApproved,
+		RejectedTotal:     semanticRejected,
+		ApprovalRate:      semanticApprovalRate,
+		AverageConfidence: avgConfidence,
+		AverageDuration:   avgSemanticDur,
+		ByMode:            byMode,
+	}
+	if len(byProvider) > 0 {
+		semSummary.ByProvider = byProvider
+	}
+	if len(byModel) > 0 {
+		semSummary.ByModel = byModel
+	}
+
 	return DORAMetrics{
 		DeploymentFrequency: deployFreq,
 		DeploymentsTotal:    deploymentsTotal,
@@ -683,16 +727,17 @@ func CalculateDORA(data *MetricsData, opts ...DORAOptions) DORAMetrics {
 		FailedDeployments:   failedDeployments,
 		TimeToRestore:       mttr,
 		RestoresTotal:       restoresTotal,
-		Semantic: SemanticSummary{
-			TotalEvaluations:  semanticTotal,
-			ApprovedTotal:     semanticApproved,
-			RejectedTotal:     semanticRejected,
-			ApprovalRate:      semanticApprovalRate,
-			AverageConfidence: avgConfidence,
-			AverageDuration:   avgSemanticDur,
-			ByMode:            byMode,
-		},
+		Semantic:            semSummary,
 	}
+}
+
+// CalculateDORAWithOptions carrega os dados de rootDir e calcula as métricas DORA retornando por valor.
+func CalculateDORAWithOptions(rootDir string, opts ...DORAOptions) (DORAMetrics, error) {
+	data, err := Load(rootDir)
+	if err != nil {
+		return DORAMetrics{}, err
+	}
+	return CalculateDORA(data, opts...), nil
 }
 
 // GetDORA carrega os dados de rootDir e calcula as métricas DORA.

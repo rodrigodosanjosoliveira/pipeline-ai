@@ -1695,3 +1695,80 @@ func TestMCPHelpfulErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestMCPRoutingResourceAndSemanticGate(t *testing.T) {
+	s := NewServer("../..")
+
+	t.Run("resources/read em pipeline://routing retorna JSON valido com default_model e skills", func(t *testing.T) {
+		req := `{"jsonrpc":"2.0","id":301,"method":"resources/read","params":{"uri":"pipeline://routing"}}`
+		res := runRPC(t, s, req)
+
+		result, ok := res["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente em resources/read pipeline://routing: %v", res)
+		}
+		contents, ok := result["contents"].([]any)
+		if !ok || len(contents) == 0 {
+			t.Fatalf("contents vazio em pipeline://routing: %v", result)
+		}
+		first, ok := contents[0].(map[string]any)
+		if !ok {
+			t.Fatalf("formato de content inválido: %v", contents)
+		}
+		if first["mimeType"] != "application/json" {
+			t.Errorf("mimeType = %v, esperado %q", first["mimeType"], "application/json")
+		}
+		text, _ := first["text"].(string)
+		var routing struct {
+			DefaultModel string            `json:"default_model"`
+			Skills       map[string]string `json:"skills"`
+		}
+		if err := json.Unmarshal([]byte(text), &routing); err != nil {
+			t.Fatalf("texto de pipeline://routing não é JSON válido: %v\nraw:\n%s", err, text)
+		}
+		if strings.TrimSpace(routing.DefaultModel) == "" {
+			t.Errorf("default_model vazio em pipeline://routing")
+		}
+		if routing.Skills["docs-update"] != "gemini-4-hydrogen-low" {
+			t.Errorf("skills[\"docs-update\"] = %q, esperado %q", routing.Skills["docs-update"], "gemini-4-hydrogen-low")
+		}
+		if routing.Skills["code-reviewer"] != "gemini-4-hydrogen-high" {
+			t.Errorf("skills[\"code-reviewer\"] = %q, esperado %q", routing.Skills["code-reviewer"], "gemini-4-hydrogen-high")
+		}
+	})
+
+	t.Run("tools/list expoe semantic_gate em pipeline_run_pipeline", func(t *testing.T) {
+		req := `{"jsonrpc":"2.0","id":302,"method":"tools/list","params":{}}`
+		res := runRPC(t, s, req)
+
+		result, ok := res["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("result ausente em tools/list: %v", res)
+		}
+		tools, ok := result["tools"].([]any)
+		if !ok {
+			t.Fatalf("tools ausente em tools/list: %v", result)
+		}
+
+		var found bool
+		for _, raw := range tools {
+			tool, ok := raw.(map[string]any)
+			if !ok || tool["name"] != "pipeline_run_pipeline" {
+				continue
+			}
+			found = true
+			schema, ok := tool["inputSchema"].(map[string]any)
+			if !ok {
+				t.Fatalf("inputSchema inválido em pipeline_run_pipeline")
+			}
+			props, ok := schema["properties"].(map[string]any)
+			if !ok || props["semantic_gate"] == nil {
+				t.Errorf("inputSchema de pipeline_run_pipeline deve expor 'semantic_gate'")
+			}
+			break
+		}
+		if !found {
+			t.Fatalf("ferramenta pipeline_run_pipeline não encontrada em tools/list")
+		}
+	})
+}

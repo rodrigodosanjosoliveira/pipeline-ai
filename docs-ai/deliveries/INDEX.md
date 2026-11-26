@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-042 | TASK-042 | Release v0.12.0: Consolidação do Dual-Audience CLI Design, Gemini 4 Hydrogen e Helpful Errors | chore | 2026-11-26 | draft |
+| DEL-043 | TASK-043 | Integração End-to-End do Ciclo Gemini 4 Hydrogen (Telemetria por Tier, Gate Semântico Advisory no Runner e pipeline://routing) | feat | 2026-11-26 | draft |
+| DEL-042 | TASK-042 | Release v0.12.0: Consolidação do Dual-Audience CLI Design, Gemini 4 Hydrogen e Helpful Errors | chore | 2026-11-26 | merged |
 | DEL-041 | TASK-041 | Helpful Errors com Hints Acionáveis & Guided Recovery | feat | 2026-11-19 | merged |
 | DEL-040 | TASK-040 | Discovery e Introspecção de Schema em Tempo de Execução (schema / --schema) | feat | 2026-11-14 | merged |
 | DEL-039 | TASK-039 | Thinking Tier Matrix (model_routing) e Provider Nativo Gemini Hydrogen no Sensor Semântico | feat | 2026-11-13 | merged |

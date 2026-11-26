@@ -748,6 +748,24 @@ Padronização da experiência não-interativa e estruturada para orquestradores
 3. **Alternativas descartadas:**
    - Alterar o formato das strings de erro antigas sem manter retrocompatibilidade: descartado para não quebrar scripts e testes existentes.
 
+---
+
+## 18. Integração End-to-End do Ciclo Gemini 4 Hydrogen
+
+### D-44 — Telemetria por Tier, Gate Semântico Advisory no Runner e `pipeline://routing` (DEL-043)
+
+1. **Contexto:**
+   - Ter o provider Gemini Hydrogen e o `ModelRouting` isolados em `eval` não fecha o ciclo de governança contínua nem permite visibilidade de custo/latência por tier ou consulta estruturada pelo orquestrador.
+
+2. **Decisão:**
+   - **(1) Telemetria por Provider e Model (`internal/metrics`):** Estender `internal/metrics` com `RecordSemanticEvalWithProvider` e `SemanticSummary.ByProvider`/`ByModel` (com tag `omitempty` para retrocompatibilidade total com históricos existentes).
+   - **(2) Gate Semântico Advisory no Runner (`internal/runner`):** Integrar o 4º estágio opcional `-semantic-gate` no `internal/runner` como gate advisory usando o preset `yagni` (`StatusSkip` quando não houver credenciais configuradas, `StatusPass`/`StatusWarn` na execução, aplicando `redactSecrets` em mensagens de erro).
+   - **(3) Recurso MCP `pipeline://routing` (`internal/mcp`):** Expor o recurso MCP `pipeline://routing` em JSON com a Thinking Tier Matrix (`model_routing`) resolvida.
+
+3. **Alternativas descartadas:**
+   - Tornar o gate semântico bloqueante (`StatusFail`) por padrão no `runner`: descartado para preservar o determinismo da esteira quando houver oscilação de rede/API ou ausência de chave.
+
+
 
 
 
