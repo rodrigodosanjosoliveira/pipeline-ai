@@ -733,5 +733,21 @@ Padronização da experiência não-interativa e estruturada para orquestradores
 3. **Alternativas descartadas:**
    - Gerar schemas por reflexão em runtime de `flag.FlagSet` espalhados: descartado por omitir enums, variáveis de ambiente e `output_schema` de retorno JSON.
 
+---
+
+## 17. Helpful Errors com Hints Acionáveis & Guided Recovery
+
+### D-43 — Erros Estruturados com `cause`, `hint`, `fix_command` e Sugestão de Comandos (DEL-041)
+
+1. **Contexto:**
+   - Erros genéricos sem contexto ou sugestão de correção forçam humanos e agentes de IA a múltiplas tentativas ou leitura manual de documentação.
+
+2. **Decisão:**
+   - Padronizar respostas de erro na CLI (`writeCLIError` + `suggestCommand` via distância de Levenshtein) e no servidor MCP (`sendToolError`) contendo diagnóstico (`cause`), dica acionável (`hint`) e comando exato de recuperação (`fix_command`), preservando prefixos e campos retrocompatíveis (`ERRO:`, `configured: false`).
+
+3. **Alternativas descartadas:**
+   - Alterar o formato das strings de erro antigas sem manter retrocompatibilidade: descartado para não quebrar scripts e testes existentes.
+
+
 
 

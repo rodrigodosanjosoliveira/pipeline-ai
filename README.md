@@ -314,6 +314,17 @@ pipeline-ai schema eval
 pipeline-ai eval --schema
 ```
 
+### Helpful Errors & Guided Recovery
+A CLI e o servidor MCP emitem erros estruturados com diagnóstico (`cause`), dica acionável (`hint`) e comando exato de recuperação (`fix_command`), além de sugestão automática de subcomandos via distância de Levenshtein (D-43):
+```bash
+# Comando digitado incorretamente sugere o comando correto:
+pipeline-ai sensro
+# → Você quis dizer: pipeline-ai sensor?
+
+# Em modo JSON / -agent, erros retornam cause, hint e fix_command estruturados:
+pipeline-ai -agent validate
+```
+
 ### Avaliação Semântica Calibrada (`pipeline-ai eval`)
 Submete uma avaliação semântica calibrada (System One / Jev ou nativo Gemini) nos modos binário (`noul`), múltipla escolha (`choice`) ou pontuação contínua (`score`) (D-34, D-35, D-41):
 ```bash
@@ -471,14 +482,6 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 - **`pipeline_list_debt`**: Varre o diretório e retorna o inventário JSON de atalhos deliberados (`// shortcut: <limite> | upgrade: <gatilho>`) (`dir`).
 - **`pipeline_eval_semantic`**: Submete uma avaliação semântica calibrada (Jev ou nativo Gemini) nos modos `noul`, `choice` ou `score`, ou via `preset` (`yagni`, `minimalism`, `ponytail`) (`state`, `question`, `preset`, `mode`, `choices`, `max_score`, `threshold`, `provider`, `model`, `thinking_level`, `endpoint`, `api_key`, `timeout_seconds`) (D-34, D-35, D-41).
 - **`pipeline_manage_modules`**: Gerencia módulos opcionais (`action`: list, enable, disable; `module`, `dir`).
-
----
-
-## Roadmap (Próximas Entregas)
-
-### Helpful Errors com Hints Acionáveis & Guided Recovery (`DEL-041`)
-- **Mensagens de Erro Orientadas a Ação:** Padronização de mensagens de erro estruturadas na CLI e MCP contendo diagnóstico determinístico (`cause`), contexto de falha e sugestão direta de recuperação (`hint` e `fix_command`).
-- **Sugestão Automática de Correções:** Dicas de comandos de autocorreção quando arquivos ou parâmetros obrigatórios estiverem ausentes.
 
 ---
 

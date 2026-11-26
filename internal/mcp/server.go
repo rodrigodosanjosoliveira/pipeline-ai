@@ -810,27 +810,25 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 		case "enable":
 			modName, _ := params.Arguments["module"].(string)
 			if strings.TrimSpace(modName) == "" {
-				s.sendResult(out, req.ID, ToolResult{
-					Content: []ToolContent{
-						{
-							Type: "text",
-							Text: "ERRO: módulo não informado",
-						},
-					},
-					IsError: true,
-				})
+				s.sendToolError(
+					out,
+					req.ID,
+					"módulo não informado",
+					"O parâmetro 'module' é obrigatório para habilitar um módulo.",
+					"Execute a ação 'list' para consultar os módulos opcionais disponíveis.",
+					"pipeline_manage_modules(action=\"list\")",
+				)
 				return
 			}
 			if err := cfg.EnableModule(modName); err != nil {
-				s.sendResult(out, req.ID, ToolResult{
-					Content: []ToolContent{
-						{
-							Type: "text",
-							Text: fmt.Sprintf("ERRO ao habilitar módulo: %v", err),
-						},
-					},
-					IsError: true,
-				})
+				s.sendToolError(
+					out,
+					req.ID,
+					fmt.Sprintf("ao habilitar módulo: %v", err),
+					fmt.Sprintf("O módulo %q não é reconhecido ou não pôde ser habilitado.", modName),
+					"Execute a ação 'list' para ver os módulos válidos disponíveis.",
+					"pipeline_manage_modules(action=\"list\")",
+				)
 				return
 			}
 			if err := cfg.Save(); err != nil {
@@ -858,27 +856,25 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 		case "disable":
 			modName, _ := params.Arguments["module"].(string)
 			if strings.TrimSpace(modName) == "" {
-				s.sendResult(out, req.ID, ToolResult{
-					Content: []ToolContent{
-						{
-							Type: "text",
-							Text: "ERRO: módulo não informado",
-						},
-					},
-					IsError: true,
-				})
+				s.sendToolError(
+					out,
+					req.ID,
+					"módulo não informado",
+					"O parâmetro 'module' é obrigatório para desabilitar um módulo.",
+					"Execute a ação 'list' para consultar os módulos opcionais disponíveis.",
+					"pipeline_manage_modules(action=\"list\")",
+				)
 				return
 			}
 			if err := cfg.DisableModule(modName); err != nil {
-				s.sendResult(out, req.ID, ToolResult{
-					Content: []ToolContent{
-						{
-							Type: "text",
-							Text: fmt.Sprintf("ERRO ao desabilitar módulo: %v", err),
-						},
-					},
-					IsError: true,
-				})
+				s.sendToolError(
+					out,
+					req.ID,
+					fmt.Sprintf("ao desabilitar módulo: %v", err),
+					fmt.Sprintf("O módulo %q não é reconhecido ou não pôde ser desabilitado.", modName),
+					"Execute a ação 'list' para ver os módulos válidos disponíveis.",
+					"pipeline_manage_modules(action=\"list\")",
+				)
 				return
 			}
 			if err := cfg.Save(); err != nil {
@@ -904,15 +900,14 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			})
 
 		default:
-			s.sendResult(out, req.ID, ToolResult{
-				Content: []ToolContent{
-					{
-						Type: "text",
-						Text: fmt.Sprintf("ação desconhecida: %q (use 'list', 'enable' ou 'disable')", action),
-					},
-				},
-				IsError: true,
-			})
+			s.sendToolError(
+				out,
+				req.ID,
+				fmt.Sprintf("ação desconhecida: %q", action),
+				"A ação informada não é suportada por pipeline_manage_modules.",
+				"Use 'list', 'enable' ou 'disable'. Comece com 'list' para inspecionar os módulos.",
+				"pipeline_manage_modules(action=\"list\")",
+			)
 		}
 
 	case "pipeline_run_pipeline":
@@ -1213,15 +1208,14 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 		}
 
 		if stateStr == "" || questionStr == "" {
-			s.sendResult(out, req.ID, ToolResult{
-				Content: []ToolContent{
-					{
-						Type: "text",
-						Text: "ERRO: argumentos 'state' e 'question' (ou 'preset') são obrigatórios e não podem ser vazios",
-					},
-				},
-				IsError: true,
-			})
+			s.sendToolError(
+				out,
+				req.ID,
+				"argumentos 'state' e 'question' (ou 'preset') são obrigatórios e não podem ser vazios",
+				"Um ou mais parâmetros obrigatórios para avaliação semântica não foram informados.",
+				"Forneça 'state' com o conteúdo a avaliar e 'question' (ou 'preset' como 'yagni' ou 'minimalism').",
+				"pipeline_eval_semantic(state=\"...\", question=\"...\")",
+			)
 			return
 		}
 
@@ -1550,6 +1544,33 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 	default:
 		s.sendError(out, req.ID, CodeInvalidParams, fmt.Sprintf("ferramenta desconhecida: %s", params.Name))
 	}
+}
+
+func (s *Server) sendToolError(out io.Writer, reqID any, msg, cause, hint, fixCmd string) {
+	var sb strings.Builder
+	sb.WriteString("ERRO: ")
+	sb.WriteString(msg)
+	if cause != "" {
+		sb.WriteString("\nCausa: ")
+		sb.WriteString(cause)
+	}
+	if hint != "" {
+		sb.WriteString("\nDica: ")
+		sb.WriteString(hint)
+	}
+	if fixCmd != "" {
+		sb.WriteString("\nComando sugerido: ")
+		sb.WriteString(fixCmd)
+	}
+	s.sendResult(out, reqID, ToolResult{
+		Content: []ToolContent{
+			{
+				Type: "text",
+				Text: sb.String(),
+			},
+		},
+		IsError: true,
+	})
 }
 
 func (s *Server) sendResult(out io.Writer, id any, result any) {

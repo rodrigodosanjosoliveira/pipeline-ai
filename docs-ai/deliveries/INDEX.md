@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-040 | TASK-040 | Discovery e Introspecção de Schema em Tempo de Execução (schema / --schema) | feat | 2026-11-14 | draft |
+| DEL-041 | TASK-041 | Helpful Errors com Hints Acionáveis & Guided Recovery | feat | 2026-11-19 | draft |
+| DEL-040 | TASK-040 | Discovery e Introspecção de Schema em Tempo de Execução (schema / --schema) | feat | 2026-11-14 | merged |
 | DEL-039 | TASK-039 | Thinking Tier Matrix (model_routing) e Provider Nativo Gemini Hydrogen no Sensor Semântico | feat | 2026-11-13 | merged |
 | DEL-038 | TASK-038 | Agent Mode, detecção de TTY, hardening não-interativo e cobertura JSON integral | feat | 2026-11-12 | merged |
 | DEL-037 | TASK-037 | Bounded Output, Smart Test Filtering e marcação de resultados parciais no sensor e runner (CLI e MCP) | feat | 2026-11-12 | merged |

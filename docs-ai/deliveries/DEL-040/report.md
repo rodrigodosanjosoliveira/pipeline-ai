@@ -2,7 +2,7 @@
 delivery_id: DEL-040
 task_code: TASK-040
 title: "Discovery e Introspecção de Schema em Tempo de Execução (schema / --schema)"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false
