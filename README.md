@@ -431,6 +431,7 @@ Persistência atômica e fail-safe em `.pipeline-state/metrics.json` (incluindo 
 3. **Métricas DORA e Telemetria Passiva para Agentes de IA:** [artigo-dora-metrics-telemetria-ia.md](docs-ai/artigos/artigo-dora-metrics-telemetria-ia.md) | [Dev.to (EN)](docs-ai/artigos/article-dora-metrics-ai-agents-devto.md)
 4. **System 1 vs. System 2: Sensoriamento Semântico Calibrado com Jev:** [artigo-sensoriamento-semantico-jev.md](docs-ai/artigos/artigo-sensoriamento-semantico-jev.md) | [Dev.to (EN)](docs-ai/artigos/article-semantic-sensing-jev-go-devto.md)
 5. **Governança Anti-Overengineering: Decision Ladder, Debt Ledger e Sensores YAGNI:** [artigo-governanca-anti-overengineering-yagni.md](docs-ai/artigos/artigo-governanca-anti-overengineering-yagni.md) | [Dev.to (EN)](docs-ai/artigos/article-anti-overengineering-yagni-go-devto.md)
+6. **Gemini 4 Hydrogen na Prática (Thinking Tiers & Sensor Semântico em Go):** [artigo-gemini-4-hydrogen-pipeline-ai.md](docs-ai/artigos/artigo-gemini-4-hydrogen-pipeline-ai.md) | [Dev.to (EN)](docs-ai/artigos/article-gemini-4-hydrogen-pipeline-ai-devto.md)
 
 ---
 

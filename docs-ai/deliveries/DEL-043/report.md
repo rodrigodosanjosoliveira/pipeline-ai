@@ -2,7 +2,7 @@
 delivery_id: DEL-043
 task_code: TASK-043
 title: "Integração End-to-End do Ciclo Gemini 4 Hydrogen (Telemetria por Tier, Gate Semântico Advisory no Runner e pipeline://routing)"
-status: draft
+status: merged
 require_security: true
 require_migration: false
 require_performance: false
