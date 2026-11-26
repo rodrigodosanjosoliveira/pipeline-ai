@@ -2553,3 +2553,40 @@ func TestCLIHelpfulErrorsAndGuidedRecovery(t *testing.T) {
 		}
 	})
 }
+
+func TestCLIRunSemanticGateFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	exitCode := run([]string{"schema", "run"}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("run(schema run) exitCode = %d, esperado 0; stderr:\n%s", exitCode, stderr.String())
+	}
+
+	var cmd struct {
+		Name  string `json:"name"`
+		Flags []struct {
+			Name    string `json:"name"`
+			Type    string `json:"type"`
+			Default any    `json:"default"`
+		} `json:"flags"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &cmd); err != nil {
+		t.Fatalf("stdout de schema run não é JSON válido: %v\n%s", err, stdout.String())
+	}
+
+	var found bool
+	for _, f := range cmd.Flags {
+		if f.Name == "semantic-gate" {
+			found = true
+			if f.Type != "bool" {
+				t.Errorf("flag semantic-gate type = %q, esperado %q", f.Type, "bool")
+			}
+			if f.Default != false {
+				t.Errorf("flag semantic-gate default = %v (%T), esperado false", f.Default, f.Default)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("flag 'semantic-gate' não encontrada no schema do comando 'run': %+v", cmd.Flags)
+	}
+}

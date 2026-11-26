@@ -2,6 +2,8 @@ package runner
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -402,4 +404,110 @@ func TestRun_PropagatesMaxOutputBytes(t *testing.T) {
 	if testCheck.OmittedBytes <= 0 {
 		t.Errorf("testCheck.OmittedBytes = %d, esperado > 0", testCheck.OmittedBytes)
 	}
+}
+
+func TestRunnerSemanticGate(t *testing.T) {
+	t.Run("SemanticGate=true sem credenciais faz skip do step semantic", func(t *testing.T) {
+		t.Setenv("GEMINI_API_KEY", "")
+		t.Setenv("PIPELINE_SEMANTIC_API_KEY", "")
+		t.Setenv("JEV_API_KEY", "")
+		t.Setenv("JEV_ENDPOINT", "")
+
+		tmpDir := setupBaseWorkspace(t)
+		setupValidDelivery(t, tmpDir, "DEL-043", "TASK-043")
+
+		res, err := Run(Options{
+			Dir:          tmpDir,
+			NoGit:        true,
+			SemanticGate: true,
+		})
+		if err != nil {
+			t.Fatalf("Run retornou erro inesperado: %v", err)
+		}
+		if res == nil {
+			t.Fatal("res retornado é nil")
+		}
+
+		semStep := findStep(res.Steps, "semantic")
+		if semStep == nil {
+			t.Fatalf("step 'semantic' não encontrado em res.Steps: %+v", res.Steps)
+		}
+		if semStep.Status != StatusSkip {
+			t.Errorf("semStep.Status = %q, esperado %q", semStep.Status, StatusSkip)
+		}
+	})
+
+	t.Run("SemanticGate=true com mock Gemini aprova e retorna StatusPass", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"decision\":true,\"confidence\":0.95,\"reasoning\":\"aprovado\"}"}]}}]}`))
+		}))
+		defer srv.Close()
+
+		tmpDir := setupBaseWorkspace(t)
+		setupValidDelivery(t, tmpDir, "DEL-043", "TASK-043")
+
+		res, err := Run(Options{
+			Dir:              tmpDir,
+			NoGit:            true,
+			SemanticGate:     true,
+			SemanticProvider: "gemini",
+			SemanticEndpoint: srv.URL,
+			SemanticAPIKey:   "gem-runner-secret",
+		})
+		if err != nil {
+			t.Fatalf("Run retornou erro inesperado: %v", err)
+		}
+		if res == nil {
+			t.Fatal("res retornado é nil")
+		}
+
+		semStep := findStep(res.Steps, "semantic")
+		if semStep == nil {
+			t.Fatalf("step 'semantic' não encontrado em res.Steps: %+v", res.Steps)
+		}
+		if semStep.Status != StatusPass {
+			t.Errorf("semStep.Status = %q, esperado %q (msg: %s)", semStep.Status, StatusPass, semStep.Message)
+		}
+	})
+
+	t.Run("SEC-03 erro 500 com segredo no body retorna StatusWarn e nao vaza API key", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":"upstream failed with key gem-runner-secret"}`))
+		}))
+		defer srv.Close()
+
+		tmpDir := setupBaseWorkspace(t)
+		setupValidDelivery(t, tmpDir, "DEL-043", "TASK-043")
+
+		res, err := Run(Options{
+			Dir:              tmpDir,
+			NoGit:            true,
+			SemanticGate:     true,
+			SemanticProvider: "gemini",
+			SemanticEndpoint: srv.URL,
+			SemanticAPIKey:   "gem-runner-secret",
+		})
+		if err != nil {
+			t.Fatalf("Run retornou erro inesperado: %v", err)
+		}
+		if res == nil {
+			t.Fatal("res retornado é nil")
+		}
+		if !res.OK {
+			t.Errorf("res.OK = false, esperado true (gate semântico em falha de API não deve quebrar build determinístico)")
+		}
+
+		semStep := findStep(res.Steps, "semantic")
+		if semStep == nil {
+			t.Fatalf("step 'semantic' não encontrado em res.Steps: %+v", res.Steps)
+		}
+		if semStep.Status != StatusWarn {
+			t.Errorf("semStep.Status = %q, esperado %q (msg: %s)", semStep.Status, StatusWarn, semStep.Message)
+		}
+		if strings.Contains(semStep.Message, "gem-runner-secret") {
+			t.Errorf("semStep.Message vazou API key: %q", semStep.Message)
+		}
+	})
 }

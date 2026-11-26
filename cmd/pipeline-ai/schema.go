@@ -236,6 +236,7 @@ func buildCLISchema() CLISchema {
 					{Name: "no-git", Type: "bool", Default: false, Description: "Pula verificações dependentes do git"},
 					{Name: "base", Type: "string", Default: "", Description: "Referência git para o diff"},
 					{Name: "max-output-bytes", Type: "int", Default: 65536, Description: "Limite máximo de bytes na saída dos sensores"},
+					{Name: "semantic-gate", Type: "bool", Default: false, Description: "Executa gate semântico opcional (YAGNI) após validação"},
 					{Name: "json", Type: "bool", Default: false, Description: "Emite os resultados consolidados em JSON"},
 				},
 				OutputSchema: map[string]any{

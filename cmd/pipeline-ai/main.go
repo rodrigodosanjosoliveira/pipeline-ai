@@ -386,6 +386,7 @@ func runRun(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	noGit := fs.Bool("no-git", false, "pula verificações dependentes do git")
 	baseRef := fs.String("base", "", "referência git para o diff")
 	maxOutputBytes := fs.Int("max-output-bytes", sensor.DefaultMaxOutputBytes, "limite máximo de bytes na saída dos sensores")
+	semanticGateFlag := fs.Bool("semantic-gate", false, "Executa gate semântico opcional (YAGNI) após validação")
 	asJSON := fs.Bool("json", false, "emite os resultados consolidados em JSON")
 
 	if err := fs.Parse(args); err != nil {
@@ -399,6 +400,7 @@ func runRun(args []string, agentMode bool, stdout, stderr io.Writer) int {
 		BaseRef:        *baseRef,
 		NoGit:          *noGit,
 		MaxOutputBytes: *maxOutputBytes,
+		SemanticGate:   *semanticGateFlag,
 	}
 
 	res, err := runner.Run(opts)
@@ -1786,7 +1788,7 @@ func runEval(args []string, stdin io.Reader, agentMode bool, stdout, stderr io.W
 		}
 	}
 
-	_ = metrics.RecordSemanticEval(*dirFlag, activeDelID, mode, time.Since(start), evalErr == nil, conf)
+	_ = metrics.RecordSemanticEvalWithProvider(*dirFlag, activeDelID, mode, provider, model, time.Since(start), evalErr == nil, conf)
 
 	secrets := []string{apiKey, os.Getenv("JEV_API_KEY"), os.Getenv("PIPELINE_SEMANTIC_API_KEY"), os.Getenv("GEMINI_API_KEY")}
 

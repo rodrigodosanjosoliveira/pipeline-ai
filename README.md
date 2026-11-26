@@ -359,12 +359,13 @@ Consolida a execução em lote da esteira de validação em um único comando de
 pipeline-ai run
 ```
 
-O Runner executa automaticamente a cascata em 3 estágios:
+O Runner executa automaticamente a cascata em 3 estágios (mais um 4º estágio opcional):
 1. **`Doctor`:** Valida runtime (Go 1.24+), integridade de hooks, imutabilidade (`immutable_paths`) e configuração.
 2. **`Sensor`:** Executa a toolchain (`gofmt`, `go vet`, `go test ./...`, injeção automática de ambiente sem CGO para projetos desktop).
 3. **`Validate`:** Localiza a delivery ativa (ou via flag `-delivery` / `-report`) e audita o `report.md` contra o `git diff` real.
+4. **`Semantic Gate` (opcional via `-semantic-gate`):** 4º estágio *advisory* usando o preset `yagni` com Gemini Hydrogen / Jev (`StatusSkip` sem credenciais, `StatusPass`/`StatusWarn` com redação de segredos em erros) (D-44).
 
-Suporta a flag `-json` para emissão do payload estruturado com duração e status de cada estágio, além de `-max-output-bytes` e `-verbose-output` para controle de *Bounded Output* e *Smart Test Filtering* nos sensores (D-39).
+Suporta a flag `-json` para emissão do payload estruturado com duração e status de cada estágio, além de `-max-output-bytes` e `-verbose-output` para controle de *Bounded Output* e *Smart Test Filtering* nos sensores (D-39) e `-semantic-gate` para ativar o gate semântico advisory (D-44).
 
 ---
 
@@ -466,12 +467,13 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 - **`pipeline://invariants`**: Fornece os invariantes de arquitetura e governança do projeto.
 - **`pipeline://active-delivery`**: Retorna o status da entrega ativa e tabela do `INDEX.md`.
 - **`pipeline://catalog`**: Lista de skills nativas, módulos disponíveis e mapeamento de roteamento de modelos por skill (`model_routing`) (D-41).
+- **`pipeline://routing`**: Retorna a Thinking Tier Matrix (`model_routing`) resolvida em JSON (D-44).
 - **`pipeline://delivery/active`**: Metadados, status e expiração da delivery atualmente ativa em JSON (D-21).
 
 ### Ferramentas MCP (Tools)
 - **`pipeline_doctor`**: Executa diagnóstico completo de ambiente e configuração (`dir`).
 - **`pipeline_validate`**: Valida relatórios de entrega (`report_path`, `no_git`, `base_ref`) e salvaguardas de Git.
-- **`pipeline_run_pipeline`**: Executa a esteira determinística completa em lote (`doctor` → `sensor` → `validate`) com telemetria automática e suporte a *Bounded Output* (`delivery_id`, `report_path`, `dir`, `max_output_bytes`, `verbose_output`).
+- **`pipeline_run_pipeline`**: Executa a esteira determinística completa em lote (`doctor` → `sensor` → `validate`, e opcionalmente `semantic_gate`) com telemetria automática e suporte a *Bounded Output* (`delivery_id`, `report_path`, `dir`, `max_output_bytes`, `verbose_output`, `semantic_gate`).
 - **`pipeline_get_dashboard_html`**: Gera o dashboard HTML interativo, autocontido e responsivo com métricas DORA, esteira e histórico (`dir`).
 - **`pipeline_get_metrics`**: Retorna as métricas DORA e o histórico de telemetria dos agentes em formato JSON (`dir`, `window_days`).
 - **`pipeline_validate_handoff`**: Valida sintaxe e completude de blocos de Handoff Contract (`contract`, `file`).
