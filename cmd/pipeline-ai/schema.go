@@ -236,6 +236,7 @@ func buildCLISchema() CLISchema {
 					{Name: "no-git", Type: "bool", Default: false, Description: "Pula verificações dependentes do git"},
 					{Name: "base", Type: "string", Default: "", Description: "Referência git para o diff"},
 					{Name: "max-output-bytes", Type: "int", Default: 65536, Description: "Limite máximo de bytes na saída dos sensores"},
+					{Name: "vuln", Type: "bool", Default: false, Description: "Inclui auditoria govulncheck no estágio de sensores"},
 					{Name: "semantic-gate", Type: "bool", Default: false, Description: "Executa gate semântico opcional (YAGNI) após validação"},
 					{Name: "json", Type: "bool", Default: false, Description: "Emite os resultados consolidados em JSON"},
 				},
@@ -311,6 +312,7 @@ func buildCLISchema() CLISchema {
 					{Name: "dir", Type: "string", Default: ".", Description: "Diretório raiz do projeto a ser analisado"},
 					{Name: "max-output-bytes", Type: "int", Default: 65536, Description: "Limite máximo de bytes na saída de cada sensor"},
 					{Name: "verbose-output", Type: "bool", Default: false, Description: "Preserva logs verbosos de testes que passaram até o limite de bytes"},
+					{Name: "vuln", Type: "bool", Default: false, Description: "Executa auditoria de vulnerabilidades (govulncheck ./...)"},
 					{Name: "json", Type: "bool", Default: false, Description: "Emite os resultados estruturados em JSON"},
 				},
 				OutputSchema: map[string]any{

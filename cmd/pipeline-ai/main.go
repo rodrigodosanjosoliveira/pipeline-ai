@@ -386,6 +386,7 @@ func runRun(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	noGit := fs.Bool("no-git", false, "pula verificações dependentes do git")
 	baseRef := fs.String("base", "", "referência git para o diff")
 	maxOutputBytes := fs.Int("max-output-bytes", sensor.DefaultMaxOutputBytes, "limite máximo de bytes na saída dos sensores")
+	vulnFlag := fs.Bool("vuln", false, "Inclui auditoria govulncheck no estágio de sensores")
 	semanticGateFlag := fs.Bool("semantic-gate", false, "Executa gate semântico opcional (YAGNI) após validação")
 	asJSON := fs.Bool("json", false, "emite os resultados consolidados em JSON")
 
@@ -400,6 +401,7 @@ func runRun(args []string, agentMode bool, stdout, stderr io.Writer) int {
 		BaseRef:        *baseRef,
 		NoGit:          *noGit,
 		MaxOutputBytes: *maxOutputBytes,
+		IncludeVuln:    *vulnFlag,
 		SemanticGate:   *semanticGateFlag,
 	}
 
@@ -564,6 +566,7 @@ func runSensor(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	dir := fs.String("dir", ".", "diretório raiz do projeto a ser analisado")
 	maxOutputBytes := fs.Int("max-output-bytes", sensor.DefaultMaxOutputBytes, "limite máximo de bytes na saída de cada sensor")
 	verboseOutput := fs.Bool("verbose-output", false, "preserva logs verbosos de testes que passaram até o limite de bytes")
+	vulnFlag := fs.Bool("vuln", false, "Executa auditoria de vulnerabilidades (govulncheck ./...)")
 	asJSON := fs.Bool("json", false, "emite os resultados estruturados em JSON")
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -572,6 +575,7 @@ func runSensor(args []string, agentMode bool, stdout, stderr io.Writer) int {
 	res, err := sensor.RunWithOptions(*dir, sensor.Options{
 		MaxOutputBytes: *maxOutputBytes,
 		VerboseOutput:  *verboseOutput,
+		IncludeVuln:    *vulnFlag,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "sensor: erro na execução: %v\n", err)

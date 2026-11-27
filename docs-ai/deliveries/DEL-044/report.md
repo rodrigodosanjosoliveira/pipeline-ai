@@ -2,7 +2,7 @@
 delivery_id: DEL-044
 task_code: TASK-044
 title: "Gemini 4 Hydrogen na Prática: 6º artigo técnico (PT/EN), post LinkedIn e infográfico"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

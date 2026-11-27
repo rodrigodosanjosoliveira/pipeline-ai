@@ -259,10 +259,11 @@ pipeline-ai debt -dir . -json   # Emite o inventário estruturado em JSON
 ```
 
 ### Sensores de Qualidade (`pipeline-ai sensor`)
-Executa a validação de formato, vet e testes com proteção contra falsos positivos, *Smart Test Filtering* (suprimindo blocos `--- PASS` / `--- SKIP` por padrão), *Bounded Output* com truncamento seguro UTF-8 (padrão 8 KB) e metadados explícitos de resultados parciais (`truncated`, `total_bytes`, `omitted_bytes`, `failed_tests`) (D-24, D-39):
+Executa a validação de formato, vet, testes e (opcionalmente) auditoria de supply chain (`govulncheck ./...`) com proteção contra falsos positivos, *Smart Test Filtering* (suprimindo blocos `--- PASS` / `--- SKIP` por padrão), *Bounded Output* com truncamento seguro UTF-8 (padrão 8 KB) e metadados explícitos de resultados parciais (`truncated`, `total_bytes`, `omitted_bytes`, `failed_tests`) (D-24, D-39, D-45):
 ```bash
 pipeline-ai sensor                              # Execução padrão com Smart Test Filtering e teto de 8 KB
 pipeline-ai sensor -json                        # Saída estruturada em JSON com failed_tests e metadados de truncamento
+pipeline-ai sensor -vuln                        # Inclui auditoria de supply chain govulncheck ./... com Bounded Output (StatusSkip se ausente)
 pipeline-ai sensor -max-output-bytes 16384      # Customiza teto máximo de bytes por saída (0 = ilimitado)
 pipeline-ai sensor -verbose-output              # Preserva logs completos de testes aprovados (--- PASS)
 ```
@@ -365,7 +366,7 @@ O Runner executa automaticamente a cascata em 3 estágios (mais um 4º estágio 
 3. **`Validate`:** Localiza a delivery ativa (ou via flag `-delivery` / `-report`) e audita o `report.md` contra o `git diff` real.
 4. **`Semantic Gate` (opcional via `-semantic-gate`):** 4º estágio *advisory* usando o preset `yagni` com Gemini Hydrogen / Jev (`StatusSkip` sem credenciais, `StatusPass`/`StatusWarn` com redação de segredos em erros) (D-44).
 
-Suporta a flag `-json` para emissão do payload estruturado com duração e status de cada estágio, além de `-max-output-bytes` e `-verbose-output` para controle de *Bounded Output* e *Smart Test Filtering* nos sensores (D-39) e `-semantic-gate` para ativar o gate semântico advisory (D-44).
+Suporta a flag `-json` para emissão do payload estruturado com duração e status de cada estágio, `-vuln` para incluir auditoria de supply chain (`govulncheck ./...`) com *Bounded Output* e `StatusSkip` gracioso no estágio `Sensor` (D-45), `-max-output-bytes` e `-verbose-output` para controle de *Bounded Output* e *Smart Test Filtering* nos sensores (D-39) e `-semantic-gate` para ativar o gate semântico advisory (D-44).
 
 ---
 
@@ -474,14 +475,14 @@ O `pipeline-ai` inclui um servidor compatível com a especificação **Model Con
 ### Ferramentas MCP (Tools)
 - **`pipeline_doctor`**: Executa diagnóstico completo de ambiente e configuração (`dir`).
 - **`pipeline_validate`**: Valida relatórios de entrega (`report_path`, `no_git`, `base_ref`) e salvaguardas de Git.
-- **`pipeline_run_pipeline`**: Executa a esteira determinística completa em lote (`doctor` → `sensor` → `validate`, e opcionalmente `semantic_gate`) com telemetria automática e suporte a *Bounded Output* (`delivery_id`, `report_path`, `dir`, `max_output_bytes`, `verbose_output`, `semantic_gate`).
+- **`pipeline_run_pipeline`**: Executa a esteira determinística completa em lote (`doctor` → `sensor` → `validate`, e opcionalmente `semantic_gate`) com telemetria automática e suporte a *Bounded Output* e auditoria `govulncheck` (`delivery_id`, `report_path`, `dir`, `max_output_bytes`, `verbose_output`, `include_vuln`, `semantic_gate`).
 - **`pipeline_get_dashboard_html`**: Gera o dashboard HTML interativo, autocontido e responsivo com métricas DORA, esteira e histórico (`dir`).
 - **`pipeline_get_metrics`**: Retorna as métricas DORA e o histórico de telemetria dos agentes em formato JSON (`dir`, `window_days`).
 - **`pipeline_validate_handoff`**: Valida sintaxe e completude de blocos de Handoff Contract (`contract`, `file`).
 - **`pipeline_scaffold_delivery`**: Cria o esqueleto da próxima entrega (`title`, `type`, `task_code`), gera `report.md` com seções obrigatórias e registra no `INDEX.md`.
 - **`pipeline_sync_skills`**: Sincroniza e atualiza `.agents/skills` e regras a partir dos templates embutidos (`dir`).
 - **`pipeline_close_delivery`**: Encerra a delivery ativa no repositório.
-- **`pipeline_run_sensors`**: Executa sensores de qualidade (`fmt`, `vet`, `test`) com saída estruturada, *Smart Test Filtering*, *Bounded Output* (`truncated`, `omitted_bytes`, `failed_tests`) e salvaguarda contra falsos positivos (`dir`, `max_output_bytes`, `verbose_output`).
+- **`pipeline_run_sensors`**: Executa sensores de qualidade (`fmt`, `vet`, `test` e opcionalmente `vuln` via `govulncheck ./...`) com saída estruturada, *Smart Test Filtering*, *Bounded Output* (`truncated`, `omitted_bytes`, `failed_tests`) e salvaguarda contra falsos positivos (`dir`, `max_output_bytes`, `verbose_output`, `include_vuln`).
 - **`pipeline_list_debt`**: Varre o diretório e retorna o inventário JSON de atalhos deliberados (`// shortcut: <limite> | upgrade: <gatilho>`) (`dir`).
 - **`pipeline_eval_semantic`**: Submete uma avaliação semântica calibrada (Jev ou nativo Gemini) nos modos `noul`, `choice` ou `score`, ou via `preset` (`yagni`, `minimalism`, `ponytail`) (`state`, `question`, `preset`, `mode`, `choices`, `max_score`, `threshold`, `provider`, `model`, `thinking_level`, `endpoint`, `api_key`, `timeout_seconds`) (D-34, D-35, D-41).
 - **`pipeline_manage_modules`**: Gerencia módulos opcionais (`action`: list, enable, disable; `module`, `dir`).

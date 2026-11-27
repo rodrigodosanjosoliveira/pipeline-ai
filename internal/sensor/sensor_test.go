@@ -605,3 +605,126 @@ func FuzzBoundTestOutput(f *testing.F) {
 		}
 	})
 }
+
+func TestRunWithOptions_VulnSensor(t *testing.T) {
+	setupProject := func(t *testing.T) string {
+		t.Helper()
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "go.mod"), "module vulnmod\n\ngo 1.24\n")
+		writeFile(t, filepath.Join(dir, "main.go"), "package main\n\nfunc Hello() string {\n\treturn \"ok\"\n}\n")
+		writeFile(t, filepath.Join(dir, "main_test.go"), "package main\n\nimport \"testing\"\n\nfunc TestHello(t *testing.T) {\n\tif Hello() != \"ok\" {\n\t\tt.Fatal(\"err\")\n\t}\n}\n")
+		return dir
+	}
+
+	findVulnCheck := func(t *testing.T, res *Result) *CheckResult {
+		t.Helper()
+		for i := range res.Sensors {
+			if res.Sensors[i].Name == "vuln" {
+				return &res.Sensors[i]
+			}
+		}
+		return nil
+	}
+
+	t.Run("binario inexistente retorna StatusSkip e mantem res.OK=true", func(t *testing.T) {
+		dir := setupProject(t)
+		missingBin := filepath.Join(t.TempDir(), "govulncheck-inexistente")
+
+		res, err := RunWithOptions(dir, Options{
+			IncludeVuln: true,
+			VulnBinary:  missingBin,
+		})
+		if err != nil {
+			t.Fatalf("RunWithOptions retornou erro inesperado: %v", err)
+		}
+		if res == nil {
+			t.Fatal("res retornado é nil")
+		}
+		if !res.OK {
+			t.Errorf("res.OK = false, esperado true quando govulncheck não está instalado (msg: %s)", res.Message)
+		}
+
+		vulnCheck := findVulnCheck(t, res)
+		if vulnCheck == nil {
+			t.Fatalf("check 'vuln' não encontrado em res.Sensors: %+v", res.Sensors)
+		}
+		if vulnCheck.Status != StatusSkip {
+			t.Errorf("vulnCheck.Status = %q, esperado %q", vulnCheck.Status, StatusSkip)
+		}
+		if !strings.Contains(strings.ToLower(vulnCheck.Message), "govulncheck") {
+			t.Errorf("vulnCheck.Message = %q, esperado conter 'govulncheck'", vulnCheck.Message)
+		}
+	})
+
+	t.Run("mock exit 0 retorna StatusPass e res.OK=true", func(t *testing.T) {
+		dir := setupProject(t)
+		mockBin := filepath.Join(t.TempDir(), "mock-govulncheck-pass")
+		script := "#!/bin/sh\necho \"No vulnerabilities found.\"\nexit 0\n"
+		if err := os.WriteFile(mockBin, []byte(script), 0o755); err != nil {
+			t.Fatalf("falha ao criar mock script: %v", err)
+		}
+
+		res, err := RunWithOptions(dir, Options{
+			IncludeVuln: true,
+			VulnBinary:  mockBin,
+		})
+		if err != nil {
+			t.Fatalf("RunWithOptions retornou erro inesperado: %v", err)
+		}
+		if res == nil {
+			t.Fatal("res retornado é nil")
+		}
+		if !res.OK {
+			t.Errorf("res.OK = false, esperado true (msg: %s)", res.Message)
+		}
+
+		vulnCheck := findVulnCheck(t, res)
+		if vulnCheck == nil {
+			t.Fatalf("check 'vuln' não encontrado em res.Sensors: %+v", res.Sensors)
+		}
+		if vulnCheck.Status != StatusPass {
+			t.Errorf("vulnCheck.Status = %q, esperado %q", vulnCheck.Status, StatusPass)
+		}
+	})
+
+	t.Run("mock exit 3 com saida longa trunca e retorna StatusFail com res.OK=false", func(t *testing.T) {
+		dir := setupProject(t)
+		mockBin := filepath.Join(t.TempDir(), "mock-govulncheck-fail")
+		script := "#!/bin/sh\necho \"Vulnerability #1: GO-2026-9999 found in example.com/vuln/pkg with detailed stack trace\"\nexit 3\n"
+		if err := os.WriteFile(mockBin, []byte(script), 0o755); err != nil {
+			t.Fatalf("falha ao criar mock script: %v", err)
+		}
+
+		res, err := RunWithOptions(dir, Options{
+			IncludeVuln:    true,
+			VulnBinary:     mockBin,
+			MaxOutputBytes: 32,
+		})
+		if err != nil {
+			t.Fatalf("RunWithOptions retornou erro inesperado: %v", err)
+		}
+		if res == nil {
+			t.Fatal("res retornado é nil")
+		}
+		if res.OK {
+			t.Errorf("res.OK = true, esperado false quando vuln retorna exit 3")
+		}
+
+		vulnCheck := findVulnCheck(t, res)
+		if vulnCheck == nil {
+			t.Fatalf("check 'vuln' não encontrado em res.Sensors: %+v", res.Sensors)
+		}
+		if vulnCheck.Status != StatusFail {
+			t.Errorf("vulnCheck.Status = %q, esperado %q", vulnCheck.Status, StatusFail)
+		}
+		if !vulnCheck.Truncated {
+			t.Errorf("vulnCheck.Truncated = false, esperado true com MaxOutputBytes=32")
+		}
+		if vulnCheck.TotalBytes <= 32 {
+			t.Errorf("vulnCheck.TotalBytes = %d, esperado > 32", vulnCheck.TotalBytes)
+		}
+		if vulnCheck.OmittedBytes <= 0 {
+			t.Errorf("vulnCheck.OmittedBytes = %d, esperado > 0", vulnCheck.OmittedBytes)
+		}
+	})
+}

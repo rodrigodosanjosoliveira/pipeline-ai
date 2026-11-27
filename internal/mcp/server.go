@@ -372,6 +372,10 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 						"type":        "integer",
 						"description": "Limite máximo de bytes da saída por sensor (padrão: 8192)",
 					},
+					"include_vuln": map[string]any{
+						"type":        "boolean",
+						"description": "Executa auditoria de vulnerabilidades (govulncheck ./...) como 4º sensor",
+					},
 				},
 			},
 		},
@@ -427,6 +431,10 @@ func (s *Server) handleToolsList(req *Request, out io.Writer) {
 					"max_output_bytes": map[string]any{
 						"type":        "integer",
 						"description": "Limite máximo de bytes da saída dos sensores (padrão: 8192)",
+					},
+					"include_vuln": map[string]any{
+						"type":        "boolean",
+						"description": "Inclui auditoria govulncheck no estágio de sensores",
 					},
 					"semantic_gate": map[string]any{
 						"type":        "boolean",
@@ -753,7 +761,15 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			maxBytes = int(v)
 		}
 
-		res, err := sensor.RunWithOptions(targetDir, sensor.Options{MaxOutputBytes: maxBytes})
+		includeVuln := false
+		if v, ok := params.Arguments["include_vuln"].(bool); ok {
+			includeVuln = v
+		}
+
+		res, err := sensor.RunWithOptions(targetDir, sensor.Options{
+			MaxOutputBytes: maxBytes,
+			IncludeVuln:    includeVuln,
+		})
 		if err != nil {
 			s.sendResult(out, req.ID, ToolResult{
 				Content: []ToolContent{
@@ -984,6 +1000,11 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			maxBytes = int(v)
 		}
 
+		includeVuln := false
+		if v, ok := params.Arguments["include_vuln"].(bool); ok {
+			includeVuln = v
+		}
+
 		semanticGate := false
 		if v, ok := params.Arguments["semantic_gate"].(bool); ok {
 			semanticGate = v
@@ -998,6 +1019,7 @@ func (s *Server) handleToolsCall(req *Request, out, errOut io.Writer) {
 			BaseRef:        strings.TrimSpace(baseRef),
 			NoGit:          noGit,
 			MaxOutputBytes: maxBytes,
+			IncludeVuln:    includeVuln,
 			SemanticGate:   semanticGate,
 		}
 

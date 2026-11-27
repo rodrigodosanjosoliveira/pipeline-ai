@@ -511,3 +511,41 @@ func TestRunnerSemanticGate(t *testing.T) {
 		}
 	})
 }
+
+func TestRunnerIncludeVulnOption(t *testing.T) {
+	tmpDir := setupBaseWorkspace(t)
+	setupValidDelivery(t, tmpDir, "DEL-045", "TASK-045")
+
+	res, err := Run(Options{
+		Dir:         tmpDir,
+		NoGit:       true,
+		IncludeVuln: true,
+	})
+	if err != nil {
+		t.Fatalf("Run retornou erro inesperado: %v", err)
+	}
+	if res == nil {
+		t.Fatal("res retornado é nil")
+	}
+
+	sensorStep := findStep(res.Steps, "sensor")
+	if sensorStep == nil {
+		t.Fatal("sensorStep ausente em res.Steps")
+	}
+
+	sensorRes, ok := sensorStep.Details.(*sensor.Result)
+	if !ok || sensorRes == nil {
+		t.Fatalf("sensorStep.Details não é *sensor.Result válido: %T", sensorStep.Details)
+	}
+
+	var foundVuln bool
+	for _, chk := range sensorRes.Sensors {
+		if chk.Name == "vuln" {
+			foundVuln = true
+			break
+		}
+	}
+	if !foundVuln {
+		t.Errorf("check 'vuln' não encontrado no detalhe do step 'sensor': %+v", sensorRes.Sensors)
+	}
+}

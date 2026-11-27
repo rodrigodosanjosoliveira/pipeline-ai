@@ -17,8 +17,10 @@ const DefaultMaxOutputBytes = 8192
 
 // Options configura limites de saída e nível de verbosidade da execução dos sensores.
 type Options struct {
-	MaxOutputBytes int  `json:"max_output_bytes,omitempty"`
-	VerboseOutput  bool `json:"verbose_output,omitempty"`
+	MaxOutputBytes int    `json:"max_output_bytes,omitempty"`
+	VerboseOutput  bool   `json:"verbose_output,omitempty"`
+	IncludeVuln    bool   `json:"include_vuln,omitempty"`
+	VulnBinary     string `json:"-"`
 }
 
 // SensorStatus representa o status de execução de um sensor.
@@ -27,6 +29,7 @@ type SensorStatus string
 const (
 	StatusPass SensorStatus = "PASS"
 	StatusFail SensorStatus = "FAIL"
+	StatusSkip SensorStatus = "SKIP"
 )
 
 // CheckResult descreve o resultado da execução de um sensor individual.
@@ -67,6 +70,35 @@ func findBinary(name string) string {
 		}
 	}
 	return name
+}
+
+func resolveVulnBinary(override string) (string, bool) {
+	if trimmed := strings.TrimSpace(override); trimmed != "" {
+		if fi, err := os.Stat(trimmed); err == nil && !fi.IsDir() {
+			return trimmed, true
+		}
+		if p, err := exec.LookPath(trimmed); err == nil {
+			return p, true
+		}
+		return "", false
+	}
+
+	if p, err := exec.LookPath("govulncheck"); err == nil {
+		return p, true
+	}
+
+	var candidates []string
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, "go", "bin", "govulncheck"))
+	}
+	candidates = append(candidates, filepath.Join("/usr/local/go/bin", "govulncheck"))
+
+	for _, c := range candidates {
+		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
+			return c, true
+		}
+	}
+	return "", false
 }
 
 // BoundOutput limita o tamanho da saída em bytes garantindo corte seguro em fronteira de runa UTF-8.
@@ -282,6 +314,40 @@ func RunWithOptions(dir string, opts Options) (*Result, error) {
 		testCheck.Message = fmt.Sprintf("Todos os testes passaram (%d testes executados, %d pulados).", testsRun, testsSkip)
 	}
 	checks = append(checks, testCheck)
+
+	// 4. Sensor VULN (opcional): govulncheck ./...
+	if opts.IncludeVuln {
+		vulnBin, found := resolveVulnBinary(opts.VulnBinary)
+		if !found {
+			checks = append(checks, CheckResult{
+				Name:    "vuln",
+				Status:  StatusSkip,
+				Message: "govulncheck não instalado (instale com: go install golang.org/x/vuln/cmd/govulncheck@latest)",
+			})
+		} else {
+			vulnCmd := exec.Command(vulnBin, "./...")
+			vulnCmd.Dir = absDir
+			if cmdEnv != nil {
+				vulnCmd.Env = cmdEnv
+			}
+			vulnOut, vulnErr := vulnCmd.CombinedOutput()
+			trimmedVuln := strings.TrimSpace(string(vulnOut))
+
+			vulnCheck := CheckResult{
+				Name: "vuln",
+			}
+			vulnCheck.Output, vulnCheck.Truncated, vulnCheck.TotalBytes, vulnCheck.OmittedBytes = BoundOutput(trimmedVuln, opts.MaxOutputBytes)
+			if vulnErr != nil {
+				vulnCheck.Status = StatusFail
+				vulnCheck.Message = "govulncheck detectou vulnerabilidades ou erro na verificação."
+				overallOK = false
+			} else {
+				vulnCheck.Status = StatusPass
+				vulnCheck.Message = "govulncheck executado com sucesso: nenhuma vulnerabilidade invocada detectada."
+			}
+			checks = append(checks, vulnCheck)
+		}
+	}
 
 	var overallStatus SensorStatus = StatusPass
 	var message string
