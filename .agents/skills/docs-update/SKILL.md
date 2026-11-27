@@ -20,6 +20,7 @@ Todos os handoffs da delivery.
 1. Atualizar apenas a documentação dos módulos que o diff tocou:
    - `AGENTS.md` (ou `GEMINI.md`): só se a estrutura ou um invariante mudou
    - `docs-ai/03-MAPA-RAPIDO-MODULOS.md`: se um módulo nasceu, sumiu ou mudou de responsabilidade
+   - `docs/interactive/index.html`: **obrigatório** sempre que a delivery adicionar uma nova funcionalidade relevante para usuários/agentes (plausível de artigo/demonstração) ou publicar um novo artigo em `docs-ai/artigos/`, atualizando `LESSONS` e `LESSON_ARTICLES` (ver D-46)
    - docstrings dos símbolos exportados alterados
 2. Montar `docs-ai/deliveries/{DELIVERY_ID}/report.md` a partir do template (`docs-ai/deliveries/_template/report.md`).
 3. Preencher o front matter. `require_security` reflete o sinal real da delivery: se `security-review` rodou, é `true`.

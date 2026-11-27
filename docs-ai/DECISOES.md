@@ -780,6 +780,21 @@ Padronização da experiência não-interativa e estruturada para orquestradores
 3. **Alternativas descartadas:**
    - Tornar `govulncheck` bloqueante sem opt-in em ambientes offline: descartado para não quebrar execuções locais sem acesso à base de vulnerabilidades Go ou sem o binário instalado.
 
+---
+
+## 20. Guia Interativo como Documentação Viva
+
+### D-46 — Atualização Obrigatória do Guia Interativo (`docs/interactive/index.html`) para Funcionalidades e Artigos
+
+1. **Contexto:**
+   - O Guia Interativo publicado no GitHub Pages (`docs/interactive/index.html`) traduz as dores reais e a arquitetura do `pipeline-ai` em lições visuais step-by-step conectadas aos artigos técnicos em `docs-ai/artigos/`. Sem uma regra explícita na esteira, novas funcionalidades e novos artigos acabam ficando fora do guia com o tempo.
+
+2. **Decisão:**
+   - Fixar no procedimento obrigatório da skill `docs-update` (`.agents/skills/docs-update/SKILL.md` e `plugin/skills/docs-update/SKILL.md`) que toda delivery que introduzir uma funcionalidade relevante para usuários/agentes (plausível de artigo ou demonstração) ou publicar um novo artigo em `docs-ai/artigos/` deve atualizar `docs/interactive/index.html` (`LESSONS` e `LESSON_ARTICLES`).
+
+3. **Alternativas descartadas:**
+   - Manter a atualização do guia interativo como tarefa manual esporádica: descartado por gerar drift entre o código/artigos e a experiência pública no GitHub Pages.
+
 
 
 
