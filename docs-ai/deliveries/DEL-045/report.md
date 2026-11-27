@@ -2,7 +2,7 @@
 delivery_id: DEL-045
 task_code: TASK-045
 title: "Sensor Nativo de Supply Chain (govulncheck) com StatusSkip e Bounded Output"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

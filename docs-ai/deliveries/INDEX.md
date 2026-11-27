@@ -7,7 +7,8 @@ Ordem: mais recente primeiro.
 
 | ID | Task | Título | Tipo | Data | Status |
 |---|---|---|---|---|---|
-| DEL-045 | TASK-045 | Sensor Nativo de Supply Chain (govulncheck) com StatusSkip e Bounded Output | feat | 2026-11-27 | draft |
+| DEL-046 | TASK-046 | Guia Interativo Step-by-Step do pipeline-ai (docs/interactive/index.html) | docs | 2026-11-27 | draft |
+| DEL-045 | TASK-045 | Sensor Nativo de Supply Chain (govulncheck) com StatusSkip e Bounded Output | feat | 2026-11-27 | merged |
 | DEL-044 | TASK-044 | Gemini 4 Hydrogen na Prática: 6º artigo técnico (PT/EN), post LinkedIn e infográfico | docs | 2026-11-26 | merged |
 | DEL-043 | TASK-043 | Integração End-to-End do Ciclo Gemini 4 Hydrogen (Telemetria por Tier, Gate Semântico Advisory no Runner e pipeline://routing) | feat | 2026-11-26 | merged |
 | DEL-042 | TASK-042 | Release v0.12.0: Consolidação do Dual-Audience CLI Design, Gemini 4 Hydrogen e Helpful Errors | chore | 2026-11-26 | merged |
