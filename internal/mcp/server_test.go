@@ -1772,3 +1772,50 @@ func TestMCPRoutingResourceAndSemanticGate(t *testing.T) {
 		}
 	})
 }
+
+func TestMCPIncludeVulnSchema(t *testing.T) {
+	s := NewServer(t.TempDir())
+	req := `{"jsonrpc":"2.0","id":310,"method":"tools/list","params":{}}`
+	res := runRPC(t, s, req)
+
+	result, ok := res["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result ausente em tools/list: %v", res)
+	}
+	tools, ok := result["tools"].([]any)
+	if !ok {
+		t.Fatalf("tools ausente em tools/list: %v", result)
+	}
+
+	requiredTools := map[string]bool{
+		"pipeline_run_sensors":  false,
+		"pipeline_run_pipeline": false,
+	}
+
+	for _, raw := range tools {
+		tool, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := tool["name"].(string)
+		if _, wanted := requiredTools[name]; !wanted {
+			continue
+		}
+		requiredTools[name] = true
+
+		schema, ok := tool["inputSchema"].(map[string]any)
+		if !ok {
+			t.Fatalf("inputSchema inválido em %s", name)
+		}
+		props, ok := schema["properties"].(map[string]any)
+		if !ok || props["include_vuln"] == nil {
+			t.Errorf("inputSchema de %s deve expor a propriedade 'include_vuln'", name)
+		}
+	}
+
+	for name, found := range requiredTools {
+		if !found {
+			t.Errorf("ferramenta %q não encontrada em tools/list", name)
+		}
+	}
+}

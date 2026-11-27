@@ -2590,3 +2590,44 @@ func TestCLIRunSemanticGateFlag(t *testing.T) {
 		t.Errorf("flag 'semantic-gate' não encontrada no schema do comando 'run': %+v", cmd.Flags)
 	}
 }
+
+func TestCLIVulnFlagSchema(t *testing.T) {
+	for _, cmdName := range []string{"sensor", "run"} {
+		t.Run("schema "+cmdName+" expoe flag vuln", func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			exitCode := run([]string{"schema", cmdName}, &stdout, &stderr)
+			if exitCode != 0 {
+				t.Fatalf("run(schema %s) exitCode = %d, esperado 0; stderr:\n%s", cmdName, exitCode, stderr.String())
+			}
+
+			var cmd struct {
+				Name  string `json:"name"`
+				Flags []struct {
+					Name    string `json:"name"`
+					Type    string `json:"type"`
+					Default any    `json:"default"`
+				} `json:"flags"`
+			}
+			if err := json.Unmarshal(stdout.Bytes(), &cmd); err != nil {
+				t.Fatalf("stdout de schema %s não é JSON válido: %v\n%s", cmdName, err, stdout.String())
+			}
+
+			var found bool
+			for _, f := range cmd.Flags {
+				if f.Name == "vuln" {
+					found = true
+					if f.Type != "bool" {
+						t.Errorf("flag vuln em %s: type = %q, esperado %q", cmdName, f.Type, "bool")
+					}
+					if f.Default != false && f.Default != "false" {
+						t.Errorf("flag vuln em %s: default = %v (%T), esperado false", cmdName, f.Default, f.Default)
+					}
+					break
+				}
+			}
+			if !found {
+				t.Errorf("flag 'vuln' não encontrada no schema do comando %q: %+v", cmdName, cmd.Flags)
+			}
+		})
+	}
+}

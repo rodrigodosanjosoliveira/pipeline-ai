@@ -56,6 +56,7 @@ type Options struct {
 	NoGit            bool   `json:"no_git"`
 	MaxOutputBytes   int    `json:"max_output_bytes,omitempty"`
 	VerboseOutput    bool   `json:"verbose_output,omitempty"`
+	IncludeVuln      bool   `json:"include_vuln,omitempty"`
 	SemanticGate     bool   `json:"semantic_gate,omitempty"`
 	SemanticProvider string `json:"semantic_provider,omitempty"`
 	SemanticModel    string `json:"semantic_model,omitempty"`
@@ -143,6 +144,7 @@ func Run(opts Options) (*Result, error) {
 	sensorRes, err := sensor.RunWithOptions(absRoot, sensor.Options{
 		MaxOutputBytes: opts.MaxOutputBytes,
 		VerboseOutput:  opts.VerboseOutput,
+		IncludeVuln:    opts.IncludeVuln,
 	})
 	sensorDur := time.Since(sensorStart)
 	sensorStep := StepResult{

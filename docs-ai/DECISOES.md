@@ -765,6 +765,22 @@ Padronização da experiência não-interativa e estruturada para orquestradores
 3. **Alternativas descartadas:**
    - Tornar o gate semântico bloqueante (`StatusFail`) por padrão no `runner`: descartado para preservar o determinismo da esteira quando houver oscilação de rede/API ou ausência de chave.
 
+---
+
+## 19. Sensor Nativo de Supply Chain (`govulncheck`)
+
+### D-45 — Sensor Nativo de Supply Chain (`govulncheck`) com `StatusSkip` e `Bounded Output` (DEL-045)
+
+1. **Contexto:**
+   - `govulncheck ./...` era um gate obrigatório apenas via `Taskfile.yml` / CI, sem integração estruturada nos sensores (`pipeline-ai sensor`), no `runner` (`pipeline-ai run`) nem nas tools MCP.
+
+2. **Decisão:**
+   - Integrar o 4º sensor `"vuln"` em `internal/sensor` (opt-in via `-vuln` na CLI e `include_vuln` no MCP) com `BoundOutput` aplicado à saída, `StatusSkip` gracioso quando `govulncheck` não estiver instalado no ambiente, e `VulnBinary` injetável para testes determinísticos offline em 100% Go stdlib.
+
+3. **Alternativas descartadas:**
+   - Tornar `govulncheck` bloqueante sem opt-in em ambientes offline: descartado para não quebrar execuções locais sem acesso à base de vulnerabilidades Go ou sem o binário instalado.
+
+
 
 
 
