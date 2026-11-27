@@ -205,25 +205,27 @@
       padding-top: var(--topbar-h);
       min-height: 100vh;
       display: grid;
-      grid-template-columns: minmax(0, 1.85fr) minmax(320px, 1fr);
+      grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.95fr);
       max-width: 1520px;
       margin: 0 auto;
     }
 
     .stage-col {
-      padding: 24px 28px 36px;
+      padding: 16px 22px 24px;
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 14px;
+      min-width: 0;
     }
 
     .narrative-col {
-      padding: 24px 24px 36px;
+      padding: 16px 22px 24px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 14px;
       background: var(--bg);
+      min-width: 0;
     }
 
     @media (max-width: 1040px) {
@@ -377,12 +379,16 @@
         linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
         linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
       background-size: 24px 24px;
-      padding: 10px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .svg-wrap svg {
       width: 100%;
       height: auto;
+      max-height: clamp(210px, 42vh, 360px);
       display: block;
     }
 
@@ -743,7 +749,7 @@
     @media (min-width: 1121px) {
       .drawer {
         top: var(--topbar-h);
-        width: 276px;
+        width: 256px;
         transform: translateX(0);
         box-shadow: none;
         z-index: 30;
@@ -755,8 +761,8 @@
         display: none;
       }
       .workspace {
-        margin-left: 276px;
-        max-width: calc(100vw - 276px);
+        margin-left: 256px;
+        max-width: calc(100vw - 256px);
         transition: margin-left 0.22s ease, max-width 0.22s ease;
       }
       body.sidebar-collapsed .workspace {
