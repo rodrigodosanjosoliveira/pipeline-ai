@@ -2112,6 +2112,7 @@
         badgeEl.textContent = step.badge;
         badgeEl.className = `badge badge-${step.badge}`;
 
+        document.title = `${lesson.title} · pipeline-ai`;
         document.getElementById("stepHeading").textContent = step.heading;
         document.getElementById("stepBody").innerHTML = step.body;
         document.getElementById("keyIdeaText").textContent = step.keyIdea;
