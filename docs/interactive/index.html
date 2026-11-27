@@ -740,6 +740,32 @@
 
     .drawer.open { transform: translateX(0); }
 
+    @media (min-width: 1121px) {
+      .drawer {
+        top: var(--topbar-h);
+        width: 276px;
+        transform: translateX(0);
+        box-shadow: none;
+        z-index: 30;
+      }
+      body.sidebar-collapsed .drawer {
+        transform: translateX(-100%);
+      }
+      .drawer-header .icon-btn {
+        display: none;
+      }
+      .workspace {
+        margin-left: 276px;
+        max-width: calc(100vw - 276px);
+        transition: margin-left 0.22s ease, max-width 0.22s ease;
+      }
+      body.sidebar-collapsed .workspace {
+        margin-left: 0;
+        max-width: 1520px;
+        margin-right: auto;
+      }
+    }
+
     .drawer-header {
       padding: 16px 18px;
       border-bottom: 1px solid var(--border);
@@ -2096,7 +2122,13 @@
       }
 
       // Event Listeners
-      document.getElementById("drawerBtn").addEventListener("click", openDrawer);
+      document.getElementById("drawerBtn").addEventListener("click", () => {
+        if (window.innerWidth >= 1121) {
+          document.body.classList.toggle("sidebar-collapsed");
+        } else {
+          openDrawer();
+        }
+      });
       document.getElementById("closeDrawerBtn").addEventListener("click", closeModals);
       document.getElementById("searchBtn").addEventListener("click", openSearch);
       overlay.addEventListener("click", closeModals);
