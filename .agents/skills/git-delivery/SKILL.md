@@ -34,6 +34,7 @@ Handoff do `docs-update`, com o `pipeline-validate` devidamente aprovado.
 6. Subir a branch com `git push -u origin <branch>` (o pre-push hook bloqueia pushes diretos na `main`).
 7. Abrir o Pull Request via GitHub CLI: `gh pr create`.
 8. Preencher o corpo do PR: Contexto, O que mudou, Como testar, Riscos.
+9. **Pós-Merge (Higiene de Branches):** Assim que o PR for mesclado no remoto, sincronizar `main`, podar referências remotas e deletar a branch local mesclada (`git checkout main && git pull origin main && git fetch --prune && git branch -d <branch>`).
 
 ## O que NÃO fazer
 
