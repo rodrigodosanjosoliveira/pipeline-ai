@@ -1,0 +1,2159 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pipeline-ai // Guia Interativo Step-by-Step</title>
+  <meta name="description" content="Guia interativo step-by-step sobre governança determinística, bounded output, dual-audience CLI, Gemini 4 Hydrogen tiers e telemetria DORA no pipeline-ai." />
+  <style>
+    :root {
+      --bg: #f7f4ee;
+      --bg-card: #efeae0;
+      --bg-elevated: #fbf9f5;
+      --bg-code: #e7e1d5;
+      --text: #1f1d1a;
+      --text-muted: #5c564c;
+      --text-subtle: #7d7568;
+      --border: #d9d2c5;
+      --border-strong: #c5bcac;
+      --shadow-sm: 0 1px 2px rgba(31, 29, 26, 0.05), 0 4px 12px rgba(31, 29, 26, 0.04);
+      --shadow-md: 0 6px 24px rgba(31, 29, 26, 0.08);
+      --shadow-lg: 0 16px 48px rgba(31, 29, 26, 0.14);
+
+      --sage: #2f8f6b;
+      --sage-soft: rgba(47, 143, 107, 0.12);
+      --lavender: #7c6fd6;
+      --lavender-soft: rgba(124, 111, 214, 0.12);
+      --blue: #3b82c4;
+      --blue-soft: rgba(59, 130, 196, 0.12);
+      --amber: #d4832a;
+      --amber-soft: rgba(212, 131, 42, 0.14);
+      --coral: #d14d41;
+      --coral-soft: rgba(209, 77, 65, 0.12);
+
+      --grid-line: rgba(31, 29, 26, 0.06);
+      --svg-node-bg: #fbf9f5;
+      --svg-node-stroke: #c5bcac;
+
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --radius: 10px;
+      --radius-sm: 6px;
+      --topbar-h: 58px;
+    }
+
+    [data-theme="dark"] {
+      --bg: #211e1a;
+      --bg-card: #2b2722;
+      --bg-elevated: #322d27;
+      --bg-code: #1a1714;
+      --text: #f3efe6;
+      --text-muted: #c2b9ab;
+      --text-subtle: #968d7f;
+      --border: #3e3830;
+      --border-strong: #534b40;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.22);
+      --shadow-md: 0 8px 28px rgba(0, 0, 0, 0.35);
+      --shadow-lg: 0 20px 56px rgba(0, 0, 0, 0.55);
+
+      --sage: #45b389;
+      --sage-soft: rgba(69, 179, 137, 0.16);
+      --lavender: #9c91eb;
+      --lavender-soft: rgba(156, 145, 235, 0.16);
+      --blue: #5da3e5;
+      --blue-soft: rgba(93, 163, 229, 0.16);
+      --amber: #ea9c46;
+      --amber-soft: rgba(234, 156, 70, 0.16);
+      --coral: #e86b60;
+      --coral-soft: rgba(232, 107, 96, 0.16);
+
+      --grid-line: rgba(243, 239, 230, 0.05);
+      --svg-node-bg: #2b2722;
+      --svg-node-stroke: #534b40;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    button, input {
+      font-family: inherit;
+      color: inherit;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    /* Top Bar */
+    .topbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--topbar-h);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      z-index: 40;
+      gap: 12px;
+    }
+
+    .topbar-left, .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 34px;
+      padding: 0 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 12px;
+      transition: border-color 0.15s, background-color 0.15s, transform 0.1s;
+    }
+
+    .icon-btn:hover {
+      border-color: var(--border-strong);
+      background: var(--bg-card);
+    }
+
+    .icon-btn:active { transform: translateY(1px); }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--sage);
+      box-shadow: 0 0 0 3px var(--sage-soft);
+    }
+
+    .brand-sep { color: var(--text-subtle); font-weight: 400; }
+    .brand-sub { color: var(--lavender); font-weight: 600; }
+
+    .kbd {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1px 5px;
+      font-size: 11px;
+      border-radius: 4px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg);
+      color: var(--text-muted);
+      line-height: 1.3;
+    }
+
+    .progress-pill {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .progress-bar-mini {
+      width: 56px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--border);
+      overflow: hidden;
+    }
+
+    .progress-bar-mini > span {
+      display: block;
+      height: 100%;
+      background: var(--sage);
+      transition: width 0.25s ease;
+    }
+
+    @media (min-width: 820px) {
+      .progress-pill { display: inline-flex; }
+    }
+
+    /* Main Workspace */
+    .workspace {
+      padding-top: var(--topbar-h);
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(0, 1.85fr) minmax(320px, 1fr);
+      max-width: 1520px;
+      margin: 0 auto;
+    }
+
+    .stage-col {
+      padding: 24px 28px 36px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .narrative-col {
+      padding: 24px 24px 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      background: var(--bg);
+    }
+
+    @media (max-width: 1040px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+      .stage-col {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding: 18px 16px 24px;
+      }
+      .narrative-col {
+        padding: 18px 16px 32px;
+      }
+    }
+
+    /* Stage Header */
+    .breadcrumb {
+      font-size: 12px;
+      color: var(--text-subtle);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .breadcrumb-tag {
+      color: var(--sage);
+      font-weight: 600;
+    }
+
+    .lesson-title {
+      font-size: 22px;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    .lesson-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Live Metrics */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    @media (max-width: 600px) {
+      .metrics-grid { grid-template-columns: 1fr; }
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .metric-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-subtle);
+    }
+
+    .metric-value {
+      font-size: 18px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
+
+    .metric-delta {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .tone-sage { color: var(--sage); }
+    .tone-lavender { color: var(--lavender); }
+    .tone-blue { color: var(--blue); }
+    .tone-amber { color: var(--amber); }
+    .tone-coral { color: var(--coral); }
+
+    /* SVG Stage Canvas */
+    .canvas-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .canvas-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .canvas-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--sage);
+      animation: pulse 1.8s infinite;
+    }
+
+    .canvas-card.paused .live-dot {
+      background: var(--amber);
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.85); }
+    }
+
+    .canvas-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .svg-wrap {
+      position: relative;
+      width: 100%;
+      background-image:
+        linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+      background-size: 24px 24px;
+      padding: 10px;
+    }
+
+    .svg-wrap svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .canvas-card.paused svg * {
+      animation-play-state: paused !important;
+    }
+
+    /* SVG Helpers */
+    .flow-dash {
+      stroke-dasharray: 6 6;
+      animation: dashFlow 1.4s linear infinite;
+    }
+
+    .flow-dash-slow {
+      stroke-dasharray: 5 5;
+      animation: dashFlow 2.4s linear infinite;
+    }
+
+    @keyframes dashFlow {
+      to { stroke-dashoffset: -24; }
+    }
+
+    .node-pulse {
+      animation: nodeGlow 2.2s ease-in-out infinite;
+    }
+
+    @keyframes nodeGlow {
+      0%, 100% { opacity: 0.25; }
+      50% { opacity: 0.7; }
+    }
+
+    /* Stepper */
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .step-pill {
+      flex: 1;
+      min-width: 96px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      cursor: pointer;
+      text-align: left;
+      font-size: 12px;
+      transition: border-color 0.15s, background-color 0.15s;
+    }
+
+    .step-pill:hover {
+      border-color: var(--border-strong);
+      background: var(--bg-elevated);
+    }
+
+    .step-pill.active {
+      border-color: var(--sage);
+      background: var(--sage-soft);
+      font-weight: 700;
+    }
+
+    .step-pill.done:not(.active) {
+      border-color: var(--border-strong);
+    }
+
+    .step-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--bg);
+      border: 1px solid var(--border-strong);
+      flex-shrink: 0;
+    }
+
+    .step-pill.active .step-num {
+      background: var(--sage);
+      color: #fff;
+      border-color: var(--sage);
+    }
+
+    .step-pill.done:not(.active) .step-num {
+      color: var(--sage);
+      border-color: var(--sage);
+    }
+
+    .step-pill-label {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Narrative Panel */
+    .step-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .step-counter {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-subtle);
+      letter-spacing: 0.05em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      border: 1px solid transparent;
+    }
+
+    .badge-PROBLEM { background: var(--coral-soft); color: var(--coral); border-color: var(--coral); }
+    .badge-SETUP { background: var(--blue-soft); color: var(--blue); border-color: var(--blue); }
+    .badge-TECHNIQUE { background: var(--amber-soft); color: var(--amber); border-color: var(--amber); }
+    .badge-INSIGHT { background: var(--lavender-soft); color: var(--lavender); border-color: var(--lavender); }
+    .badge-RECAP { background: var(--sage-soft); color: var(--sage); border-color: var(--sage); }
+
+    .step-heading {
+      font-size: 17px;
+      font-weight: 700;
+      line-height: 1.35;
+      letter-spacing: -0.01em;
+    }
+
+    .step-body {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.65;
+    }
+
+    .step-body code {
+      background: var(--bg-code);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    /* Key Idea Card */
+    .key-idea {
+      background: var(--lavender-soft);
+      border: 1px solid var(--lavender);
+      border-left: 4px solid var(--lavender);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+    }
+
+    .key-idea-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--lavender);
+      margin-bottom: 4px;
+    }
+
+    .key-idea-text {
+      font-size: 12.5px;
+      color: var(--text);
+      line-height: 1.55;
+    }
+
+    /* What Changed Diff */
+    .diff-box {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+
+    .diff-header {
+      padding: 7px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      color: var(--text-subtle);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+    }
+
+    .diff-lines {
+      padding: 8px 0;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .diff-line {
+      padding: 2px 12px;
+      display: flex;
+      gap: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .diff-line.del { background: var(--coral-soft); color: var(--coral); }
+    .diff-line.mod { background: var(--amber-soft); color: var(--amber); }
+    .diff-line.add { background: var(--sage-soft); color: var(--sage); }
+
+    .diff-sigil { font-weight: 700; flex-shrink: 0; }
+
+    /* Learning Checklist */
+    .checklist-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+    }
+
+    .checklist-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      color: var(--text-subtle);
+      margin-bottom: 8px;
+    }
+
+    .checklist {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      transition: color 0.15s;
+    }
+
+    .checklist li.checked { color: var(--text); }
+
+    .check-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border: 1px solid var(--border-strong);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      background: var(--bg);
+    }
+
+    .checklist li.checked .check-icon {
+      background: var(--sage);
+      border-color: var(--sage);
+      color: #fff;
+    }
+
+    /* Nav Footer */
+    .nav-footer {
+      margin-top: auto;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+    }
+
+    .nav-btn {
+      flex: 1;
+      height: 38px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: border-color 0.15s, background-color 0.15s;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      border-color: var(--border-strong);
+      background: var(--bg-card);
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .nav-btn.primary {
+      background: var(--sage);
+      border-color: var(--sage);
+      color: #fff;
+    }
+
+    .nav-btn.primary:hover:not(:disabled) {
+      filter: brightness(1.06);
+      background: var(--sage);
+    }
+
+    .shortcuts-hint {
+      font-size: 11px;
+      color: var(--text-subtle);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    /* Drawer */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 13, 11, 0.5);
+      z-index: 60;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .drawer {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: min(360px, 90vw);
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      z-index: 70;
+      transform: translateX(-100%);
+      transition: transform 0.22s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .drawer.open { transform: translateX(0); }
+
+    .drawer-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .drawer-progress {
+      padding: 14px 18px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .drawer-progress-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      margin-bottom: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .drawer-progress-bar {
+      height: 7px;
+      border-radius: 999px;
+      background: var(--border);
+      overflow: hidden;
+    }
+
+    .drawer-progress-bar > span {
+      display: block;
+      height: 100%;
+      background: var(--sage);
+      transition: width 0.25s ease;
+    }
+
+    .drawer-list {
+      padding: 12px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .lesson-item {
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      cursor: pointer;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: border-color 0.15s, background-color 0.15s;
+    }
+
+    .lesson-item:hover {
+      border-color: var(--border-strong);
+      background: var(--bg-card);
+    }
+
+    .lesson-item.active {
+      border-color: var(--sage);
+      background: var(--sage-soft);
+    }
+
+    .lesson-item-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-subtle);
+    }
+
+    .lesson-item-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .lesson-item-desc {
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .done-tag {
+      color: var(--sage);
+      font-weight: 700;
+    }
+
+    /* Search Modal */
+    .search-modal {
+      position: fixed;
+      top: 12vh;
+      left: 50%;
+      transform: translateX(-50%) scale(0.97);
+      width: min(620px, 92vw);
+      background: var(--bg);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      z-index: 80;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.16s ease, transform 0.16s ease;
+      overflow: hidden;
+    }
+
+    .search-modal.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(-50%) scale(1);
+    }
+
+    .search-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+    }
+
+    .search-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 14px;
+      color: var(--text);
+    }
+
+    .search-results {
+      max-height: 52vh;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .search-result {
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      cursor: pointer;
+      text-align: left;
+      background: transparent;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .search-result:hover {
+      background: var(--bg-card);
+      border-color: var(--border);
+    }
+
+    .search-result-meta {
+      font-size: 11px;
+      color: var(--lavender);
+      font-weight: 600;
+    }
+
+    .search-result-title {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .search-result-snippet {
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .search-empty {
+      padding: 24px;
+      text-align: center;
+      color: var(--text-subtle);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="icon-btn" id="drawerBtn" aria-label="Abrir lista de lições" title="Lições">
+        <span>☰</span>
+      </button>
+      <a href="#/01-governanca/1" class="brand">
+        <span class="brand-dot"></span>
+        <span>pipeline-ai</span>
+        <span class="brand-sep">//</span>
+        <span class="brand-sub">interactive</span>
+      </a>
+    </div>
+
+    <div class="topbar-right">
+      <div class="progress-pill" id="topProgressPill" title="Progresso salvo no navegador">
+        <span id="topProgressText">Progresso (0 / 5)</span>
+        <span class="progress-bar-mini"><span id="topProgressBar" style="width:0%"></span></span>
+      </div>
+      <button class="icon-btn" id="searchBtn" aria-label="Buscar lições e conceitos">
+        <span>Buscar</span>
+        <span class="kbd">⌘K</span>
+      </button>
+      <button class="icon-btn" id="themeBtn" aria-label="Alternar tema claro/escuro" title="Alternar tema">
+        <span id="themeIcon">☾</span>
+      </button>
+      <a class="icon-btn" href="https://github.com/rodrigodosanjosoliveira/pipeline-ai" target="_blank" rel="noopener noreferrer" title="Repositório no GitHub">
+        <span>GitHub ↗</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="workspace">
+    <!-- Left Column: Visual Stage -->
+    <section class="stage-col">
+      <div>
+        <div class="breadcrumb">
+          <span class="breadcrumb-tag" id="breadcrumbModule">Módulo 01</span>
+          <span>/</span>
+          <span id="breadcrumbLesson">Lição 1 de 5</span>
+        </div>
+        <h1 class="lesson-title" id="lessonTitle"></h1>
+        <p class="lesson-subtitle" id="lessonSubtitle"></p>
+      </div>
+
+      <!-- 3 Live Metric Cards -->
+      <div class="metrics-grid" id="metricsGrid"></div>
+
+      <!-- Animated SVG Stage -->
+      <div class="canvas-card" id="canvasCard">
+        <div class="canvas-toolbar">
+          <div class="canvas-status">
+            <span class="live-dot"></span>
+            <span id="canvasCaption">Fluxo arquitetural ao vivo</span>
+          </div>
+          <div class="canvas-controls">
+            <button class="icon-btn" id="playPauseBtn" title="Pausar/Retomar animação (Space)">
+              <span id="playPauseLabel">⏸ Pausar</span>
+              <span class="kbd">Space</span>
+            </button>
+            <button class="icon-btn" id="replayBtn" title="Reiniciar animação (R)">
+              <span>↻ Replay</span>
+              <span class="kbd">R</span>
+            </button>
+          </div>
+        </div>
+        <div class="svg-wrap" id="svgStage"></div>
+      </div>
+
+      <!-- Horizontal Stepper -->
+      <nav class="stepper" id="stepper" aria-label="Etapas da lição"></nav>
+    </section>
+
+    <!-- Right Column: Narrative Panel -->
+    <aside class="narrative-col">
+      <div class="step-meta">
+        <span class="step-counter" id="stepCounter">STEP 1 / 4</span>
+        <span class="badge" id="stepBadge">PROBLEM</span>
+      </div>
+
+      <h2 class="step-heading" id="stepHeading"></h2>
+      <div class="step-body" id="stepBody"></div>
+
+      <div class="key-idea">
+        <div class="key-idea-title">KEY IDEA</div>
+        <div class="key-idea-text" id="keyIdeaText"></div>
+      </div>
+
+      <div class="diff-box">
+        <div class="diff-header">WHAT CHANGED</div>
+        <div class="diff-lines" id="diffLines"></div>
+      </div>
+
+      <div class="checklist-box">
+        <div class="checklist-title">VOCÊ VAI APRENDER</div>
+        <ul class="checklist" id="checklist"></ul>
+      </div>
+
+      <div class="nav-footer">
+        <button class="nav-btn" id="prevBtn">← Anterior</button>
+        <button class="nav-btn primary" id="nextBtn">Próximo →</button>
+      </div>
+
+      <div class="shortcuts-hint">
+        <span><span class="kbd">←</span> <span class="kbd">→</span> navegar</span>
+        <span><span class="kbd">Space</span> pausar</span>
+        <span><span class="kbd">R</span> replay</span>
+        <span><span class="kbd">⌘K</span> buscar</span>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Overlay -->
+  <div class="overlay" id="overlay"></div>
+
+  <!-- Drawer -->
+  <aside class="drawer" id="drawer" aria-label="Menu de lições">
+    <div class="drawer-header">
+      <strong>Lições do pipeline-ai</strong>
+      <button class="icon-btn" id="closeDrawerBtn" aria-label="Fechar menu">✕</button>
+    </div>
+    <div class="drawer-progress">
+      <div class="drawer-progress-top">
+        <span>Progresso</span>
+        <strong id="drawerProgressText">0 / 5 concluídas</strong>
+      </div>
+      <div class="drawer-progress-bar">
+        <span id="drawerProgressBar" style="width:0%"></span>
+      </div>
+    </div>
+    <div class="drawer-list" id="drawerList"></div>
+  </aside>
+
+  <!-- Search Modal -->
+  <div class="search-modal" id="searchModal" role="dialog" aria-modal="true" aria-label="Buscar no guia">
+    <div class="search-input-wrap">
+      <span>⌕</span>
+      <input type="text" class="search-input" id="searchInput" placeholder="Buscar lições, steps, flags, conceitos (ex: PreToolUse, BoundOutput, Hydrogen)..." autocomplete="off" />
+      <span class="kbd">Esc</span>
+    </div>
+    <div class="search-results" id="searchResults"></div>
+  </div>
+
+  <script>
+    (function () {
+      const STORAGE_PROGRESS = "pipeline_ai_interactive_progress_v1";
+      const STORAGE_THEME = "pipeline_ai_interactive_theme_v1";
+
+      const LESSONS = [
+        {
+          id: "01-governanca",
+          module: "Módulo 01 · Governança",
+          title: "Caos da Edição Direta vs Governança Determinística",
+          subtitle: "Como PreToolUse, active-delivery.json e a esteira de skills eliminam alterações sem escopo.",
+          checklist: [
+            "Por que editar código direto na sessão principal quebra invariantes",
+            "Como o hook PreToolUse bloqueia caminhos protegidos (internal/, cmd/)",
+            "O papel do contrato active-delivery.json com TTL",
+            "O fluxo completo pm-triage → test-writer → dev → review → pipeline-validate"
+          ],
+          steps: [
+            {
+              short: "Problema",
+              badge: "PROBLEM",
+              heading: "Edição direta na sessão principal gera drift silencioso",
+              body: "Sem um gate determinístico, um agente de IA pode editar <code>internal/</code> ou <code>cmd/</code> diretamente após um prompt vago — pulando testes, ignorando invariantes e deixando o diff sem rastreabilidade.",
+              keyIdea: "Com IA, o gargalo não é gerar código: é verificar e governar o que entra no repositório.",
+              diff: [
+                { t: "del", text: "Sessão principal edita internal/sensor/sensor.go direto" },
+                { t: "del", text: "Sem delivery ativa, sem testes prévios, sem revisão" },
+                { t: "mod", text: "Risco alto de scope creep e regressão silenciosa" }
+              ],
+              metrics: [
+                { label: "Edições Bloqueadas", value: "0%", delta: "sem hook PreToolUse", tone: "coral" },
+                { label: "Rastreabilidade", value: "Nenhuma", delta: "sem DEL-ID ativo", tone: "coral" },
+                { label: "Custo de Revisão", value: "Alto", delta: "diff fora de escopo", tone: "amber" }
+              ],
+              caption: "Fluxo sem governança: escrita direta em caminhos protegidos",
+              diagram: "gov-1"
+            },
+            {
+              short: "PreToolUse",
+              badge: "SETUP",
+              heading: "Hook PreToolUse intercepta toda escrita antes do disco",
+              body: "O hook <code>pipeline-ai hook</code> lê <code>.pipeline-ai.json</code> e intercepta chamadas de escrita em <code>internal/</code> e <code>cmd/</code>. Se o chamador não for um agente autorizado em <code>editor_agents</code> ou não houver <code>active-delivery.json</code> válida, a operação é bloqueada com exit code não-zero.",
+              keyIdea: "Governança que depende só de prompt falha; governança em hook PreToolUse é determinística (fail-closed).",
+              diff: [
+                { t: "add", text: ".agents/hooks.json -> PreToolUse: pipeline-ai hook" },
+                { t: "add", text: ".pipeline-ai.json -> protected_paths: [internal/, cmd/]" },
+                { t: "add", text: "Bloqueio automático fora de editor_agents" }
+              ],
+              metrics: [
+                { label: "Modo do Hook", value: "Fail-Closed", delta: "bloqueia por padrão", tone: "sage" },
+                { label: "Caminhos Protegidos", value: "internal/ cmd/", delta: "via .pipeline-ai.json", tone: "blue" },
+                { label: "Latência do Gate", value: "< 8 ms", delta: "binário Go nativo", tone: "lavender" }
+              ],
+              caption: "PreToolUse intercepta e bloqueia escrita não autorizada",
+              diagram: "gov-2"
+            },
+            {
+              short: "Delivery TTL",
+              badge: "TECHNIQUE",
+              heading: "active-delivery.json vincula escopo, agentes e expiração",
+              body: "Ao iniciar uma demanda, <code>pm-triage</code> abre uma delivery via <code>pipeline-ai delivery open</code>. O arquivo <code>.pipeline-ai/active-delivery.json</code> registra o <code>DEL-ID</code>, o escopo aprovado e um <code>TTL</code> para evitar sessões zumbis.",
+              keyIdea: "Toda linha alterada pertence a uma delivery ativa com prazo de validade e dono explícito.",
+              diff: [
+                { t: "add", text: "pipeline-ai delivery open DEL-046 --ttl 4h" },
+                { t: "add", text: "active-delivery.json -> { id, status: active, expires_at }" },
+                { t: "mod", text: "PreToolUse valida delivery ativa + editor_agents" }
+              ],
+              metrics: [
+                { label: "Delivery Ativa", value: "DEL-046", delta: "TTL 4h ativo", tone: "sage" },
+                { label: "Agentes Editores", value: "test + dev", delta: "escopo estrito", tone: "blue" },
+                { label: "Drift Permitido", value: "0", delta: "caminhos imutáveis", tone: "sage" }
+              ],
+              caption: "Autorização híbrida: active-delivery.json + editor_agents",
+              diagram: "gov-3"
+            },
+            {
+              short: "Esteira",
+              badge: "RECAP",
+              heading: "Fluxo ponta a ponta com validação final determinística",
+              body: "A entrega percorre <code>pm-triage → test-writer → dev-implementation → code-reviewer → qa-validation → docs-update</code>. Antes do commit, <code>pipeline-validate</code> audita o relatório, o <code>INDEX.md</code> e o <code>git diff</code>.",
+              keyIdea: "Cada papel tem responsabilidade única e handoff verificável até o PR final.",
+              diff: [
+                { t: "add", text: "pm-triage -> test-writer -> dev-implementation" },
+                { t: "add", text: "code-reviewer (somente leitura) -> qa-validation" },
+                { t: "add", text: "pipeline-validate docs-ai/deliveries/DEL-046/report.md -> APROVADO" }
+              ],
+              metrics: [
+                { label: "Gates Executados", value: "5 / 5", delta: "100% determinísticos", tone: "sage" },
+                { label: "Handoffs", value: "Validados", delta: "contrato formal", tone: "lavender" },
+                { label: "Status Final", value: "APROVADO", delta: "pronto para PR", tone: "sage" }
+              ],
+              caption: "Esteira completa de governança do pipeline-ai",
+              diagram: "gov-4"
+            }
+          ]
+        },
+        {
+          id: "02-bounded-output",
+          module: "Módulo 02 · Contexto",
+          title: "Contexto Explodindo (84 KB → 1 KB)",
+          subtitle: "Smart Test Filtering e BoundOutput mantêm a janela do agente limpa sem perder falhas.",
+          checklist: [
+            "Como logs verbosos de go test -v poluem a janela de contexto",
+            "Smart Test Filtering removendo === RUN e --- PASS",
+            "Preservação integral de blocos --- FAIL e mensagens de erro",
+            "Metadados explícitos de truncamento (truncated, total_bytes, omitted_bytes)"
+          ],
+          steps: [
+            {
+              short: "Contexto Cheio",
+              badge: "PROBLEM",
+              heading: "Logs brutos de teste consomem milhares de tokens inúteis",
+              body: "Rodar <code>go test -v ./...</code> em um repositório real despeja dezenas de kilobytes de linhas <code>=== RUN</code> e <code>--- PASS</code>. O agente gasta contexto precioso lendo o que passou e perde o foco na única falha real.",
+              keyIdea: "Ruído no stdout é um imposto invisível sobre a precisão e o custo do agente.",
+              diff: [
+                { t: "del", text: "stdout bruto: 84.2 KB (~21.000 tokens)" },
+                { t: "del", text: "98% composto por === RUN e --- PASS" },
+                { t: "mod", text: "Falha real soterrada no meio do log" }
+              ],
+              metrics: [
+                { label: "Payload Bruto", value: "84.2 KB", delta: "~21k tokens", tone: "coral" },
+                { label: "Sinal Útil", value: "1.4%", delta: "98.6% ruído", tone: "coral" },
+                { label: "Risco de Alucinação", value: "Alto", delta: "contexto saturado", tone: "amber" }
+              ],
+              caption: "Log bruto de go test saturando a janela do agente",
+              diagram: "bound-1"
+            },
+            {
+              short: "Smart Filter",
+              badge: "TECHNIQUE",
+              heading: "Smart Test Filtering descarta ruído e preserva falhas",
+              body: "O sensor <code>pipeline-ai sensor</code> aplica filtragem inteligente na saída do <code>go test</code>: remove linhas <code>=== RUN</code>, <code>--- PASS</code> e <code>PASS</code> redundantes, mantendo intactos os blocos <code>--- FAIL</code>, stack traces e o slice <code>failed_tests</code>.",
+              keyIdea: "O agente precisa saber exatamente o que quebrou — não ver 400 linhas dizendo que o resto passou.",
+              diff: [
+                { t: "del", text: "=== RUN   TestSensorPass / --- PASS: TestSensorPass" },
+                { t: "add", text: "--- FAIL: TestBoundOutputTruncation (0.01s)" },
+                { t: "add", text: "failed_tests: [\"TestBoundOutputTruncation\"]" }
+              ],
+              metrics: [
+                { label: "Após Filtro", value: "3.1 KB", delta: "-96.3% de ruído", tone: "sage" },
+                { label: "Falhas Preservadas", value: "100%", delta: "zero perda de sinal", tone: "sage" },
+                { label: "failed_tests", value: "Estruturado", delta: "array JSON", tone: "blue" }
+              ],
+              caption: "Smart Test Filtering separando ruído de falhas reais",
+              diagram: "bound-2"
+            },
+            {
+              short: "BoundOutput",
+              badge: "TECHNIQUE",
+              heading: "BoundOutput impõe teto determinístico com transparência",
+              body: "Mesmo filtrado, um log pode crescer. <code>BoundOutput(raw, maxBytes)</code> aplica um limite rígido (padrão <code>-max-output-bytes</code>) e preenche metadados explícitos: <code>truncated</code>, <code>total_bytes</code> e <code>omitted_bytes</code>.",
+              keyIdea: "Truncamento silencioso engana o agente; truncamento declarado permite pedir -verbose-output quando necessário.",
+              diff: [
+                { t: "add", text: "truncated: true" },
+                { t: "add", text: "total_bytes: 84210, omitted_bytes: 83186" },
+                { t: "add", text: "output: \"... [1.0 KB preservado com FAIL] ...\"" }
+              ],
+              metrics: [
+                { label: "Saída Final", value: "1.0 KB", delta: "84x menor", tone: "sage" },
+                { label: "truncated", value: "true", delta: "sinalizado no JSON", tone: "amber" },
+                { label: "omitted_bytes", value: "83.2 KB", delta: "auditável", tone: "lavender" }
+              ],
+              caption: "BoundOutput entregando payload enxuto e auditável",
+              diagram: "bound-3"
+            },
+            {
+              short: "Resultado",
+              badge: "RECAP",
+              heading: "Mesma interface no Sensor, Runner e MCP",
+              body: "Tanto <code>pipeline-ai sensor</code>, <code>pipeline-ai run</code> quanto as tools MCP <code>pipeline_run_sensors</code> e <code>pipeline_run_pipeline</code> compartilham o mesmo contrato de <em>Bounded Output</em>, garantindo previsibilidade em toda a esteira.",
+              keyIdea: "Contexto economizado no feedback loop vira raciocínio melhor na correção do código.",
+              diff: [
+                { t: "add", text: "CLI: -max-output-bytes / -verbose-output" },
+                { t: "add", text: "MCP: max_output_bytes / verbose_output" },
+                { t: "add", text: "Redução média de 98% no consumo de tokens de CI local" }
+              ],
+              metrics: [
+                { label: "Economia Média", value: "98.8%", delta: "84 KB -> 1 KB", tone: "sage" },
+                { label: "Superfícies", value: "CLI + MCP", delta: "contrato único", tone: "blue" },
+                { label: "Falsos Positivos", value: "0", delta: "failed_tests preservado", tone: "sage" }
+              ],
+              caption: "Bounded Output unificado entre CLI, Runner e MCP",
+              diagram: "bound-4"
+            }
+          ]
+        },
+        {
+          id: "03-dual-audience",
+          module: "Módulo 03 · CLI & Ergonomia",
+          title: "Agente Travado vs Dual-Audience CLI",
+          subtitle: "Como isTTY, -agent, --schema e Helpful Errors tornam a CLI nativa para humanos e agentes.",
+          checklist: [
+            "Por que prompts interativos travam agentes autônomos em stdin",
+            "Detecção automática de TTY e ativação via -agent / PIPELINE_AGENT_MODE=1",
+            "Introspecção declarativa com --schema sem efeitos colaterais",
+            "Helpful Errors estruturados com cause, hint e fix_command"
+          ],
+          steps: [
+            {
+              short: "Prompt Travado",
+              badge: "PROBLEM",
+              heading: "Prompts interativos congelam agentes em execução autônoma",
+              body: "Uma CLI pensada apenas para humanos pergunta <code>Nome do projeto:</code> esperando entrada no <code>stdin</code>. Quando um agente invoca o comando sem TTY, o processo fica pendurado até estourar timeout.",
+              keyIdea: "Um único prompt bloqueante quebra toda a autonomia de um agente de IA.",
+              diff: [
+                { t: "del", text: "stdin bloqueado aguardando input humano" },
+                { t: "del", text: "Saída colorida com ANSI difícil de parsear" },
+                { t: "mod", text: "Erro genérico: exit status 1 sem instrução de recuperação" }
+              ],
+              metrics: [
+                { label: "Estado do Agente", value: "Travado", delta: "timeout em stdin", tone: "coral" },
+                { label: "Parseabilidade", value: "Baixa", delta: "texto livre + ANSI", tone: "coral" },
+                { label: "Recuperação", value: "Manual", delta: "sem fix_command", tone: "amber" }
+              ],
+              caption: "Agente bloqueado em prompt interativo sem TTY",
+              diagram: "dual-1"
+            },
+            {
+              short: "Agent Mode",
+              badge: "SETUP",
+              heading: "Detecção de isTTY + flag -agent / PIPELINE_AGENT_MODE=1",
+              body: "O <code>pipeline-ai</code> detecta se há terminal interativo via <code>isTTY</code>. Com <code>-agent</code>, <code>PIPELINE_AGENT_MODE=1</code> ou <code>init -non-interactive</code>, 100% dos subcomandos respondem em JSON estruturado e nunca bloqueiam aguardando <code>stdin</code>.",
+              keyIdea: "Uma boa CLI serve dois públicos sem duplicar código: leitura agradável para humanos, JSON determinístico para agentes.",
+              diff: [
+                { t: "add", text: "Humano (TTY): tabela limpa + cores discretas" },
+                { t: "add", text: "Agente (-agent / env): JSON puro + non-interactive" },
+                { t: "add", text: "init -name app -type api -non-interactive -json" }
+              ],
+              metrics: [
+                { label: "Cobertura JSON", value: "100%", delta: "todos subcomandos", tone: "sage" },
+                { label: "Bloqueios stdin", value: "0", delta: "protegido por isTTY", tone: "sage" },
+                { label: "Modo Ativo", value: "Dual", delta: "Humano + Agente", tone: "blue" }
+              ],
+              caption: "Roteamento Dual-Audience: TTY humano vs JSON para agentes",
+              diagram: "dual-2"
+            },
+            {
+              short: "--schema",
+              badge: "TECHNIQUE",
+              heading: "Introspecção --schema sem efeitos colaterais",
+              body: "Antes de executar qualquer comando, o agente pode chamar <code>pipeline-ai &lt;cmd&gt; --schema</code> (ou <code>pipeline-ai schema</code>) para descobrir flags, tipos, defaults e exemplos em JSON — sem tocar em disco ou rede.",
+              keyIdea: "Agentes não precisam adivinhar flags a partir de --help em texto livre quando existe um contrato --schema.",
+              diff: [
+                { t: "add", text: "pipeline-ai sensor --schema -> JSON declarativo" },
+                { t: "add", text: "Zero efeitos colaterais (read-only discovery)" },
+                { t: "add", text: "Flags, tipos, obrigatoriedade e exemplos" }
+              ],
+              metrics: [
+                { label: "Efeitos Colaterais", value: "0", delta: "introspecção pura", tone: "sage" },
+                { label: "Descoberta", value: "1 chamada", delta: "catálogo completo", tone: "lavender" },
+                { label: "Erros de Flag", value: "-90%", delta: "contrato tipado", tone: "sage" }
+              ],
+              caption: "Agente descobrindo contrato de flags via --schema",
+              diagram: "dual-3"
+            },
+            {
+              short: "Helpful Errors",
+              badge: "INSIGHT",
+              heading: "Helpful Errors guiam a auto-recuperação",
+              body: "Quando algo falha, a CLI emite um erro estruturado contendo <code>cause</code> (o que houve), <code>hint</code> (como corrigir) e <code>fix_command</code> (comando pronto para executar). O agente corrige o ambiente em um único ciclo.",
+              keyIdea: "Um erro bem estruturado transforma uma falha bloqueante em um passo de auto-recuperação.",
+              diff: [
+                { t: "del", text: "error: missing report" },
+                { t: "add", text: "cause: \"active-delivery.json não encontrado\"" },
+                { t: "add", text: "hint: \"Abra uma delivery antes de validar\"" },
+                { t: "add", text: "fix_command: \"pipeline-ai delivery open DEL-046\"" }
+              ],
+              metrics: [
+                { label: "Campos do Erro", value: "3", delta: "cause, hint, fix_command", tone: "lavender" },
+                { label: "Auto-Recovery", value: "1 turno", delta: "sem intervenção humana", tone: "sage" },
+                { label: "Saída", value: "JSON/Texto", delta: "Dual-Audience", tone: "blue" }
+              ],
+              caption: "Guided Recovery com cause, hint e fix_command",
+              diagram: "dual-4"
+            }
+          ]
+        },
+        {
+          id: "04-gemini-hydrogen",
+          module: "Módulo 04 · Roteamento & Semântica",
+          title: "Modelo Único vs Gemini 4 Hydrogen Tiers",
+          subtitle: "Thinking Tier Matrix (low/medium/high), provider nativo em Go puro e gate semântico advisory.",
+          checklist: [
+            "Por que usar um único modelo pesado para toda skill desperdiça latência e custo",
+            "Roteamento por tiers (low, medium, high) via model_routing e pipeline://routing",
+            "Provider nativo generateContent em Go puro net/http com responseSchema",
+            "Gate semântico -semantic-gate em modo advisory no Runner"
+          ],
+          steps: [
+            {
+              short: "Modelo Único",
+              badge: "PROBLEM",
+              heading: "Um único modelo caro para todas as skills cria gargalo",
+              body: "Usar raciocínio profundo para tarefas mecânicas (como formatar docs ou triagem simples) infla latência e custo; usar um modelo raso para arquitetura ou segurança reduz a qualidade das decisões.",
+              keyIdea: "Nem toda etapa da esteira exige o mesmo orçamento de raciocínio (thinking budget).",
+              diff: [
+                { t: "del", text: "100% das skills no mesmo modelo estático" },
+                { t: "del", text: "Docs e triage pagando latência de raciocínio profundo" },
+                { t: "mod", text: "Sem visibilidade de custo/uso por tier" }
+              ],
+              metrics: [
+                { label: "Latência Média", value: "Alta", delta: "overkill em tarefas simples", tone: "coral" },
+                { label: "Roteamento", value: "Estático", delta: "1 modelo para tudo", tone: "amber" },
+                { label: "Telemetria Tier", value: "Ausente", delta: "sem ByModel", tone: "coral" }
+              ],
+              caption: "Todas as skills competindo no mesmo modelo único",
+              diagram: "hydro-1"
+            },
+            {
+              short: "Tier Matrix",
+              badge: "SETUP",
+              heading: "model_routing e pipeline://routing distribuem por complexidade",
+              body: "O arquivo <code>.pipeline-ai.json</code> define <code>model_routing</code> com três tiers (<code>low</code>, <code>medium</code>, <code>high</code>), expostos aos agentes via recurso MCP <code>pipeline://routing</code>. Triagem e docs rodam em <code>low</code>; dev e testes em <code>medium</code>; arquitetura e segurança em <code>high</code>.",
+              keyIdea: "Alinhe o tier de raciocínio ao risco real de cada skill da esteira.",
+              diff: [
+                { t: "add", text: "tier low    -> pm-triage, docs-update, git-delivery" },
+                { t: "add", text: "tier medium -> test-writer, dev-implementation, qa" },
+                { t: "add", text: "tier high   -> architecture-guardrails, security-review" }
+              ],
+              metrics: [
+                { label: "Tiers Ativos", value: "3", delta: "low · medium · high", tone: "lavender" },
+                { label: "MCP Resource", value: "pipeline://routing", delta: "consulta dinâmica", tone: "blue" },
+                { label: "Eficiência", value: "+60%", delta: "menos tokens em low", tone: "sage" }
+              ],
+              caption: "Thinking Tier Matrix roteando skills para low, medium e high",
+              diagram: "hydro-2"
+            },
+            {
+              short: "Provider Go",
+              badge: "TECHNIQUE",
+              heading: "Provider nativo Gemini Hydrogen em Go puro (net/http)",
+              body: "O sensor semântico (<code>internal/sensor/semantic</code>) chama a API <code>generateContent</code> diretamente via <code>net/http</code> da stdlib Go — zero SDK externo — enviando <code>x-goog-api-key</code> no header e <code>responseSchema</code> para respostas calibradas (<code>noul</code>, <code>choice</code>, <code>score</code>).",
+              keyIdea: "Go stdlib + responseSchema entrega decisões semânticas tipadas sem inflar go.mod.",
+              diff: [
+                { t: "add", text: "Header: x-goog-api-key (via env, zero segredo em código)" },
+                { t: "add", text: "Body: generationConfig.responseSchema (JSON estrito)" },
+                { t: "add", text: "Dependências externas adicionadas: 0" }
+              ],
+              metrics: [
+                { label: "Dependências", value: "0", delta: "100% Go net/http", tone: "sage" },
+                { label: "Schema", value: "Estrito", delta: "responseSchema nativo", tone: "lavender" },
+                { label: "Modos Jev", value: "3", delta: "noul · choice · score", tone: "blue" }
+              ],
+              caption: "Chamada direta generateContent com responseSchema e x-goog-api-key",
+              diagram: "hydro-3"
+            },
+            {
+              short: "Semantic Gate",
+              badge: "RECAP",
+              heading: "-semantic-gate advisory no Runner sem quebrar determinismo",
+              body: "No <code>pipeline-ai run -semantic-gate</code>, o Runner executa os gates determinísticos primeiro (<code>doctor → sensor → validate</code>) e, em seguida, roda o julgamento semântico em modo <em>advisory</em>, registrando o resultado na telemetria por provider e modelo.",
+              keyIdea: "Gates determinísticos bloqueiam; gates semânticos aconselham com calibração e rastreabilidade.",
+              diff: [
+                { t: "add", text: "pipeline-ai run -semantic-gate (modo advisory)" },
+                { t: "add", text: "Telemetria grava provider + model + score" },
+                { t: "add", text: "Determinismo preservado mesmo offline" }
+              ],
+              metrics: [
+                { label: "Modo do Gate", value: "Advisory", delta: "não bloqueia offline", tone: "amber" },
+                { label: "Telemetria", value: "ByModel", delta: "custo & calibração", tone: "lavender" },
+                { label: "Determinismo", value: "100%", delta: "doctor/sensor/validate", tone: "sage" }
+              ],
+              caption: "Runner combinando gates determinísticos + semantic-gate advisory",
+              diagram: "hydro-4"
+            }
+          ]
+        },
+        {
+          id: "05-supply-chain-dora",
+          module: "Módulo 05 · Supply Chain & Observabilidade",
+          title: "Vulnerabilidades & Overengineering Silenciosos",
+          subtitle: "Sensor -vuln (govulncheck), Decision Ladder YAGNI, Debt Ledger e telemetria DORA.",
+          checklist: [
+            "Sensor nativo -vuln com govulncheck, StatusSkip gracioso e BoundOutput",
+            "Decision Ladder YAGNI para barrar abstrações prematuras",
+            "Rastreamento explícito de atalhos com // shortcut: e pipeline-ai debt",
+            "Telemetria DORA passiva com quebra ByProvider e ByModel"
+          ],
+          steps: [
+            {
+              short: "Riscos Ocultos",
+              badge: "PROBLEM",
+              heading: "CVEs em dependências e abstrações prematuras passam despercebidos",
+              body: "Mesmo com testes verdes, um projeto pode carregar vulnerabilidades transitivas de supply chain ou acumular camadas desnecessárias criadas por IA (overengineering) sem registro de dívida técnica nem métricas de entrega.",
+              keyIdea: "Testes verdes não garantem código seguro nem arquitetura enxuta.",
+              diff: [
+                { t: "del", text: "govulncheck isolado só no CI externo" },
+                { t: "del", text: "Abstrações especulativas sem justificativa YAGNI" },
+                { t: "del", text: "Sem visibilidade de Lead Time, CFR, MTTR ou modelos usados" }
+              ],
+              metrics: [
+                { label: "Supply Chain Local", value: "Manual", delta: "fora do sensor", tone: "coral" },
+                { label: "Atalhos Rastreados", value: "0", delta: "dívida invisível", tone: "amber" },
+                { label: "Métricas DORA", value: "Cegas", delta: "sem telemetria", tone: "coral" }
+              ],
+              caption: "Pontos cegos: vulnerabilidades, overengineering e falta de DORA",
+              diagram: "dora-1"
+            },
+            {
+              short: "Sensor -vuln",
+              badge: "TECHNIQUE",
+              heading: "4º sensor nativo 'vuln' com StatusSkip e BoundOutput",
+              body: "Com <code>pipeline-ai sensor -vuln</code> (ou <code>include_vuln: true</code> no MCP), o sensor executa <code>govulncheck ./...</code> com saída limitada por <code>BoundOutput</code>. Se o binário não estiver instalado, retorna <code>StatusSkip</code> gracioso sem falso positivo.",
+              keyIdea: "Segurança de supply chain integrada ao fluxo local, sem quebrar ambientes offline.",
+              diff: [
+                { t: "add", text: "pipeline-ai sensor -vuln / pipeline-ai run -vuln" },
+                { t: "add", text: "Binário ausente -> StatusSkip (Overall não falha)" },
+                { t: "add", text: "CVE detectada -> StatusFail + BoundOutput" }
+              ],
+              metrics: [
+                { label: "Sensores Nativos", value: "4", delta: "fmt · vet · test · vuln", tone: "sage" },
+                { label: "Fallback Offline", value: "StatusSkip", delta: "gracioso", tone: "blue" },
+                { label: "Saída", value: "Bounded", delta: "protegida contra ruído", tone: "lavender" }
+              ],
+              caption: "Sensor vuln (govulncheck) integrado com StatusSkip e BoundOutput",
+              diagram: "dora-2"
+            },
+            {
+              short: "YAGNI & Debt",
+              badge: "TECHNIQUE",
+              heading: "Decision Ladder YAGNI + Debt Ledger (// shortcut:)",
+              body: "A governança anti-overengineering exige justificar abstrações no <code>architecture-guardrails</code> (com preset <code>pipeline-ai eval -preset yagni</code>). Quando um atalho deliberado é aceito, ele é marcado com <code>// shortcut: &lt;limite&gt; | upgrade: &lt;gatilho&gt;</code> e auditado por <code>pipeline-ai debt</code>.",
+              keyIdea: "Atalho documentado com gatilho de upgrade é engenharia pragmática; atalho oculto é bomba-relógio.",
+              diff: [
+                { t: "add", text: "// shortcut: cache em memória | upgrade: > 10k req/s" },
+                { t: "add", text: "pipeline-ai debt -json -> inventário determinístico" },
+                { t: "add", text: "pipeline-ai eval -preset yagni -> checagem semântica" }
+              ],
+              metrics: [
+                { label: "Debt Ledger", value: "Auditável", delta: "pipeline-ai debt", tone: "amber" },
+                { label: "Preset YAGNI", value: "Ativo", delta: "anti-overengineering", tone: "lavender" },
+                { label: "Gatilho Upgrade", value: "Explícito", delta: "em código", tone: "sage" }
+              ],
+              caption: "Decision Ladder YAGNI e inventário determinístico de dívida",
+              diagram: "dora-3"
+            },
+            {
+              short: "DORA & Tiers",
+              badge: "RECAP",
+              heading: "Telemetria DORA passiva com ByProvider e ByModel",
+              body: "Cada execução do <code>pipeline-ai run</code> e fechamento de delivery alimenta automaticamente as 4 métricas DORA (Deployment Frequency, Lead Time, Change Failure Rate, MTTR) e o breakdown <code>ByProvider</code> / <code>ByModel</code> visíveis em <code>pipeline-ai metrics</code> e <code>pipeline-ai dashboard</code>.",
+              keyIdea: "Observabilidade passiva fecha o ciclo: você melhora a esteira com dados reais, não intuição.",
+              diff: [
+                { t: "add", text: "DORA: DF, Lead Time, CFR, MTTR inferido" },
+                { t: "add", text: "Breakdown: ByProvider & ByModel (Hydrogen tiers)" },
+                { t: "add", text: "pipeline-ai dashboard -> HTML interativo local" }
+              ],
+              metrics: [
+                { label: "Métricas DORA", value: "4 / 4", delta: "coleta passiva", tone: "sage" },
+                { label: "Visibilidade IA", value: "ByModel", delta: "provider + tier", tone: "lavender" },
+                { label: "Dashboard", value: "Local HTML", delta: "zero infra externa", tone: "blue" }
+              ],
+              caption: "Telemetria DORA passiva + breakdown por Provider e Model",
+              diagram: "dora-4"
+            }
+          ]
+        }
+      ];
+
+      // SVG Diagram Builder (viewBox 0 0 720 360)
+      function svgBox(x, y, w, h, title, sub, accent) {
+        const stroke = accent ? `var(--${accent})` : "var(--svg-node-stroke)";
+        const bg = accent ? `var(--${accent}-soft)` : "var(--svg-node-bg)";
+        const titleColor = accent ? `var(--${accent})` : "var(--text)";
+        return `
+          <g>
+            <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" fill="${bg}" stroke="${stroke}" stroke-width="1.6"/>
+            <text x="${x + w / 2}" y="${y + (sub ? h / 2 - 4 : h / 2 + 4)}" text-anchor="middle" fill="${titleColor}" font-size="12.5" font-weight="700">${title}</text>
+            ${sub ? `<text x="${x + w / 2}" y="${y + h / 2 + 13}" text-anchor="middle" fill="var(--text-muted)" font-size="10.5">${sub}</text>` : ""}
+          </g>
+        `;
+      }
+
+      function svgPacket(pathId, color, dur, begin) {
+        return `
+          <circle r="4.5" fill="var(--${color})">
+            <animateMotion dur="${dur}s" begin="${begin}s" repeatCount="indefinite">
+              <mpath href="#${pathId}"/>
+            </animateMotion>
+          </circle>
+        `;
+      }
+
+      function renderDiagram(id) {
+        let inner = "";
+        switch (id) {
+          case "gov-1":
+            inner = `
+              <path id="p-g1" d="M 185 180 L 505 180" fill="none" stroke="var(--coral)" stroke-width="2" class="flow-dash"/>
+              ${svgPacket("p-g1", "coral", 1.8, 0)}
+              ${svgPacket("p-g1", "coral", 1.8, 0.9)}
+              ${svgBox(35, 140, 150, 80, "Sessão Principal", "prompt direto", "amber")}
+              ${svgBox(505, 130, 180, 100, "internal/ & cmd/", "editado sem gate!", "coral")}
+              <rect x="255" y="128" width="180" height="32" rx="6" fill="var(--coral-soft)" stroke="var(--coral)" stroke-dasharray="4 3"/>
+              <text x="345" y="148" text-anchor="middle" fill="var(--coral)" font-size="11" font-weight="700">✕ SEM PRETOOLUSE</text>
+              <text x="345" y="218" text-anchor="middle" fill="var(--text-subtle)" font-size="11">scope creep · sem testes · sem DEL-ID</text>
+            `;
+            break;
+          case "gov-2":
+            inner = `
+              <path id="p-g2a" d="M 175 180 L 290 180" fill="none" stroke="var(--coral)" stroke-width="2" class="flow-dash"/>
+              ${svgPacket("p-g2a", "coral", 1.5, 0)}
+              <path d="M 430 180 L 520 180" fill="none" stroke="var(--border-strong)" stroke-width="1.5" stroke-dasharray="4 4"/>
+              ${svgBox(35, 142, 140, 76, "Sessão Principal", "edit_file(internal/)", "amber")}
+              ${svgBox(290, 126, 140, 108, "PreToolUse", "pipeline-ai hook", "coral")}
+              <text x="360" y="220" text-anchor="middle" fill="var(--coral)" font-size="10.5" font-weight="700">BLOCKED (exit 2)</text>
+              ${svgBox(520, 142, 165, 76, "internal/ & cmd/", "protegido ✓", "sage")}
+            `;
+            break;
+          case "gov-3":
+            inner = `
+              <path id="p-g3a" d="M 175 120 L 295 165" fill="none" stroke="var(--blue)" stroke-width="1.8" class="flow-dash"/>
+              <path id="p-g3b" d="M 175 245 L 295 200" fill="none" stroke="var(--lavender)" stroke-width="1.8" class="flow-dash"/>
+              <path id="p-g3c" d="M 445 180 L 535 180" fill="none" stroke="var(--sage)" stroke-width="2.2" class="flow-dash"/>
+              ${svgPacket("p-g3a", "blue", 2.0, 0)}
+              ${svgPacket("p-g3b", "lavender", 2.0, 0.4)}
+              ${svgPacket("p-g3c", "sage", 1.6, 0.2)}
+              ${svgBox(30, 82, 145, 72, "dev-implementation", "editor_agents ✓", "blue")}
+              ${svgBox(30, 210, 145, 72, "active-delivery.json", "DEL-046 · TTL 4h", "lavender")}
+              ${svgBox(295, 136, 150, 88, "PreToolUse Gate", "autorizado ✓", "sage")}
+              ${svgBox(535, 142, 155, 76, "internal/ & cmd/", "escrita liberada", "sage")}
+            `;
+            break;
+          case "gov-4":
+            inner = `
+              <path id="p-g4" d="M 95 150 L 215 150 L 335 150 L 455 150 L 595 150" fill="none" stroke="var(--sage)" stroke-width="2" class="flow-dash"/>
+              ${svgPacket("p-g4", "sage", 3.0, 0)}
+              ${svgPacket("p-g4", "lavender", 3.0, 1.5)}
+              ${svgBox(25, 118, 110, 64, "pm-triage", "DEL-ID", "blue")}
+              ${svgBox(155, 118, 110, 64, "test-writer", "TDD", "lavender")}
+              ${svgBox(285, 118, 110, 64, "dev-impl", "código", "amber")}
+              ${svgBox(415, 118, 110, 64, "code-review", "read-only", "blue")}
+              ${svgBox(545, 118, 145, 64, "pipeline-validate", "APROVADO ✓", "sage")}
+              <text x="360" y="235" text-anchor="middle" fill="var(--text-muted)" font-size="11.5">Handoffs verificados + relatório em docs-ai/deliveries/DEL-046/report.md</text>
+            `;
+            break;
+          case "bound-1":
+            inner = `
+              <path id="p-b1" d="M 210 180 L 485 180" fill="none" stroke="var(--coral)" stroke-width="4" class="flow-dash"/>
+              ${svgPacket("p-b1", "coral", 1.2, 0)}
+              ${svgPacket("p-b1", "coral", 1.2, 0.4)}
+              ${svgPacket("p-b1", "coral", 1.2, 0.8)}
+              ${svgBox(35, 125, 175, 110, "go test -v ./...", "84.2 KB stdout", "amber")}
+              ${svgBox(485, 125, 195, 110, "Contexto do Agente", "SATURADO (~21k tok)", "coral")}
+              <text x="348" y="155" text-anchor="middle" fill="var(--coral)" font-size="11" font-weight="700">=== RUN / --- PASS x 420</text>
+            `;
+            break;
+          case "bound-2":
+            inner = `
+              <path id="p-b2a" d="M 185 180 L 285 180" fill="none" stroke="var(--amber)" stroke-width="2.5" class="flow-dash"/>
+              <path id="p-b2b" d="M 445 160 L 535 120" fill="none" stroke="var(--sage)" stroke-width="2" class="flow-dash"/>
+              <path d="M 445 200 L 535 245" fill="none" stroke="var(--coral)" stroke-width="1.5" stroke-dasharray="4 4"/>
+              ${svgPacket("p-b2a", "amber", 1.6, 0)}
+              ${svgPacket("p-b2b", "sage", 1.6, 0.3)}
+              ${svgBox(30, 142, 155, 76, "stdout bruto", "84.2 KB", "amber")}
+              ${svgBox(285, 134, 160, 92, "Smart Filter", "remove PASS/RUN", "blue")}
+              ${svgBox(535, 82, 155, 74, "--- FAIL", "preservado 100%", "sage")}
+              ${svgBox(535, 208, 155, 74, "=== RUN / PASS", "descartado (-96%)", "coral")}
+            `;
+            break;
+          case "bound-3":
+            inner = `
+              <path id="p-b3a" d="M 185 180 L 280 180" fill="none" stroke="var(--blue)" stroke-width="2" class="flow-dash"/>
+              <path id="p-b3b" d="M 450 180 L 535 180" fill="none" stroke="var(--sage)" stroke-width="2" class="flow-dash"/>
+              ${svgPacket("p-b3a", "blue", 1.8, 0)}
+              ${svgPacket("p-b3b", "sage", 1.8, 0.5)}
+              ${svgBox(30, 142, 155, 76, "Log Filtrado", "3.1 KB", "blue")}
+              ${svgBox(280, 128, 170, 104, "BoundOutput()", "max_output_bytes", "lavender")}
+              ${svgBox(535, 118, 160, 124, "JSON Enxuto", "1.0 KB · truncated", "sage")}
+              <text x="615" y="226" text-anchor="middle" fill="var(--text-subtle)" font-size="10">omitted_bytes: 83186</text>
+            `;
+            break;
+          case "bound-4":
+            inner = `
+              <path id="p-b4a" d="M 180 110 L 300 175" fill="none" stroke="var(--sage)" stroke-width="1.8" class="flow-dash"/>
+              <path id="p-b4b" d="M 180 180 L 300 180" fill="none" stroke="var(--blue)" stroke-width="1.8" class="flow-dash"/>
+              <path id="p-b4c" d="M 180 250 L 300 185" fill="none" stroke="var(--lavender)" stroke-width="1.8" class="flow-dash"/>
+              <path id="p-b4d" d="M 455 180 L 535 180" fill="none" stroke="var(--sage)" stroke-width="2.2" class="flow-dash"/>
+              ${svgPacket("p-b4a", "sage", 2, 0)}
+              ${svgPacket("p-b4b", "blue", 2, 0.4)}
+              ${svgPacket("p-b4c", "lavender", 2, 0.8)}
+              ${svgPacket("p-b4d", "sage", 1.5, 0.2)}
+              ${svgBox(35, 80, 145, 56, "pipeline-ai sensor", "CLI", "sage")}
+              ${svgBox(35, 152, 145, 56, "pipeline-ai run", "Runner", "blue")}
+              ${svgBox(35, 224, 145, 56, "MCP Tools", "stdio JSON-RPC", "lavender")}
+              ${svgBox(300, 138, 155, 84, "BoundOutput", "contrato único", "sage")}
+              ${svgBox(535, 140, 155, 80, "Agente IA", "1 KB · foco total", "sage")}
+            `;
+            break;
+          case "dual-1":
+            inner = `
+              <path id="p-d1" d="M 190 180 L 495 180" fill="none" stroke="var(--coral)" stroke-width="2" stroke-dasharray="5 5"/>
+              ${svgBox(35, 140, 155, 80, "Agente Autônomo", "sem TTY (stdin EOF)", "amber")}
+              ${svgBox(495, 135, 190, 90, "CLI Interativa", "Esperando input...", "coral")}
+              <text x="342" y="165" text-anchor="middle" fill="var(--coral)" font-size="11.5" font-weight="700">⏳ TIMEOUT / TRAVADO</text>
+            `;
+            break;
+          case "dual-2":
+            inner = `
+              <path id="p-d2a" d="M 185 120 L 295 168" fill="none" stroke="var(--blue)" stroke-width="1.8" class="flow-dash"/>
+              <path id="p-d2b" d="M 185 240 L 295 192" fill="none" stroke="var(--sage)" stroke-width="1.8" class="flow-dash"/>
+              <path id="p-d2c" d="M 445 168 L 535 120" fill="none" stroke="var(--blue)" stroke-width="1.8" class="flow-dash"/>
+              <path id="p-d2d" d="M 445 192 L 535 240" fill="none" stroke="var(--sage)" stroke-width="1.8" class="flow-dash"/>
+              ${svgPacket("p-d2a", "blue", 1.8, 0)}
+              ${svgPacket("p-d2b", "sage", 1.8, 0.5)}
+              ${svgPacket("p-d2c", "blue", 1.8, 0.3)}
+              ${svgPacket("p-d2d", "sage", 1.8, 0.8)}
+              ${svgBox(30, 86, 155, 68, "Humano (TTY)", "terminal interativo", "blue")}
+              ${svgBox(30, 206, 155, 68, "Agente (-agent)", "PIPELINE_AGENT_MODE=1", "sage")}
+              ${svgBox(295, 136, 150, 88, "isTTY Router", "Dual-Audience", "lavender")}
+              ${svgBox(535, 86, 155, 68, "Texto / Tabela", "ergonomia humana", "blue")}
+              ${svgBox(535, 206, 155, 68, "JSON Estrito", "non-interactive", "sage")}
+            `;
+            break;
+          case "dual-3":
+            inner = `
+              <path id="p-d3a" d="M 190 155 L 495 155" fill="none" stroke="var(--lavender)" stroke-width="2" class="flow-dash"/>
+              <path id="p-d3b" d="M 495 205 L 190 205" fill="none" stroke="var(--sage)" stroke-width="2" class="flow-dash"/>
+              ${svgPacket("p-d3a", "lavender", 1.8, 0)}
+              ${svgPacket("p-d3b", "sage", 1.8, 0.9)}
+              ${svgBox(35, 135, 155, 90, "Agente IA", "descoberta prévia", "blue")}
+              ${svgBox(495, 135, 190, 90, "pipeline-ai --schema", "0 efeitos colaterais", "lavender")}
+              <text x="342" y="143" text-anchor="middle" fill="var(--lavender)" font-size="11">sensor --schema</text>
+              <text x="342" y="225" text-anchor="middle" fill="var(--sage)" font-size="11">{ flags, types, defaults }</text>
+            `;
+            break;
+          case "dual-4":
+            inner = `
+              <path id="p-d4a" d="M 185 180 L 285 180" fill="none" stroke="var(--coral)" stroke-width="2" class="flow-dash"/>
+              <path id="p-d4b" d="M 455 180 L 535 180" fill="none" stroke="var(--sage)" stroke-width="2" class="flow-dash"/>
+              ${svgPacket("p-d4a", "coral", 1.6, 0)}
+              ${svgPacket("p-d4b", "sage", 1.6, 0.6)}
+              ${svgBox(30, 142, 155, 76, "Falha de Gate", "delivery ausente", "coral")}
+              ${svgBox(285, 124, 170, 112, "Helpful Error", "cause · hint · fix", "amber")}
+              ${svgBox(535, 142, 155, 76, "Auto-Recovery", "executa fix_command", "sage")}
+            `;
+            break;
+          case "hydro-1":
+            inner = `
+              <path id="p-h1a" d="M 180 105 L 470 170" fill="none" stroke="var(--amber)" stroke-width="1.8" class="flow-dash"/>
+              <path id="p-h1b" d="M 180 180 L 470 180" fill="none" stroke="var(--amber)" stroke-width="1.8" class="flow-dash"/>
+              <path id="p-h1c" d="M 180 255 L 470 190" fill="none" stroke="var(--amber)" stroke-width="1.8" class="flow-dash"/>
+              ${svgPacket("p-h1a", "coral", 1.7, 0)}
+              ${svgPacket("p-h1b", "coral", 1.7, 0.5)}
+              ${svgPacket("p-h1c", "coral", 1.7, 1.0)}
+              ${svgBox(35, 78, 145, 54, "docs-update", "simples", "blue")}
+              ${svgBox(35, 153, 145, 54, "dev-impl", "médio", "amber")}
+              ${svgBox(35, 228, 145, 54, "security-review", "crítico", "coral")}
+              ${svgBox(470, 130, 210, 100, "Modelo Único Pesado", "gargalo de custo & latência", "coral")}
+            `;
+            break;
+          case "hydro-2":
+            inner = `
+              <path id="p-h2a" d="M 185 180 L 295 105" fill="none" stroke="var(--sage)" stroke-width="2" class="flow-dash"/>
+              <path id="p-h2b" d="M 185 180 L 295 180" fill="none" stroke="var(--blue)" stroke-width="2" class="flow-dash"/>
+              <path id="p-h2c" d="M 185 180 L 295 255" fill="none" stroke="var(--lavender)" stroke-width="2" class="flow-dash"/>
+              ${svgPacket("p-h2a", "sage", 1.6, 0)}
+              ${svgPacket("p-h2b", "blue", 1.9, 0.3)}
+              ${svgPacket("p-h2c", "lavender", 2.2, 0.6)}
+              ${svgBox(25, 136, 160, 88, "pipeline://routing", "model_routing", "amber")}
+              ${svgBox(295, 74, 390, 58, "TIER LOW  ·  triage · docs · git", "rápido & econômico", "sage")}
+              ${svgBox(295, 151, 390, 58, "TIER MEDIUM  ·  test · dev · qa", "equilíbrio", "blue")}
+              ${svgBox(295, 228, 390, 58, "TIER HIGH  ·  arch · security", "raciocínio profundo", "lavender")}
+            `;
+            break;
+          case "hydro-3":
+            inner = `
+              <path id="p-h3a" d="M 195 155 L 495 155" fill="none" stroke="var(--blue)" stroke-width="2" class="flow-dash"/>
+              <path id="p-h3b" d="M 495 205 L 195 205" fill="none" stroke="var(--lavender)" stroke-width="2" class="flow-dash"/>
+              ${svgPacket("p-h3a", "blue", 1.8, 0)}
+              ${svgPacket("p-h3b", "lavender", 1.8, 0.9)}
+              ${svgBox(30, 130, 165, 100, "internal/sensor/semantic", "Go puro net/http", "blue")}
+              ${svgBox(495, 130, 195, 100, "Gemini generateContent", "responseSchema", "lavender")}
+              <text x="345" y="142" text-anchor="middle" fill="var(--blue)" font-size="11">x-goog-api-key + prompt</text>
+              <text x="345" y="226" text-anchor="middle" fill="var(--lavender)" font-size="11">JSON calibrado (noul/choice/score)</text>
+            `;
+            break;
+          case "hydro-4":
+            inner = `
+              <path id="p-h4a" d="M 155 180 L 245 180" fill="none" stroke="var(--sage)" stroke-width="2" class="flow-dash"/>
+              <path id="p-h4b" d="M 395 180 L 485 180" fill="none" stroke="var(--amber)" stroke-width="2" class="flow-dash"/>
+              ${svgPacket("p-h4a", "sage", 1.6, 0)}
+              ${svgPacket("p-h4b", "amber", 1.8, 0.5)}
+              ${svgBox(25, 140, 130, 80, "doctor/sensor", "bloqueante", "sage")}
+              ${svgBox(245, 140, 150, 80, "validate", "determinístico", "sage")}
+              ${svgBox(485, 132, 205, 96, "-semantic-gate", "advisory + telemetria", "amber")}
+            `;
+            break;
+          case "dora-1":
+            inner = `
+              ${svgBox(45, 115, 185, 125, "CVEs Transitivas", "fora do fluxo local", "coral")}
+              ${svgBox(267, 115, 185, 125, "Overengineering", "camadas sem uso", "amber")}
+              ${svgBox(490, 115, 185, 125, "DORA Invisível", "sem métricas reais", "coral")}
+              <text x="360" y="285" text-anchor="middle" fill="var(--text-subtle)" font-size="11.5">Testes passam, mas risco operacional cresce em silêncio</text>
+            `;
+            break;
+          case "dora-2":
+            inner = `
+              <path id="p-s2a" d="M 185 180 L 290 180" fill="none" stroke="var(--blue)" stroke-width="2" class="flow-dash"/>
+              <path id="p-s2b" d="M 450 155 L 535 120" fill="none" stroke="var(--sage)" stroke-width="2" class="flow-dash"/>
+              <path id="p-s2c" d="M 450 205 L 535 240" fill="none" stroke="var(--amber)" stroke-width="2" class="flow-dash"/>
+              ${svgPacket("p-s2a", "blue", 1.7, 0)}
+              ${svgPacket("p-s2b", "sage", 1.7, 0.4)}
+              ${svgPacket("p-s2c", "amber", 1.7, 0.8)}
+              ${svgBox(30, 140, 155, 80, "sensor -vuln", "govulncheck ./...", "blue")}
+              ${svgBox(290, 134, 160, 92, "BoundOutput", "saída limitada", "lavender")}
+              ${svgBox(535, 84, 155, 72, "StatusPass / Fail", "CVEs reportadas", "sage")}
+              ${svgBox(535, 204, 155, 72, "StatusSkip", "binário ausente", "amber")}
+            `;
+            break;
+          case "dora-3":
+            inner = `
+              <path id="p-s3a" d="M 195 180 L 285 180" fill="none" stroke="var(--lavender)" stroke-width="2" class="flow-dash"/>
+              <path id="p-s3b" d="M 445 180 L 535 180" fill="none" stroke="var(--amber)" stroke-width="2" class="flow-dash"/>
+              ${svgPacket("p-s3a", "lavender", 1.7, 0)}
+              ${svgPacket("p-s3b", "amber", 1.7, 0.5)}
+              ${svgBox(30, 138, 165, 84, "Decision Ladder", "YAGNI / -preset yagni", "lavender")}
+              ${svgBox(285, 138, 160, 84, "// shortcut:", "limite | upgrade", "amber")}
+              ${svgBox(535, 138, 155, 84, "pipeline-ai debt", "inventário JSON", "sage")}
+            `;
+            break;
+          case "dora-4":
+            inner = `
+              <path id="p-s4a" d="M 185 180 L 285 180" fill="none" stroke="var(--sage)" stroke-width="2" class="flow-dash"/>
+              <path id="p-s4b" d="M 445 155 L 530 120" fill="none" stroke="var(--blue)" stroke-width="2" class="flow-dash"/>
+              <path id="p-s4c" d="M 445 205 L 530 240" fill="none" stroke="var(--lavender)" stroke-width="2" class="flow-dash"/>
+              ${svgPacket("p-s4a", "sage", 1.7, 0)}
+              ${svgPacket("p-s4b", "blue", 1.7, 0.4)}
+              ${svgPacket("p-s4c", "lavender", 1.7, 0.8)}
+              ${svgBox(30, 140, 155, 80, "pipeline-ai run", "telemetria passiva", "sage")}
+              ${svgBox(285, 134, 160, 92, "Event Ledger", "JSONL local", "blue")}
+              ${svgBox(530, 84, 160, 72, "4 Métricas DORA", "DF · LT · CFR · MTTR", "sage")}
+              ${svgBox(530, 204, 160, 72, "ByProvider/Model", "Hydrogen tiers", "lavender")}
+            `;
+            break;
+        }
+        return `<svg viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagrama arquitetural">${inner}</svg>`;
+      }
+
+      // State
+      let state = {
+        lessonIdx: 0,
+        stepIdx: 0,
+        paused: false,
+        completedLessons: new Set()
+      };
+
+      function loadProgress() {
+        try {
+          const raw = localStorage.getItem(STORAGE_PROGRESS);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) state.completedLessons = new Set(parsed);
+          }
+        } catch (_) {}
+      }
+
+      function saveProgress() {
+        try {
+          localStorage.setItem(STORAGE_PROGRESS, JSON.stringify([...state.completedLessons]));
+        } catch (_) {}
+      }
+
+      function applyTheme(theme) {
+        document.documentElement.setAttribute("data-theme", theme);
+        document.getElementById("themeIcon").textContent = theme === "dark" ? "☀" : "☾";
+        try { localStorage.setItem(STORAGE_THEME, theme); } catch (_) {}
+      }
+
+      function initTheme() {
+        let saved = null;
+        try { saved = localStorage.getItem(STORAGE_THEME); } catch (_) {}
+        applyTheme(saved === "dark" ? "dark" : "light");
+      }
+
+      function parseHash() {
+        const hash = window.location.hash.replace(/^#\/?/, "");
+        if (!hash) return;
+        const [lessonId, stepNum] = hash.split("/");
+        const lIdx = LESSONS.findIndex(l => l.id === lessonId);
+        if (lIdx !== -1) {
+          state.lessonIdx = lIdx;
+          const s = parseInt(stepNum, 10) - 1;
+          if (!isNaN(s) && s >= 0 && s < LESSONS[lIdx].steps.length) {
+            state.stepIdx = s;
+          } else {
+            state.stepIdx = 0;
+          }
+        }
+      }
+
+      function syncHash() {
+        const lesson = LESSONS[state.lessonIdx];
+        const target = `#/${lesson.id}/${state.stepIdx + 1}`;
+        if (window.location.hash !== target) {
+          history.replaceState(null, "", target);
+        }
+      }
+
+      function updateProgressUI() {
+        const count = state.completedLessons.size;
+        const total = LESSONS.length;
+        const pct = Math.round((count / total) * 100);
+        document.getElementById("topProgressText").textContent = `Progresso (${count} / ${total})`;
+        document.getElementById("topProgressBar").style.width = `${pct}%`;
+        document.getElementById("drawerProgressText").textContent = `${count} / ${total} concluídas`;
+        document.getElementById("drawerProgressBar").style.width = `${pct}%`;
+      }
+
+      function renderDrawer() {
+        const list = document.getElementById("drawerList");
+        list.innerHTML = LESSONS.map((lesson, idx) => {
+          const active = idx === state.lessonIdx ? "active" : "";
+          const done = state.completedLessons.has(lesson.id);
+          return `
+            <button class="lesson-item ${active}" data-lesson="${idx}">
+              <div class="lesson-item-top">
+                <span>${lesson.module}</span>
+                ${done ? `<span class="done-tag">✓ concluída</span>` : `<span>${lesson.steps.length} steps</span>`}
+              </div>
+              <div class="lesson-item-title">${idx + 1}. ${lesson.title}</div>
+              <div class="lesson-item-desc">${lesson.subtitle}</div>
+            </button>
+          `;
+        }).join("");
+
+        list.querySelectorAll(".lesson-item").forEach(btn => {
+          btn.addEventListener("click", () => {
+            goTo(parseInt(btn.dataset.lesson, 10), 0);
+            closeModals();
+          });
+        });
+      }
+
+      function render() {
+        const lesson = LESSONS[state.lessonIdx];
+        const step = lesson.steps[state.stepIdx];
+
+        if (state.stepIdx === lesson.steps.length - 1) {
+          state.completedLessons.add(lesson.id);
+          saveProgress();
+        }
+
+        syncHash();
+        updateProgressUI();
+
+        document.getElementById("breadcrumbModule").textContent = lesson.module;
+        document.getElementById("breadcrumbLesson").textContent = `Lição ${state.lessonIdx + 1} de ${LESSONS.length}`;
+        document.getElementById("lessonTitle").textContent = lesson.title;
+        document.getElementById("lessonSubtitle").textContent = lesson.subtitle;
+
+        // Metrics
+        document.getElementById("metricsGrid").innerHTML = step.metrics.map(m => `
+          <div class="metric-card">
+            <div class="metric-label">${m.label}</div>
+            <div class="metric-value tone-${m.tone}">${m.value}</div>
+            <div class="metric-delta">${m.delta}</div>
+          </div>
+        `).join("");
+
+        // SVG Stage
+        document.getElementById("canvasCaption").textContent = step.caption;
+        document.getElementById("svgStage").innerHTML = renderDiagram(step.diagram);
+        document.getElementById("canvasCard").classList.toggle("paused", state.paused);
+        document.getElementById("playPauseLabel").textContent = state.paused ? "▶ Retomar" : "⏸ Pausar";
+
+        // Stepper
+        document.getElementById("stepper").innerHTML = lesson.steps.map((s, idx) => {
+          const cls = idx === state.stepIdx ? "active" : idx < state.stepIdx ? "done" : "";
+          return `
+            <button class="step-pill ${cls}" data-step="${idx}">
+              <span class="step-num">${idx < state.stepIdx ? "✓" : idx + 1}</span>
+              <span class="step-pill-label">${s.short}</span>
+            </button>
+          `;
+        }).join("");
+
+        document.querySelectorAll(".step-pill").forEach(btn => {
+          btn.addEventListener("click", () => goTo(state.lessonIdx, parseInt(btn.dataset.step, 10)));
+        });
+
+        // Narrative
+        document.getElementById("stepCounter").textContent = `STEP ${state.stepIdx + 1} / ${lesson.steps.length}`;
+        const badgeEl = document.getElementById("stepBadge");
+        badgeEl.textContent = step.badge;
+        badgeEl.className = `badge badge-${step.badge}`;
+
+        document.getElementById("stepHeading").textContent = step.heading;
+        document.getElementById("stepBody").innerHTML = step.body;
+        document.getElementById("keyIdeaText").textContent = step.keyIdea;
+
+        // Diff
+        document.getElementById("diffLines").innerHTML = step.diff.map(d => {
+          const sigil = d.t === "del" ? "-" : d.t === "mod" ? "~" : "+";
+          return `<div class="diff-line ${d.t}"><span class="diff-sigil">${sigil}</span><span>${d.text}</span></div>`;
+        }).join("");
+
+        // Checklist
+        document.getElementById("checklist").innerHTML = lesson.checklist.map((item, idx) => {
+          const checked = idx <= state.stepIdx;
+          return `
+            <li class="${checked ? "checked" : ""}">
+              <span class="check-icon">${checked ? "✓" : ""}</span>
+              <span>${item}</span>
+            </li>
+          `;
+        }).join("");
+
+        // Nav buttons
+        const prevBtn = document.getElementById("prevBtn");
+        const nextBtn = document.getElementById("nextBtn");
+        prevBtn.disabled = state.lessonIdx === 0 && state.stepIdx === 0;
+
+        const isLastStep = state.stepIdx === lesson.steps.length - 1;
+        const isLastLesson = state.lessonIdx === LESSONS.length - 1;
+        if (isLastStep && !isLastLesson) {
+          nextBtn.textContent = `Próxima lição →`;
+        } else if (isLastStep && isLastLesson) {
+          nextBtn.textContent = `Reiniciar guia ↻`;
+        } else {
+          nextBtn.textContent = `Próximo →`;
+        }
+
+        renderDrawer();
+      }
+
+      function goTo(lessonIdx, stepIdx) {
+        state.lessonIdx = lessonIdx;
+        state.stepIdx = stepIdx;
+        render();
+      }
+
+      function next() {
+        const lesson = LESSONS[state.lessonIdx];
+        if (state.stepIdx < lesson.steps.length - 1) {
+          state.stepIdx++;
+        } else if (state.lessonIdx < LESSONS.length - 1) {
+          state.lessonIdx++;
+          state.stepIdx = 0;
+        } else {
+          state.lessonIdx = 0;
+          state.stepIdx = 0;
+        }
+        render();
+      }
+
+      function prev() {
+        if (state.stepIdx > 0) {
+          state.stepIdx--;
+        } else if (state.lessonIdx > 0) {
+          state.lessonIdx--;
+          state.stepIdx = LESSONS[state.lessonIdx].steps.length - 1;
+        }
+        render();
+      }
+
+      function replay() {
+        const lesson = LESSONS[state.lessonIdx];
+        const step = lesson.steps[state.stepIdx];
+        state.paused = false;
+        document.getElementById("canvasCard").classList.remove("paused");
+        document.getElementById("playPauseLabel").textContent = "⏸ Pausar";
+        document.getElementById("svgStage").innerHTML = renderDiagram(step.diagram);
+      }
+
+      // Modals & Search
+      const overlay = document.getElementById("overlay");
+      const drawer = document.getElementById("drawer");
+      const searchModal = document.getElementById("searchModal");
+      const searchInput = document.getElementById("searchInput");
+
+      function openDrawer() {
+        closeModals();
+        overlay.classList.add("open");
+        drawer.classList.add("open");
+      }
+
+      function openSearch() {
+        closeModals();
+        overlay.classList.add("open");
+        searchModal.classList.add("open");
+        searchInput.value = "";
+        renderSearchResults("");
+        setTimeout(() => searchInput.focus(), 30);
+      }
+
+      function closeModals() {
+        overlay.classList.remove("open");
+        drawer.classList.remove("open");
+        searchModal.classList.remove("open");
+      }
+
+      function renderSearchResults(query) {
+        const q = query.trim().toLowerCase();
+        const items = [];
+        LESSONS.forEach((lesson, lIdx) => {
+          lesson.steps.forEach((step, sIdx) => {
+            const hay = `${lesson.title} ${lesson.subtitle} ${step.heading} ${step.body} ${step.keyIdea}`.toLowerCase();
+            if (!q || hay.includes(q)) {
+              items.push({ lIdx, sIdx, lesson, step });
+            }
+          });
+        });
+
+        const container = document.getElementById("searchResults");
+        if (!items.length) {
+          container.innerHTML = `<div class="search-empty">Nenhum resultado para "${query}".</div>`;
+          return;
+        }
+
+        container.innerHTML = items.slice(0, 12).map(it => `
+          <button class="search-result" data-l="${it.lIdx}" data-s="${it.sIdx}">
+            <span class="search-result-meta">${it.lesson.module} · Step ${it.sIdx + 1} (${it.step.badge})</span>
+            <span class="search-result-title">${it.step.heading}</span>
+            <span class="search-result-snippet">${it.step.keyIdea}</span>
+          </button>
+        `).join("");
+
+        container.querySelectorAll(".search-result").forEach(btn => {
+          btn.addEventListener("click", () => {
+            goTo(parseInt(btn.dataset.l, 10), parseInt(btn.dataset.s, 10));
+            closeModals();
+          });
+        });
+      }
+
+      // Event Listeners
+      document.getElementById("drawerBtn").addEventListener("click", openDrawer);
+      document.getElementById("closeDrawerBtn").addEventListener("click", closeModals);
+      document.getElementById("searchBtn").addEventListener("click", openSearch);
+      overlay.addEventListener("click", closeModals);
+      searchInput.addEventListener("input", e => renderSearchResults(e.target.value));
+
+      document.getElementById("themeBtn").addEventListener("click", () => {
+        const current = document.documentElement.getAttribute("data-theme");
+        applyTheme(current === "dark" ? "light" : "dark");
+      });
+
+      document.getElementById("playPauseBtn").addEventListener("click", () => {
+        state.paused = !state.paused;
+        document.getElementById("canvasCard").classList.toggle("paused", state.paused);
+        document.getElementById("playPauseLabel").textContent = state.paused ? "▶ Retomar" : "⏸ Pausar";
+      });
+
+      document.getElementById("replayBtn").addEventListener("click", replay);
+      document.getElementById("prevBtn").addEventListener("click", prev);
+      document.getElementById("nextBtn").addEventListener("click", next);
+
+      window.addEventListener("hashchange", () => {
+        parseHash();
+        render();
+      });
+
+      document.addEventListener("keydown", e => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+          e.preventDefault();
+          if (searchModal.classList.contains("open")) closeModals();
+          else openSearch();
+          return;
+        }
+        if (e.key === "Escape") {
+          closeModals();
+          return;
+        }
+        if (document.activeElement === searchInput) return;
+
+        if (e.key === "ArrowRight") { e.preventDefault(); next(); }
+        else if (e.key === "ArrowLeft") { e.preventDefault(); prev(); }
+        else if (e.key === " ") {
+          e.preventDefault();
+          state.paused = !state.paused;
+          document.getElementById("canvasCard").classList.toggle("paused", state.paused);
+          document.getElementById("playPauseLabel").textContent = state.paused ? "▶ Retomar" : "⏸ Pausar";
+        } else if (e.key.toLowerCase() === "r") {
+          e.preventDefault();
+          replay();
+        }
+      });
+
+      // Init
+      initTheme();
+      loadProgress();
+      parseHash();
+      render();
+    })();
+  </script>
+</body>
+</html>
