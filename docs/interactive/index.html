@@ -715,6 +715,62 @@
     }
 
     /* Drawer */
+    .articles-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+    }
+
+    .articles-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .articles-list {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .article-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .article-link {
+      color: var(--blue);
+      text-decoration: none;
+      line-height: 1.35;
+    }
+
+    .article-link:hover {
+      text-decoration: underline;
+    }
+
+    .article-lang {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+
+    .article-lang:hover {
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+
     .overlay {
       position: fixed;
       inset: 0;
@@ -1056,6 +1112,11 @@
         <ul class="checklist" id="checklist"></ul>
       </div>
 
+      <div class="articles-box" id="articlesBox">
+        <div class="articles-title">APROFUNDE-SE NO TEMA</div>
+        <div class="articles-list" id="articlesList"></div>
+      </div>
+
       <div class="nav-footer">
         <button class="nav-btn" id="prevBtn">← Anterior</button>
         <button class="nav-btn primary" id="nextBtn">Próximo →</button>
@@ -1105,6 +1166,69 @@
     (function () {
       const STORAGE_PROGRESS = "pipeline_ai_interactive_progress_v1";
       const STORAGE_THEME = "pipeline_ai_interactive_theme_v1";
+
+      const REPO_BLOB = "https://github.com/rodrigodosanjosoliveira/pipeline-ai/blob/main";
+
+      const LESSON_ARTICLES = {
+        "01-governanca": [
+          {
+            title: "Governança Determinística em Go",
+            url: `${REPO_BLOB}/docs-ai/artigos/artigo-governanca-ia-go.md`,
+            enUrl: `${REPO_BLOB}/docs-ai/artigos/article-ai-governance-go-devto.md`
+          },
+          {
+            title: "Orquestração Autônoma Contínua e Pipeline Runner",
+            url: `${REPO_BLOB}/docs-ai/artigos/artigo-orquestracao-autonoma-runner.md`,
+            enUrl: `${REPO_BLOB}/docs-ai/artigos/article-autonomous-orchestration-runner-devto.md`
+          }
+        ],
+        "02-bounded-output": [
+          {
+            title: "Orquestração Autônoma Contínua e Pipeline Runner",
+            url: `${REPO_BLOB}/docs-ai/artigos/artigo-orquestracao-autonoma-runner.md`,
+            enUrl: `${REPO_BLOB}/docs-ai/artigos/article-autonomous-orchestration-runner-devto.md`
+          },
+          {
+            title: "Decisão Arquitetural D-39 (Bounded Output & Smart Filtering)",
+            url: `${REPO_BLOB}/docs-ai/DECISOES.md`
+          }
+        ],
+        "03-dual-audience": [
+          {
+            title: "Gemini 4 Hydrogen & Dual-Audience CLI em Go Puro",
+            url: `${REPO_BLOB}/docs-ai/artigos/artigo-gemini-4-hydrogen-pipeline-ai.md`,
+            enUrl: `${REPO_BLOB}/docs-ai/artigos/article-gemini-4-hydrogen-pipeline-ai-devto.md`
+          },
+          {
+            title: "Decisões D-40, D-42 e D-43 (Agent Mode, Schema & Helpful Errors)",
+            url: `${REPO_BLOB}/docs-ai/DECISOES.md`
+          }
+        ],
+        "04-gemini-hydrogen": [
+          {
+            title: "Gemini 4 Hydrogen na Prática (Thinking Tiers & Sensor Semântico)",
+            url: `${REPO_BLOB}/docs-ai/artigos/artigo-gemini-4-hydrogen-pipeline-ai.md`,
+            enUrl: `${REPO_BLOB}/docs-ai/artigos/article-gemini-4-hydrogen-pipeline-ai-devto.md`
+          },
+          {
+            title: "System 1 vs. System 2: Sensoriamento Semântico Calibrado",
+            url: `${REPO_BLOB}/docs-ai/artigos/artigo-sensoriamento-semantico-jev.md`,
+            enUrl: `${REPO_BLOB}/docs-ai/artigos/article-semantic-sensing-jev-go-devto.md`
+          }
+        ],
+        "05-supply-chain-dora": [
+          {
+            title: "Governança Anti-Overengineering: Decision Ladder & Debt Ledger",
+            url: `${REPO_BLOB}/docs-ai/artigos/artigo-governanca-anti-overengineering-yagni.md`,
+            enUrl: `${REPO_BLOB}/docs-ai/artigos/article-anti-overengineering-yagni-go-devto.md`
+          },
+          {
+            title: "Métricas DORA e Telemetria Passiva para Agentes de IA",
+            url: `${REPO_BLOB}/docs-ai/artigos/artigo-dora-metrics-telemetria-ia.md`,
+            enUrl: `${REPO_BLOB}/docs-ai/artigos/article-dora-metrics-ai-agents-devto.md`
+          }
+        ]
+      };
 
       const LESSONS = [
         {
@@ -2008,6 +2132,21 @@
             </li>
           `;
         }).join("");
+
+        // Related Articles
+        const relArticles = LESSON_ARTICLES[lesson.id] || [];
+        const articlesBox = document.getElementById("articlesBox");
+        if (relArticles.length) {
+          articlesBox.style.display = "";
+          document.getElementById("articlesList").innerHTML = relArticles.map(a => `
+            <div class="article-item">
+              <a class="article-link" href="${a.url}" target="_blank" rel="noopener">↗ ${a.title}</a>
+              ${a.enUrl ? `<a class="article-lang" href="${a.enUrl}" target="_blank" rel="noopener" title="Versão em inglês (Dev.to)">EN</a>` : ""}
+            </div>
+          `).join("");
+        } else {
+          articlesBox.style.display = "none";
+        }
 
         // Nav buttons
         const prevBtn = document.getElementById("prevBtn");
