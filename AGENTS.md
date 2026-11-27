@@ -61,6 +61,7 @@ Colchetes são módulos opcionais, ativados no campo `enabled_modules` em `.pipe
 - **Branch:** `task/{code}` (ou `feat/{nome}`)
 - **Commit:** `{type}({scope}): {summary} [{task_code}]`
 - **Submissão:** Pushes diretos na branch `main` são bloqueados pelo hook local `pre-push`. Toda entrega sobe via branch e Pull Request (`gh pr create`).
+- **Pós-Merge (Higiene de Branches):** Sempre que um PR for mesclado no remoto, sincronizar `main`, podar referências remotas e deletar a branch local mesclada (`git checkout main && git pull origin main && git fetch --prune && git branch -d <branch>`).
 
 ## Delivery
 
