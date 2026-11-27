@@ -2,7 +2,7 @@
 delivery_id: DEL-046
 task_code: TASK-046
 title: "Guia Interativo Step-by-Step do pipeline-ai (docs/interactive/index.html)"
-status: draft
+status: merged
 require_security: false
 require_migration: false
 require_performance: false

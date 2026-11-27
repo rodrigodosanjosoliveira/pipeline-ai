@@ -6,7 +6,7 @@
 
 Toolkit e padrão reutilizável para projetos de desenvolvimento assistido por agentes de IA, integrando nativamente Go no backend e o ecossistema **Antigravity**.
 
-> **Guia Interativo Step-by-Step:** Explore os 5 pilares do `pipeline-ai` (Governança Determinística, Bounded Output, Dual-Audience CLI, Gemini 4 Hydrogen Tiers e Supply Chain + DORA) com diagramas animados e navegação passo a passo em [`docs/interactive/index.html`](docs/interactive/index.html).
+> **Guia Interativo Step-by-Step:** Explore os 5 pilares do `pipeline-ai` (Governança Determinística, Bounded Output, Dual-Audience CLI, Gemini 4 Hydrogen Tiers e Supply Chain + DORA) com diagramas animados e navegação passo a passo em [GitHub Pages](https://rodrigodosanjosoliveira.github.io/pipeline-ai/) ou localmente em [`docs/interactive/index.html`](docs/interactive/index.html).
 
 A ferramenta central é a CLI unificada **`pipeline-ai`**, compilada estaticamente em Go puro sem dependências externas:
 
